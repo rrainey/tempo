@@ -6,9 +6,9 @@ This project is designed to experiment with real-time audible feedback to a skyd
 
 ### Sensors and Capabilites
 
-- GPS/GNSS via u-blox CAM-M8C
-- 6-DOF Inertial measurement / gyro via MPU-6050
-- Barometric pressure / tempterature via DPS310
+- GPS/GNSS via u-blox SAM-M10Q
+- 6-DOF Inertial measurement / gyro via ICM-42688
+- Barometric pressure / tempterature via BPM390
 - 3-DOF Compass/Magnetic measurement via MMC5983
 - Bluetooth audio output (to be added)
 
