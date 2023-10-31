@@ -8,7 +8,7 @@ This project is designed to experiment with real-time audible feedback to a skyd
 
 - GPS/GNSS via u-blox SAM-M10Q
 - 6-DOF Inertial measurement / gyro via ICM-42688
-- Barometric pressure / tempterature via BPM390
+- Barometric pressure / temperature via BPM390
 - 3-DOF Compass/Magnetic measurement via MMC5983
 - Bluetooth audio output (to be added)
 
