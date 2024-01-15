@@ -1145,6 +1145,9 @@ size_t fifoSize;
 float averageValues(float values[], int count) {
   float sum = 0.0f;
   int i;
+  if (count <= 0) {
+    return sum;
+  }
   if (count == 1) {
     return values[0];
   }
@@ -1158,10 +1161,10 @@ void IMU() {
 
   if (imuPresent) {
     
-    // we initialized the IMU to sample at 200Hz and we're running this loop at 40Hz
-    // so, we should typically get 4-6 samples with each iteration
+    // We configured the IMU to sample at 200Hz and we're running this loop at 40Hz
+    // so, we should typically get 4-6 samples with each call.
 
-    // This operations transfer all available samples in the IMU FIFO
+    // This operation transfers all available samples in the IMU FIFO
     // which are then copied to seven separate vectors to be processed here
 
     imu.readFifo();
