@@ -84,7 +84,13 @@
 /*
  * I2C connection to the ICM-42688 IMU
  */
-ICM42688_FIFO imu(Wire, ICM42688_I2C_ADDR);
+ICM42688 imu(Wire, ICM42688_I2C_ADDR);
+
+volatile bool imuSampleReady = false;
+
+void IRAM_ATTR imuInt1ISR() {
+  imuSampleReady = true;
+}
 
 bool imuPresent = false;
 
@@ -122,9 +128,9 @@ MicroNMEA nmea(nmeaBuffer, sizeof(nmeaBuffer));
 #define OPS_GROUND_TEST   2  // for testing; uses GPS horizontal movement as an analogue to altitude changes
 
 /*
- * Set opertaing mode for this build of the firmware here
+ * Set operating mode for this build of the firmware here
  */
-#define OPS_MODE OPS_FLIGHT
+#define OPS_MODE OPS_STATIC_TEST
 
 #if (OPS_MODE == OPS_STATIC_TEST) 
 //#include "1976AtmosphericModel.h"
@@ -181,7 +187,7 @@ bool bBatteryAlarm = false;
 float measuredBattery_volts;
 
 /*
- * LiPoly battery is rated at 3.7V
+ * Fully charged LiPoly battery is rated at 3.7V
  */
 #define LOWBATT_THRESHOLD 3.50
 
@@ -316,7 +322,7 @@ int32_t timer2_ms = TIMER2_INTERVAL_MS;
 bool bTimer3Active = false;
 int32_t timer3_ms = 0;
 
-#define TIMER4_INTERVAL_MS 25  // 40Hz
+#define TIMER4_INTERVAL_MS  10   // 100 Hz -- twice the IMU sample interval
 
 bool bTimer4Active = false;
 int32_t timer4_ms = 0;
@@ -382,7 +388,7 @@ char * generateLogname(char *gname)
     char * result = NULL;
     int i;
     for (i=0; true; i++) {
-      sprintf (gname, "log%05d.txt", i);
+      sprintf (gname, "/log%05d.txt", i);
    
       if (!SD.exists(gname)) {
           result = gname;
@@ -414,7 +420,7 @@ void dateTime(uint16_t* date, uint16_t* time) {
 // for each log file.
 void updateGPSDateTime( char *pIncomingNMEA ) {
   // sentence has already been processed prior to this call
-  if(nmea.isValid()) {
+  if(true || nmea.isValid()) {
       usGPSDate = FAT_DATE(nmea.getYear(), nmea.getMonth(), nmea.getDay());
       usGPSTime = FAT_TIME(nmea.getHour(), nmea.getMinute(), nmea.getSecond());
   }
@@ -626,6 +632,8 @@ void sampleAndLogAltitude()
 
   if (true) {
 
+    bmp.performReading();
+
     dPressure_hPa = bmp.pressure / 100.0;
 
     if (OPS_MODE != OPS_STATIC_TEST) {
@@ -685,6 +693,9 @@ void sampleAndLogAltitude()
           p = &table[i];
   
           if (t < p->time_ms) {
+            if (p->time_ms - prev->time_ms == 0) {
+              Serial.println("divide by zero");
+            }
             dAlt_ft =  prev->alt_ft + (t - prev->time_ms) * (p->alt_ft - prev->alt_ft) / (p->time_ms - prev->time_ms);
             break;
           }
@@ -788,9 +799,7 @@ void SFE_UBLOX_GNSS::processNMEA(char incoming)
 void setup() {
 
   blinkState = BLINK_STATE_OFF;
-  
-  //bTimer2Active = true;
-  //timer2_ms = TIMER2_INTERVAL_MS;
+
 
   pinMode(RED_LED, OUTPUT);
   digitalWrite(RED_LED, LOW);
@@ -810,20 +819,6 @@ void setup() {
 
   Serial.println( APP_STRING );
 
-#ifdef notdef
-  GPS.begin( GPS_I2C_ADDR );
-
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGAGSA);
-
-  // For test operating mode, set update rate to 1HZ
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
-
-  // include antenna status in stream
-  GPS.sendCommand(PGCMD_ANTENNA);
-
-  delay(1000);
-#endif
-
   if (!SD.begin( SD_CHIP_SELECT )) {
 
     Serial.println("SD card initialization failed!");
@@ -832,7 +827,7 @@ void setup() {
 
   }
 
-  delay(500);
+  delay(200);
 
   Wire.setClock( 400000 );
   Wire.begin();
@@ -867,7 +862,7 @@ void setup() {
 
   if (myGNSS.setDynamicModel(DYN_MODEL_AIRBORNE2g) == false) 
   {
-    Serial.println(F("*** Warning: setDynamicModel failed ***"));
+    Serial.println(F("Warning: setDynamicModel failed"));
   }
   else
   {
@@ -883,34 +878,35 @@ void setup() {
 
   if (imu.begin()) {
 
-    Serial.println("IMU present");
+    Serial.println("ICM42688 IMU present");
 
     imuPresent = true;
 
     imu.setAccelFS(ICM42688::gpm4);
     imu.setGyroFS(ICM42688::dps250);
-    imu.setAccelODR(ICM42688::odr200);
-    imu.setGyroODR(ICM42688::odr200);
-    imu.enableFifo(true, true, true);
+    imu.setAccelODR(ICM42688::odr50);
+    imu.setGyroODR(ICM42688::odr50);
+
+    delay(10);
+
+    attachInterrupt(GPIO_ICM42688_INT1, imuInt1ISR, RISING);
+    imu.enableDataReadyInterrupt(); 
 
   }
   else {
-    Serial.println("Failed to find ICM-42688-P chip");
+    Serial.println(F("Failed to find ICM-42688-P chip"));
     imuPresent = false;
   }
 
-  delay(500);
+  delay(100);
 
-  if (! bmp.begin_I2C()) {
-    Serial.println("Failed to find DPS310 chip; stopping");
+  if (! bmp.begin_I2C( BMP390_I2C_ADDR )) {
+    Serial.println(F("Failed to find BMP390 chip; stopping"));
     while (1) yield();
   }
   Serial.println("BMP390 present");
 
-  delay(500);
-
-  //dps.configurePressure(DPS310_4HZ, DPS310_4SAMPLES);
-  //dps.configureTemperature(DPS310_4HZ, DPS310_4SAMPLES);
+  delay(100);
 
   bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
   bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
@@ -918,16 +914,16 @@ void setup() {
   bmp.setOutputDataRate(BMP3_ODR_50_HZ);
 
   if (OPS_MODE == OPS_STATIC_TEST) {
-    Serial.println("Welcome. The device has booted in OPS_STATIC_TEST mode.");
+    Serial.println(F("Welcome. The device has booted in OPS_STATIC_TEST mode."));
     Serial.println("");
-    Serial.println("This test will take about 20 minutes to complete. You will see");
+    Serial.println(F("This test will take about 20 minutes to complete. You will see"));
     Serial.println("state change messages for STATE_WAIT, STATE_IN_FLIGHT, and STATE_LANDED_1. ");
     Serial.println("The test is complete when the device returns to STATE_WAIT.");
     Serial.println("You may then inspect the information in the last log file generated.");
     Serial.println("---");
   }
 
-  Serial.println("Switching to STATE_WAIT");
+  Serial.println(F("Switching to STATE_WAIT"));
   nAppState = STATE_WAIT;
 
   /*
@@ -1083,7 +1079,7 @@ void loop() {
   }
 
   /*
-   * Log IMU information
+   * Log IMU samples
    */
   if (bTimer4Active && timer4_ms <= 0) {
 
@@ -1138,9 +1134,8 @@ void flushLog() {
 
 float ax[100], ay[100], az[100];
 float gx[100], gy[100], gz[100];
-size_t fifoSize;
 
-#define DEGtoRAD(x) ((x) / (180.0 * M_PI))
+#define DEGtoRAD(x) ((x) * (M_PI / 180.0))
 
 float averageValues(float values[], int count) {
   float sum = 0.0f;
@@ -1160,34 +1155,12 @@ float averageValues(float values[], int count) {
 void IMU() {
 
   if (imuPresent) {
-    
-    // We configured the IMU to sample at 200Hz and we're running this loop at 40Hz
-    // so, we should typically get 4-6 samples with each call.
 
-    // This operation transfers all available samples in the IMU FIFO
-    // which are then copied to seven separate vectors to be processed here
+    if (imuSampleReady) {
 
-    imu.readFifo();
+      imuSampleReady = false;
+      imu.getAGT();
 
-    // units: meters/sec^2
-    imu.getFifoAccelX_mss(&fifoSize, ax);
-    imu.getFifoAccelY_mss(&fifoSize, ay);
-    imu.getFifoAccelZ_mss(&fifoSize, az);
-
-    ax[0] = averageValues(ax,fifoSize);
-    ay[0] = averageValues(ay,fifoSize);
-    az[0] = averageValues(az,fifoSize);
-
-    // units: deg/sec
-    imu.getFifoGyroX(&fifoSize, gx);
-    imu.getFifoGyroY(&fifoSize, gy);
-    imu.getFifoGyroZ(&fifoSize, gz);
-
-    gx[0] = averageValues(gx,fifoSize);
-    gy[0] = averageValues(gy,fifoSize);
-    gz[0] = averageValues(gz,fifoSize);
-
-    if (fifoSize > 0) {
 
 #ifdef notdef
       Serial.print(DEGtoRAD(gx[0])); // rad per sec
@@ -1203,18 +1176,18 @@ void IMU() {
         logFile.print(millis() - ulLogfileOriginMillis);
         
         logFile.print(",");
-        logFile.print(ax[0]);  // m/s^2
+        logFile.print(imu.accX());  // m/s^2
         logFile.print(",");
-        logFile.print(ay[0]);
+        logFile.print(imu.accY());
         logFile.print(",");
-        logFile.print(az[0]);
+        logFile.print(imu.accZ());
         
         logFile.print(",");
-        logFile.print(DEGtoRAD(gx[0])); // rad per sec
+        logFile.print(DEGtoRAD(imu.gyrX())); // rad per sec
         logFile.print(",");
-        logFile.print(DEGtoRAD(gy[0]));
+        logFile.print(DEGtoRAD(imu.gyrY()));
         logFile.print(",");
-        logFile.print(DEGtoRAD(gz[0]));
+        logFile.print(DEGtoRAD(imu.gyrZ()));
         logFile.println();
       }
     }
