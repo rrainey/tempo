@@ -1,17 +1,16 @@
 /* 
-
-  Enhanced to add FIFO support by Riley Rainey
-  January 2024
-
-  References
-  [1] ICM-422688-P datasheet, Version 1.8; https://invensense.tdk.com/download-pdf/icm-42688-p-datasheet/
-
-  Based on code originally created by Kris Winer
-  From the origina header:
-  "01/14/2022 Copyright Tlera Corporation"
-  "Library may be used freely and without limit with attribution.""
-
-*/
+ * 
+ * ICM42688 class with interrupt, FIFO support, and enhanced
+ * error reporting in a few critical locations.
+ *
+ * Based on code created by Kris Winer
+ * 01/14/2022 Copyright Tlera Corporation
+ * Library may be used freely and without limit with attribution.
+ * 
+ * References
+ * [1] ICM-422688-P datasheet, Version 1.8; https://invensense.tdk.com/download-pdf/icm-42688-p-datasheet/
+ *
+ */
 
 #ifndef ICM42688_h
 #define ICM42688_h
