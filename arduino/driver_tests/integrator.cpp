@@ -1,5 +1,10 @@
 #include "pose.h"
+
+#ifdef ESP32
 #include <esp_attr.h>
+#else
+#define IRAM_ATTR
+#endif
 
 // Implementation of Sebastian Madgwick's "...efficient orientation filter for... inertial/magnetic sensor arrays"
 // (see http://www.x-io.co.uk/category/open-source/ for examples and more details)

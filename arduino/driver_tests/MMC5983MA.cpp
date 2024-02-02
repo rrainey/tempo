@@ -206,10 +206,10 @@ void MMC5983MA::offsetBias(float * dest1, float * dest2)
   uint32_t mag_temp[3] = {0, 0, 0}, magOffset = 131072;
   float _mRes = 1.0f/16384.0f;        // mag sensitivity if using 18 bit data
   
-  Serial.println("Calculate mag offset bias: move all around to sample the complete response surface!");
+  Serial.println("Calculate mag offset bias: rotate device");
   delay(2000);
 
-  for (int ii = 0; ii < 4000; ii++)
+  for (int ii = 0; ii < 1000; ii++)
   {
     readData(mag_temp);
     for (int jj = 0; jj < 3; jj++) {
@@ -240,7 +240,7 @@ void MMC5983MA::offsetBias(float * dest1, float * dest2)
     dest2[1] = avg_rad/((float)mag_scale[1]);
     dest2[2] = avg_rad/((float)mag_scale[2]);
   
-   Serial.println("Mag Calibration done!");
+   Serial.println("Mag Calibration complete");
 }
 
 

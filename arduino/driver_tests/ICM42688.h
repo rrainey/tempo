@@ -1,11 +1,15 @@
-/* 01/14/2022 Copyright Tlera Corporation
+/* 
 
-    Created by Kris Winer
+  Enhanced to add FIFO support by Riley Rainey
+  January 2024
 
-  This sketch uses SDA/SCL on pins 21/20 (ladybug default), respectively, and it uses the Ladybug STM32L432 Breakout Board.
-  The ICM42688 is a combo sensor with embedded accel and gyro, here used as 6 DoF in a 9 DoF absolute orientation solution.
+  References
+  [1] ICM-422688-P datasheet, Version 1.8; https://invensense.tdk.com/download-pdf/icm-42688-p-datasheet/
 
-  Library may be used freely and without limit with attribution.
+  Based on code originally created by Kris Winer
+  From the origina header:
+  "01/14/2022 Copyright Tlera Corporation"
+  "Library may be used freely and without limit with attribution.""
 
 */
 
@@ -14,7 +18,6 @@
 
 #include "Arduino.h"
 #include <Wire.h>
-#include "I2Cdev.h"
 
 /* ICM42688 registers
 https://media.digikey.com/pdf/Data%20Sheets/TDK%20PDFs/ICM-42688-P_DS_Rev1.2.pdf
@@ -79,6 +82,92 @@ https://media.digikey.com/pdf/Data%20Sheets/TDK%20PDFs/ICM-42688-P_DS_Rev1.2.pdf
 #define ICM42688_SELF_TEST_CONFIG          0x70
 #define ICM42688_WHO_AM_I                  0x75 // should return 0x47
 #define ICM42688_REG_BANK_SEL              0x76
+
+/*
+ * INT_SOURCE0 bits
+ */
+#define ICM42688_INT_SOURCE0_RESET_DONE_INT1_EN  (1<<4)
+#define ICM42688_INT_SOURCE0_UI_DRDY_INT1_EN     (1<<3)
+#define ICM42688_INT_SOURCE0_FIFO_THS_INT1_EN    (1<<2)
+#define ICM42688_INT_SOURCE0_FIFO_FULL_INT1_EN   (1<<1)
+#define ICM42688_INT_SOURCE0_UI_AGC_RDY_INT1_EN  (1<<0)
+
+/*
+ * PWR_MGMT0 bits
+ */
+#define ICM42688_PWR_MGMT0_TEMP_DISABLE      (1<<5)
+#define ICM42688_PWR_MGMT0_GYRO_IDLE_MASK    (1<<4)  // MASK TO ZERO TO POWER OFF
+#define ICM42688_PWR_MGMT0_GYRO_MODE_LN      (3<<2)
+#define ICM42688_PWR_MGMT0_ACCEL_MODE_LN     (3<<0)
+
+/*
+ * ICM42688_FIFO_CONFIG1
+ * Register Name: FIFO_CONFIG1
+ */
+#define BIT_FIFO_CONFIG1_RESUME_PARTIAL_RD_POS  6
+#define BIT_FIFO_CONFIG1_RESUME_PARTIAL_RD_MASK (0x1 << BIT_FIFO_CONFIG1_RESUME_PARTIAL_RD_POS)
+
+/* FIFO_WM_GT_TH */
+#define BIT_FIFO_CONFIG1_WM_GT_TH_POS  5
+#define BIT_FIFO_CONFIG1_WM_GT_TH_MASK (0x1 << BIT_FIFO_CONFIG1_WM_GT_TH_POS)
+
+typedef enum {
+	ICM426XX_FIFO_CONFIG1_WM_GT_TH_EN  = (0x1 << BIT_FIFO_CONFIG1_WM_GT_TH_POS),
+	ICM426XX_FIFO_CONFIG1_WM_GT_TH_DIS = (0x0 << BIT_FIFO_CONFIG1_WM_GT_TH_POS),
+} ICM426XX_FIFO_CONFIG1_WM_GT_t;
+
+/* FIFO_HIRES_EN */
+#define BIT_FIFO_CONFIG1_HIRES_POS  4
+#define BIT_FIFO_CONFIG1_HIRES_MASK (0x1 << BIT_FIFO_CONFIG1_HIRES_POS)
+
+typedef enum {
+	ICM426XX_FIFO_CONFIG1_HIRES_EN  = (0x1 << BIT_FIFO_CONFIG1_HIRES_POS),
+	ICM426XX_FIFO_CONFIG1_HIRES_DIS = (0x0 << BIT_FIFO_CONFIG1_HIRES_POS),
+} ICM426XX_FIFO_CONFIG1_HIRES_t;
+
+/* FIFO_TMST_FSYNC_EN */
+#define BIT_FIFO_CONFIG1_TMST_FSYNC_POS  3
+#define BIT_FIFO_CONFIG1_TMST_FSYNC_MASK (0x1 << BIT_FIFO_CONFIG1_TMST_FSYNC_POS)
+
+typedef enum {
+	ICM426XX_FIFO_CONFIG1_TMST_FSYNC_EN  = (0x1 << BIT_FIFO_CONFIG1_TMST_FSYNC_POS),
+	ICM426XX_FIFO_CONFIG1_TMST_FSYNC_DIS = (0x0 << BIT_FIFO_CONFIG1_TMST_FSYNC_POS),
+} ICM426XX_FIFO_CONFIG1_TMST_FSYNC_t;
+
+/* FIFO_TEMP_EN */
+#define BIT_FIFO_CONFIG1_TEMP_POS  2
+#define BIT_FIFO_CONFIG1_TEMP_MASK (0x1 << BIT_FIFO_CONFIG1_TEMP_POS)
+
+typedef enum {
+	ICM426XX_FIFO_CONFIG1_TEMP_EN  = (0x1 << BIT_FIFO_CONFIG1_TEMP_POS),
+	ICM426XX_FIFO_CONFIG1_TEMP_DIS = (0x0 << BIT_FIFO_CONFIG1_TEMP_POS),
+} ICM426XX_FIFO_CONFIG1_TEMP_t;
+
+/* FIFO_GYRO_EN */
+#define BIT_FIFO_CONFIG1_GYRO_POS  1
+#define BIT_FIFO_CONFIG1_GYRO_MASK (0x1 << BIT_FIFO_CONFIG1_GYRO_POS)
+
+typedef enum {
+	ICM426XX_FIFO_CONFIG1_GYRO_EN  = (0x1 << BIT_FIFO_CONFIG1_GYRO_POS),
+	ICM426XX_FIFO_CONFIG1_GYRO_DIS = (0x0 << BIT_FIFO_CONFIG1_GYRO_POS),
+} ICM426XX_FIFO_CONFIG1_GYRO_t;
+
+/* FIFO_ACCEL_EN*/
+#define BIT_FIFO_CONFIG1_ACCEL_POS  0
+#define BIT_FIFO_CONFIG1_ACCEL_MASK 0x1
+
+typedef enum {
+	ICM426XX_FIFO_CONFIG1_ACCEL_EN  = 0x01,
+	ICM426XX_FIFO_CONFIG1_ACCEL_DIS = 0x00,
+} ICM426XX_FIFO_CONFIG1_ACCEL_t;
+
+typedef enum {
+	ICM426XX_FIFO_CONFIG_BYPASS        = (0 << 6),
+	ICM426XX_FIFO_CONFIG_STREAM        = (1<<6),
+  ICM426XX_FIFO_CONFIG_STOP_ON_FULL  = (2<<6),
+  ICM426XX_FIFO_CONFIG_STOP_ON_FULL2 = (3<<6),
+} ICM426XX_FIFO_CONFIG_FIFO_MODE_t;
+
 
 // User Bank 1
 #define ICM42688_SENSOR_CONFIG0            0x03
@@ -193,26 +282,212 @@ https://media.digikey.com/pdf/Data%20Sheets/TDK%20PDFs/ICM-42688-P_DS_Rev1.2.pdf
 #define gMode_SBY 0x01
 #define gMode_LN  0x03
 
- 
-class ICM42688
-{
-  public:
-  ICM42688(I2Cdev* i2c_bus);
-  float getAres(uint8_t Ascale);
-  float getGres(uint8_t Gscale);
-  uint8_t getChipID();
-  void init(uint8_t Ascale, uint8_t Gscale, uint8_t AODR, uint8_t GODR, uint8_t aMode, uint8_t gMode, bool CLKIN);
-  void offsetBias(float * dest1, float * dest2);
-  void reset();
-  uint8_t DRStatus();  
-  void selfTest(int16_t * accelDiff, int16_t * gyroDiff, float * ratio);
-  void readData(int16_t * destination);
-  void setTiltDetect();
-  void setWakeonMotion();
-  uint16_t APEXStatus();
-  private:
-  float _aRes, _gRes;
-  I2Cdev* _i2c_bus;
+// FIFO is empty
+#define ICM42688_FIFO_HEADER_MSG                     (1<<7)
+// packet contains ACCEL data
+#define ICM42688_FIFO_HEADER_ACCEL                   (1<<6)
+// packet contains GYRO data
+#define ICM42688_FIFO_HEADER_GYRO                    (1<<5)
+// 20-bit resolution in FIFO packet
+#define ICM42688_FIFO_HEADER_20                      (1<<4)
+#define ICM42688_FIFO_HEADER_TIMESTAMP_FSYNC_MASK    (3<<2)
+#define ICM42688_FIFO_HEADER_ODR_ACCEL               (1<<1)
+#define ICM42688_FIFO_HEADER_ODR_GYRO                (1<<0)
+
+namespace icm42688 {
+
+// FIFO data read formats (see [1], section 6)
+
+__attribute__((packed)) typedef struct fifo_xfer_packet1 {
+    uint8_t header;
+    uint8_t ax_high;
+    uint8_t ax_low;
+    uint8_t ay_high;
+    uint8_t ay_low;
+    uint8_t az_high;
+    uint8_t az_low;
+    uint8_t temp;
+};
+
+__attribute__((packed)) typedef struct fifo_xfer_packet2 {
+    uint8_t header;
+    uint8_t gx_high;
+    uint8_t gx_low;
+    uint8_t gy_high;
+    uint8_t gy_low;
+    uint8_t gz_high;
+    uint8_t gz_low;
+    uint8_t temp;
+};
+
+__attribute__((packed)) typedef struct fifo_xfer_packet3 {
+    uint8_t header;
+    uint8_t ax_high;
+    uint8_t ax_low;
+    uint8_t ay_high;
+    uint8_t ay_low;
+    uint8_t az_high;
+    uint8_t az_low;
+    uint8_t gx_high;
+    uint8_t gx_low;
+    uint8_t gy_high;
+    uint8_t gy_low;
+    uint8_t gz_high;
+    uint8_t gz_low;
+    uint8_t temp;
+    uint8_t timestamp_high;
+    uint8_t timestamp_low;
+};
+
+__attribute__((packed)) typedef struct fifo_xfer_packet4 {
+    uint8_t header;
+    uint8_t ax_high;    // AX[19:12]
+    uint8_t ax_mid;     // AX[11:4]
+    uint8_t ay_high;
+    uint8_t ay_mid;
+    uint8_t az_high;
+    uint8_t az_mid;
+    uint8_t gx_high;
+    uint8_t gx_mid;
+    uint8_t gy_high;
+    uint8_t gy_mid;
+    uint8_t gz_high;
+    uint8_t gz_mid;
+    uint8_t temp_high;
+    uint8_t temp_low;
+    uint8_t timestamp_high;
+    uint8_t timestamp_low;
+    uint8_t axgx_low;       // upper 4-bits AX[3:0], lower 4-bits GX[3:0]
+    uint8_t aygy_low;
+    uint8_t azgz_low;
+};
+
+typedef struct fifo_packet3 {
+    uint8_t header;
+    int16_t ax, ay, az;
+    int16_t gx, gy, gz;
+    int8_t temp;
+    uint16_t timestamp;
+};
+
+typedef struct fifo_packet4 {
+    uint8_t header;
+    int32_t ax; // unused[31:20], AX[19:0]
+    int32_t ay; // unused[31:20], AY[19:0]
+    int32_t az; // unused[31:20], AZ[19:0]
+    int32_t gx; // unused[31:20], GX[19:0]
+    int32_t gy; // unused[31:20], GY[19:0]
+    int32_t gz; // unused[31:20], GZ[19:0]
+    int16_t temp;
+    uint16_t timestamp;
+};
+
+#define PACKET4_DATA_SIGN_BIT       (1<<19)
+#define PACKET4_SIGN_EXTEND(x)      (long)(((x) & PACKET4_DATA_SIGN_BIT) ? (x) | 0xFFF0000 : (x))
+
+// Invalid data readings are flagged where FIFO_HOLD_LAST_DATA_EN is disabled; 
+// see [1] section 14.34
+#define PACKET4_SAMPLE_MARKED_INVALID(x) ((x) == -524288)
+#define PACKET3_SAMPLE_MARKED_INVALID(x) ((x) == -32768)
+
+// Packet4 Accel to G 
+#define PACKET4_AtoG(x)   (PACKET4_SIGN_EXTEND(x)/8192f)
+// Packet 4 Gyro reading to deg/sec
+#define PACKET4_GtoDPS(x)   (PACKET4_SIGN_EXTEND(x)/131f)
+
+#define HEADER_MSG                   (1<<7)
+#define HEADER_ACCEL                 (1<<6)
+#define HEADER_GYRO                  (1<<5)
+#define HEADER_20                    (1<<4)
+#define HEADER_TIMESTAMP_FSYNC_MASK  (3<<2)
+#define HEADER_TIMESTAMP_FSYNC_NONE  (0<<2)
+#define HEADER_TIMESTAMP_FSYNC_ODR   (2<<2)
+#define HEADER_TIMESTAMP_FSYNC_FSYNC (3<<2)
+#define HEADER_ODR_ACCEL             (1<<1)
+#define HEADER_ODR_GYRO              (1<<0)
+};
+
+#define ICM42688_RETURN_OK  0
+#define ICM42688_RETURN_ERR 0xff
+
+
+class ICM42688 {
+   public:
+    ICM42688(TwoWire* i2c);
+
+    // Configure the device for operation
+    void init(uint8_t Ascale, uint8_t Gscale, uint8_t AODR, uint8_t GODR,
+              uint8_t aMode, uint8_t gMode, bool CLKIN);
+
+    float getAres(uint8_t Ascale);
+    float getGres(uint8_t Gscale);
+
+    // return the chip identifier reported by the device; 0x47 for ICM-42688-P
+    uint8_t getChipID(void);
+
+    void offsetBias(float* dest1, float* dest2);
+    void reset(void);
+
+    // return interrupt status register bits
+    uint8_t readIntStatus(void);
+    
+    void selfTest(int16_t* accelDiff, int16_t* gyroDiff, float* ratio);
+
+    // Read a sample when not in FIFO mode
+    void readData(int16_t* destination);
+
+
+    void setTiltDetect(void);
+    void setWakeonMotion(void);
+
+    // Configure the device for the desired FIFO packet mode.
+    //
+    // Call after calling init(). Currently only modes 3 and 4 are supported.
+    // returns 0 on success, 0xff on any error
+    uint8_t enableFifoMode(uint8_t mode);
+    //uint8_t disableFifoMode(void);
+
+    // Read and unpack all packets available in FIFO
+    // pPacketCount reflect number of packets read
+    // returns ICM42688_RETURN_OK or ICM42688_RETURN_ERR if not configured for FIFO mode 3
+    uint8_t readFiFo(icm42688::fifo_packet3 *pBuf,  uint16_t *pPacketCount);
+
+    // Read and unpack all packets available in FIFO
+    // returns ICM42688_RETURN_OK or ICM42688_RETURN_ERR if not configured for FIFO mode 4
+    uint8_t readFiFo(icm42688::fifo_packet4 *pBuf, uint16_t *pPacketCount);
+
+    uint16_t APEXStatus();
+
+    // returns 1 if byte was read successfully
+    uint8_t readByte(uint8_t subAddress, uint8_t *pData);
+
+    // returns number of bytes actually read
+    uint8_t readBytes(uint8_t subAddress, uint8_t count, uint8_t * pData);
+    
+    // return 1 if byte written, 0 otherwise
+    uint8_t writeByte(uint8_t regAddr, uint8_t data);
+
+    // Deprecated call
+    void writeByte(uint8_t devAddr, uint8_t regAddr, uint8_t data);
+
+    uint8_t readByte(uint8_t address, uint8_t subAddress);
+
+    // Deprecated call
+    void readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t * dest);
+
+
+   protected:
+    float       _aRes, _gRes;
+    // Wire interface used for I/O
+    TwoWire*    _i2c;
+    // I2C device address
+    uint8_t     _i2c_address;
+
+    // values: 0-4; only "3" supported currently; "0" not in FIFO mode
+    uint8_t     _fifo_packet_config;
+
+    // number of bytes expected in each FIFO packet, based on the configuration we set
+    uint8_t     _fifo_packet_size;
 };
 
 #endif

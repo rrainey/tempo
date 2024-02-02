@@ -1,28 +1,41 @@
 /* 
 
-  Test peripheral interfaces that's we'll use with the Tempo hardware
+  Test peripheral interfaces that we'll use with the Tempo hardware
 
-  Based on code by Kris Winer
-  01/14/2022 Copyright Tlera Corporation
-  Library may be used freely and without limit with proper attribution.
+  This application is an amalgam of several open source Arduino projects.
+  It was used to test several different processor board with the Peakick sensor array.
+
+  Elements based on code by Kris Winer
+  "01/14/2022 Copyright Tlera Corporation"
+  "Library may be used freely and without limit with proper attribution."
+  see https://github.com/kriswiner/ICM42688
 
 */
 
-#if !defined(ESP32)
-#error This code is intended to run on ESP32 Thing Plus C boards
-#endif
-
 #include <Arduino.h>
+#include <stdio.h>
 
 #include "I2Cdev.h"
 #include "ICM42688.h"
 #include "MMC5983MA.h"
-#include <ESP32Time.h>
-
-#include "ESP32TimerInterrupt.h"
 #include "bmp3.h"
+#include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 
-#define SerialDebug false           // set to true to get extended debugging
+SFE_UBLOX_GNSS myGNSS;
+
+#define GPS_I2C_ADDR      0x42  // SAM-M10Q
+
+// "true" for extended Serial debugging messages
+#define SerialDebug false
+
+volatile bool alarmFlag = false;  // for RTC alarm interrupt
+
+#if defined(ESP32)
+
+#include <ESP32Time.h>
+#include "ESP32TimerInterrupt.h"
+
+// Sparkfun ESP32 Thing Plus C
 #define RED_LED           13
 #define GREEN_LED         12
 #define CLKOUT            14        // ESP32 GPIO14 on the Sparkfun ESP32 Thing Plus C
@@ -40,6 +53,224 @@
 #define ICM42688_intPin2 14  // INT2/CLKIN
 #define MMC5983MA_intPin 15
 #define BMP390_intPin    33
+#endif
+
+#if defined(STM32F4xx)
+// Sparkfun STM-32 (DEV-17712)
+#define RED_LED           13
+#define GREEN_LED         12
+#define CLKOUT            5        
+
+#define CPU_SUPPLIES_IMU_CLKIN  false
+
+// ESP32 Thing Plus C/peackick-specific interrupt line connections
+#define ICM42688_intPin1 6  // INT/INT1
+#define ICM42688_intPin2 5  // INT2/CLKIN
+#define MMC5983MA_intPin 9
+#define BMP390_intPin    10
+
+#define IRAM_ATTR
+
+#include <STM32RTC.h>
+
+static STM32RTC::Hour_Format hourFormat = STM32RTC::HOUR_24;
+static STM32RTC::AM_PM period = STM32RTC::AM;
+
+STM32RTC& rtc = STM32RTC::getInstance();
+
+void rtc_SecondsCB(void *data)
+{
+  UNUSED(data);
+  alarmFlag = true;
+}
+
+#endif
+
+// A small hack to automatically identify the Sparkfun SAMD51 board
+#if defined(_SAMD51J20A_)
+#define SAMD51_THING_PLUS
+#endif
+
+#if defined(SAMD51_THING_PLUS)
+
+/**
+ * Sparkfun Thing Plus SAMD51 
+ * 
+ * see Sparkfun SAMD51 Thing Plus Hookup Guide
+ * 
+ * BMP390    INT       D10 INT2
+ * MMC5983MA INT       D9  INT7
+ * ICM42688  INT/INT1  D6  INT4
+ * ICM42688  INT2      D5  INT15 
+ * 
+ */
+#define RED_LED           13
+#define GREEN_LED         12
+#define CLKOUT            5         // as a D51 output line     
+
+#define CPU_SUPPLIES_IMU_CLKIN  false
+
+// SAMD51 Thing Plus C/peackick-specific interrupt line connections
+#define ICM42688_intPin1 digitalPinToInterrupt(6)   // INT/INT1
+#define ICM42688_intPin2 digitalPinToInterrupt(5)   // INT2/CLKIN as an interrupt line
+#define MMC5983MA_intPin digitalPinToInterrupt(9)
+#define BMP390_intPin    digitalPinToInterrupt(10)
+
+#define IRAM_ATTR
+
+#define GCLK1_HZ 48000000
+#define TIMER_PRESCALER_DIV 1024
+
+static inline void TC3_wait_for_sync() {
+  while (TC3->COUNT16.SYNCBUSY.reg != 0) {}
+}
+
+class TC_Timer {
+  public:
+    TC_Timer() {
+        callback = NULL;
+    }
+    void startTimer(unsigned long period, void (*f)());
+    void stopTimer();
+    void restartTimer(unsigned long period);
+    void setPeriod(unsigned long period);
+
+public:
+    void (*callback)();
+};
+
+TC_Timer TC;
+
+void TC_Timer::startTimer(unsigned long period, void (*f)()) {
+  // Enable the TC bus clock, use clock generator 1
+  GCLK->PCHCTRL[TC3_GCLK_ID].reg = GCLK_PCHCTRL_GEN_GCLK1_Val |
+                                   (1 << GCLK_PCHCTRL_CHEN_Pos);
+  while (GCLK->SYNCBUSY.reg > 0);
+
+  TC3->COUNT16.CTRLA.bit.ENABLE = 0;
+  
+  // Use match mode so that the timer counter resets when the count matches the
+  // compare register
+  TC3->COUNT16.WAVE.bit.WAVEGEN = TC_WAVE_WAVEGEN_MFRQ;
+  TC3_wait_for_sync();
+  
+   // Enable the compare interrupt
+  TC3->COUNT16.INTENSET.reg = 0;
+  TC3->COUNT16.INTENSET.bit.MC0 = 1;
+
+  // Enable IRQ
+  NVIC_EnableIRQ(TC3_IRQn);
+
+  this->callback = f;
+
+  setPeriod(period);
+}
+
+void TC_Timer::stopTimer() {
+  TC3->COUNT16.CTRLA.bit.ENABLE = 0;
+}
+
+void TC_Timer::restartTimer(unsigned long period) {
+  // Enable the TC bus clock, use clock generator 1
+  GCLK->PCHCTRL[TC3_GCLK_ID].reg = GCLK_PCHCTRL_GEN_GCLK1_Val |
+                                   (1 << GCLK_PCHCTRL_CHEN_Pos);
+  while (GCLK->SYNCBUSY.reg > 0);
+
+  TC3->COUNT16.CTRLA.bit.ENABLE = 0;
+  
+  // Use match mode so that the timer counter resets when the count matches the
+  // compare register
+  TC3->COUNT16.WAVE.bit.WAVEGEN = TC_WAVE_WAVEGEN_MFRQ;
+  TC3_wait_for_sync();
+  
+   // Enable the compare interrupt
+  TC3->COUNT16.INTENSET.reg = 0;
+  TC3->COUNT16.INTENSET.bit.MC0 = 1;
+
+  // Enable IRQ
+  NVIC_EnableIRQ(TC3_IRQn);
+
+  setPeriod(period);
+}
+
+void TC_Timer::setPeriod(unsigned long period) {
+  int prescaler;
+  uint32_t TC_CTRLA_PRESCALER_DIVN;
+
+  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_ENABLE;
+  TC3_wait_for_sync();
+  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV1024;
+  TC3_wait_for_sync();
+  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV256;
+  TC3_wait_for_sync();
+  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV64;
+  TC3_wait_for_sync();
+  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV16;
+  TC3_wait_for_sync();
+  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV4;
+  TC3_wait_for_sync();
+  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV2;
+  TC3_wait_for_sync();
+  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV1;
+  TC3_wait_for_sync();
+
+  if (period > 300000) {
+    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV1024;
+    prescaler = 1024;
+  } else if (80000 < period && period <= 300000) {
+    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV256;
+    prescaler = 256;
+  } else if (20000 < period && period <= 80000) {
+    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV64;
+    prescaler = 64;
+  } else if (10000 < period && period <= 20000) {
+    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV16;
+    prescaler = 16;
+  } else if (5000 < period && period <= 10000) {
+    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV8;
+    prescaler = 8;
+  } else if (2500 < period && period <= 5000) {
+    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV4;
+    prescaler = 4;
+  } else if (1000 < period && period <= 2500) {
+    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV2;
+    prescaler = 2;
+  } else if (period <= 1000) {
+    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV1;
+    prescaler = 1;
+  }
+  TC3->COUNT16.CTRLA.reg |= TC_CTRLA_PRESCALER_DIVN;
+  TC3_wait_for_sync();
+
+  int compareValue = (int)(GCLK1_HZ / (prescaler/((float)period / 1000000))) - 1;
+
+  // Make sure the count is in a proportional position to where it was
+  // to prevent any jitter or disconnect when changing the compare value.
+  TC3->COUNT16.COUNT.reg = map(TC3->COUNT16.COUNT.reg, 0,
+                               TC3->COUNT16.CC[0].reg, 0, compareValue);
+  TC3->COUNT16.CC[0].reg = compareValue;
+  TC3_wait_for_sync();
+
+  TC3->COUNT16.CTRLA.bit.ENABLE = 1;
+  TC3_wait_for_sync();
+}
+
+void TC3_Handler() {
+  // If this interrupt is due to the compare register matching the timer count
+  if (TC3->COUNT16.INTFLAG.bit.MC0 == 1) {
+    TC3->COUNT16.INTFLAG.bit.MC0 = 1;
+    if (TC.callback != NULL) {
+        (*(TC.callback))();
+    }
+  }
+}
+
+void myISR() {
+    alarmFlag = true;
+}
+
+#endif
+
 
 #define bmp3_check_rslt(func, r)                     \
     if (r != BMP3_OK) {                              \
@@ -80,9 +311,8 @@ extern void IRAM_ATTR MadgwickQuaternionUpdate(float ax, float ay, float az,
                                                float gx, float gy, float gz,
                                                float mx, float my, float mz);
 
-#define I2C_BUS Wire  // Define the I2C bus (Wire instance) you wish to use
 
-I2Cdev i2c_0(&I2C_BUS);  // Instantiate the I2Cdev object and point to the
+I2Cdev i2c_0(&Wire);  // Instantiate the I2Cdev object and point to the
                          // desired I2C bus
 
 /* Specify sensor parameters (sample rate is twice the bandwidth)
@@ -95,11 +325,11 @@ I2Cdev i2c_0(&I2C_BUS);  // Instantiate the I2Cdev object and point to the
       GODR_12_5Hz, GODR_25Hz, GODR_50Hz, GODR_100Hz, GODR_200Hz, GODR_500Hz,
  GODR_1kHz, GODR_2kHz, GODR_4kHz, GODR_8kHz, GODR_16kHz, GODR_32kHz
 */
-uint8_t Ascale = AFS_4G, Gscale = GFS_250DPS, AODR = AODR_1kHz,
-        GODR = GODR_1kHz, aMode = aMode_LN, gMode = gMode_LN;
+uint8_t Ascale = AFS_4G, Gscale = GFS_250DPS, AODR = AODR_200Hz,
+        GODR = GODR_200Hz, aMode = aMode_LN, gMode = gMode_LN;
 
 // must be set to match accel/gyro samples
-float fSampleInterval_sec = 1 / 2000.0f;
+float fSampleInterval_sec = 1 / 200.0f;
 
 float aRes, gRes;  // scale resolutions per LSB for the accel and gyro sensor2
 float accelBias[3] = {0.0f, 0.0f, 0.0f},
@@ -110,15 +340,14 @@ float STratio[7] = {
     0.0f, 0.0f, 0.0f, 0.0f,
     0.0f, 0.0f, 0.0f};    // self-test results for the accel and gyro
 int16_t ICM42688Data[7];  // Stores the 16-bit signed sensor output
-float Gtemperature;  // Stores the real internal gyro temperature in degrees
+float imuTemp_C;  // Stores the real internal gyro temperature in degrees
                      // Celsius
 float ax, ay, az, gx, gy,
     gz;  // variables to hold latest accel/gyro data values
 
-volatile bool newICM42688Data = false;
-volatile unsigned long imuISRCount = 0;
+volatile uint16_t imuISRCount = 0;
 
-ICM42688 imu(&i2c_0);  // instantiate ICM42688 class
+ICM42688 imu(&Wire);
 
 /* Specify magnetic sensor parameters (continuous mode sample rate is dependent
  * on bandwidth) choices are: MODR_ONESHOT, MODR_1Hz, MODR_10Hz, MODR_20Hz,
@@ -163,17 +392,18 @@ struct bmp3_data data = {0};
 struct bmp3_settings settings = {0};
 struct bmp3_status status = {{0}};
 
-// RTC parameter for STM32L4 native RTC class
+// ESP32 RTC API
 uint8_t seconds, minutes, hours, day, month, year;
 uint8_t Seconds, Minutes, Hours, Day, Month, Year;
-volatile bool alarmFlag = false;  // for RTC alarm interrupt
 
+#if defined(ESP32)
 // UTC timezone
 ESP32Time RTC(0);
 ESP32Timer ITimer0(0);
 
 // five second status reports to Serial
 #define ESP32_TIMER_INTERVAL_USEC (5000 * 1000)
+#endif
 
 bool IRAM_ATTR TimerHandler(void* timerNo) {
     alarmFlag = true;
@@ -181,7 +411,6 @@ bool IRAM_ATTR TimerHandler(void* timerNo) {
 }
 
 void IRAM_ATTR myinthandler1() {
-    newICM42688Data = true;
     ++imuISRCount;
 }
 
@@ -189,34 +418,76 @@ void IRAM_ATTR myinthandler2() { newMMC5983MAData = true; }
 
 void IRAM_ATTR alarmMatch() { alarmFlag = true; }
 
-// number of IMU data read interrupts processed / second
+// number of IMU data read interrupts processed / interval
 unsigned long imuIntCount = 0;
-// counts total number of times we missed one or more IMU samples
+// track total number of times we missed processing after an IMU interrupt 
 unsigned long imuISROverflow = 0;
-// count number of loop() calls / second
+// track number of loop() calls / interval
 unsigned long loopCount = 0;
+// track number of invalid samples received in FIFO
+unsigned long imuInvalidSamples = 0;
+// total number of packets processed from FIFO
+unsigned long fifoTotal = 0;
+// total number of passes through loop()
+unsigned long loopTotal = 0;
+
 bool ledState = false;
+bool greenLedState = false;
 
 float pressure_hPa = 1000.0f;
 float bmpTemperature_degC = 15.0f;
 float bmpAltitude_m = 0.0f;
 
 void setup() {
+
+    delay(2000);
+
     Serial.begin(115200);
     while (!Serial) {
-    }  // wait for serial monitor to begin
+    }
 
     // Configure led
     pinMode(RED_LED, OUTPUT);
     pinMode(GREEN_LED, OUTPUT);
 
+#if !defined(ESP32)
+    pinMode(ICM42688_intPin1, INPUT);
+    pinMode(ICM42688_intPin2, INPUT);
+    pinMode(MMC5983MA_intPin, INPUT);
+    pinMode(BMP390_intPin, INPUT);
+#endif
+
     digitalWrite(RED_LED, HIGH);
 
     Wire.begin();           // set master mode
-    Wire.setClock(400000);  // I2C frequency at 400 kHz
-    delay(1000);
+    Wire.setClock(100000);  // I2C frequency at 400 kHz
 
-    //i2c_0.I2Cscan();
+    myGNSS.begin();
+
+    myGNSS.setUART1Output(0);
+    myGNSS.setUART2Output(0);
+
+    //myGNSS.setI2COutput(COM_TYPE_UBX | COM_TYPE_NMEA); //Set the I2C port to output both NMEA and UBX messages
+    myGNSS.setI2COutput(COM_TYPE_NMEA);
+    myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); //Save (only) the communications port settings to flash and BBR
+
+    // Idle reporting will be at 0.5 Hz
+    myGNSS.setMeasurementRate(2000);
+    myGNSS.setNavigationRate(1);
+
+    if (myGNSS.setDynamicModel(DYN_MODEL_AIRBORNE2g) == false) 
+    {
+        Serial.println(F("Warning: setDynamicModel failed"));
+    }
+    else
+    {
+        Serial.println(F("GNSS Dynamic Platform Model set to AIRBORNE2g"));
+    }
+
+    //This will pipe all NMEA sentences to the serial port so we can see them
+    //myGNSS.setNMEAOutputPort(Serial);
+
+    myGNSS.setNavigationFrequency(1);
 
     Serial.println("ICM42688 ");
     byte ICM42688ID = imu.getChipID(); 
@@ -228,10 +499,10 @@ void setup() {
     bmp3_begin(&dev, 0x76, &Wire);
     uint8_t BMP390ID = dev.chip_id;
 
-    bool allSensorsAckknowledged =
+    bool allSensorsAcknowledged =
         ICM42688ID == 0x47 && MMC5983ID == 0x30 && BMP390ID == 0x60;
 
-    if (allSensorsAckknowledged) {
+    if (allSensorsAcknowledged) {
         Serial.println("All peripherals are operating");
         Serial.println(" ");
 
@@ -301,8 +572,8 @@ void setup() {
         imu.init(Ascale, Gscale, AODR, GODR, aMode, gMode, CPU_SUPPLIES_IMU_CLKIN);
 
         Serial.println(
-            "Calculate accel and gyro offset biases: keep sensor flat and "
-            "motionless!");
+            "Sampling accel and gyro offset biases: keep device flat and "
+            "motionless");
         delay(1000);
 
         imu.offsetBias(accelBias, gyroBias);
@@ -316,6 +587,11 @@ void setup() {
         Serial.println(gyroBias[2]);
         delay(1000);
 
+        Serial.println("");
+        Serial.println("Magnetometer Calibration");
+
+        digitalWrite(GREEN_LED, HIGH);
+
         mmc.selfTest();
         mmc.getOffset(magOffset);
         Serial.println("mag offsets:");
@@ -325,7 +601,7 @@ void setup() {
 
         mmc.reset();
 
-        mmc.SET();  // "deGauss"
+        mmc.SET();
         attachInterrupt(MMC5983MA_intPin, myinthandler2, RISING);
 
         mmc.init(MODR, MBW, MSET);
@@ -360,11 +636,11 @@ void setup() {
         rslt = bmp3_set_sensor_settings(settings_sel, &settings, &dev);
         bmp3_check_rslt("bmp3_set_sensor_settings", rslt);
 
+        attachInterrupt(BMP390_intPin, BMPSampleReadyHandler, RISING);
+
         settings.op_mode = BMP3_MODE_NORMAL;
         rslt = bmp3_set_op_mode(&settings, &dev);
         bmp3_check_rslt("bmp3_set_op_mode", rslt);
-
-        attachInterrupt(BMP390_intPin, BMPSampleReadyHandler, RISING);
 
         digitalWrite(RED_LED, HIGH);
     } else {
@@ -375,15 +651,36 @@ void setup() {
 
     /* Set up the RTC alarm interrupt */
 
+#if defined(ESP32)
     if (ITimer0.attachInterruptInterval(ESP32_TIMER_INTERVAL_USEC,
                                         TimerHandler)) {
         Serial.print(F("Starting RTC report interval clock; millis() = "));
         Serial.println(millis());
     } else {
-        Serial.println(F("Can't set RTC. Select another frequancy or timer"));
+        Serial.println(F("Can't set RTC."));
     }
 
     RTC.setTime(0, 0, 0, 1, 1, 2024);  // 1st Jan 2024 00:00:00
+
+#endif
+
+#if defined(SAMD51_THING_PLUS)
+    TC.startTimer(1000000, myISR); // one second
+#endif
+
+#if defined(STM32F405xx)
+        rtc.begin(hourFormat);
+
+        rtc.setHours(0, period);
+        rtc.setMinutes(0);
+        rtc.setSeconds(0);
+
+        rtc.setDay(1);
+        rtc.setMonth(1);
+        rtc.setYear(2024);
+
+        rtc.attachSecondsInterrupt(rtc_SecondsCB);
+#endif
 
     // activate CLKIN line as clock for IMU
     // Generate a 32.768K pps square wave on the IMU CLKIN pin
@@ -398,21 +695,24 @@ void setup() {
 #endif
 
     mmc.clearInt();  //  clear MMC5983MA interrupts before main loop
-    imu.DRStatus();  // clear ICM42688 data ready interrupt
+    imu.readIntStatus();  // clear ICM42688 data ready interrupt
 
     // ICM42688 INT1/INT interrupt 
-    attachInterrupt(32, myinthandler1, RISING); 
+    attachInterrupt(ICM42688_intPin1, myinthandler1, RISING); 
 
-    Serial.print("CPU frequency = ");
-    Serial.println(getCpuFrequencyMhz());
+    imu.enableFifoMode( 3 );
+
+    digitalWrite(GREEN_LED, LOW);
 }
 
 void loop() {
+
     ++loopCount;
+    ++loopTotal;
 
     // MMC5983MA magnetometer has new data?
     if (newMMC5983MAData == true) {  
-        newMMC5983MAData = false;    
+        newMMC5983MAData = false;
 
         MMC5983MAstatus = mmc.status();
         if (MMC5983MAstatus & STATUS_MEAS_M_DONE) {
@@ -432,18 +732,16 @@ void loop() {
         }
     }
 
+#ifdef UNUSED_TAKE_SAMPLES_FROM_REGISTERS
     // ICM42688 has new sample?
-    if (newICM42688Data == true) {
-        newICM42688Data = false;
-        ++imuIntCount;
-
-        deltat = fSampleInterval_sec * imuISRCount;
-
+    if (imuISRCount) {
         if (imuISRCount > 1) {
             ++imuISROverflow;
         }
-
         imuISRCount = 0;
+        ++imuIntCount;
+
+        deltat = fSampleInterval_sec;
 
         imu.readData(ICM42688Data);  // INT1 cleared on any read
 
@@ -461,6 +759,66 @@ void loop() {
         // peakick V1 board
         MadgwickQuaternionUpdate(ay, ax, az, gy * pi / 180.0f, gx * pi / 180.0f,
                                  gz * pi / 180.0f, -mx, my, -mz);
+    }
+#endif
+
+    if (imuISRCount > 0) {
+
+        if (imuISRCount > 1) {
+            ++imuISROverflow;
+        }
+        imuISRCount = 0;
+        ++imuIntCount;
+
+        // Read status bits to clear interrupt (see definition of INT_CONFIG0)
+        uint8_t intStatus = imu.readIntStatus();
+
+        deltat = fSampleInterval_sec;
+
+        uint8_t status;
+        icm42688::fifo_packet3 sampleBuf[140], *pBuf;
+        uint16_t packetCount;
+
+        status = imu.readFiFo(sampleBuf, &packetCount);
+        if (status != ICM42688_RETURN_OK) {
+            Serial.println("readFifo encountered an error");
+        }
+
+        fifoTotal += packetCount;
+
+        for (int i = 0; i < packetCount; ++i) {
+            pBuf = &sampleBuf[i];
+
+            // valid sample?
+
+            if ((pBuf->header & ICM42688_FIFO_HEADER_MSG) == 0) {
+                if (!(PACKET3_SAMPLE_MARKED_INVALID(pBuf->gx) ||
+                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->gy) ||
+                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->gz) ||
+                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->ax) ||
+                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->ay) ||
+                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->az))) {
+                    ax = (float)pBuf->ax * aRes - accelBias[0];
+                    ay = (float)pBuf->ay * aRes - accelBias[1];
+                    az = (float)pBuf->az * aRes - accelBias[2];
+
+                    // Convert the gyro value into degrees per second
+                    gx = (float)pBuf->gx * gRes - gyroBias[0];
+                    gy = (float)pBuf->gy * gRes - gyroBias[1];
+                    gz = (float)pBuf->gz * gRes - gyroBias[2];
+
+                    imuTemp_C = ((float)pBuf->temp / 2.07f) + 25.0f;
+
+                    // signs and axes if mag values corrected for IC placement
+                    // on the peakick V1 board
+                    MadgwickQuaternionUpdate(ay, ax, az, gy * pi / 180.0f,
+                                             gx * pi / 180.0f, gz * pi / 180.0f,
+                                             -mx, my, -mz);
+                } else {
+                    imuInvalidSamples++;
+                }
+            }
+        }
     }
 
     if ( pressureSampleAvailable ) {
@@ -498,6 +856,8 @@ void loop() {
 
         alarmFlag = false;
 
+#ifdef notdef
+
         if (SerialDebug) {
             Serial.println("RTC:");
             Day = RTC.getDay();
@@ -531,47 +891,25 @@ void loop() {
             Serial.println(Year);
             Serial.println(" ");
         }
+#endif
 
         if (SerialDebug) {
-            Serial.print("ax = ");
-            Serial.print((int)1000 * ax);
-            Serial.print(" ay = ");
-            Serial.print((int)1000 * ay);
-            Serial.print(" az = ");
-            Serial.print((int)1000 * az);
-            Serial.println(" mg");
-            Serial.print("gx = ");
-            Serial.print(gx, 2);
-            Serial.print(" gy = ");
-            Serial.print(gy, 2);
-            Serial.print(" gz = ");
-            Serial.print(gz, 2);
-            Serial.println(" deg/s");
+            char buf[128];
 
-            Serial.print("q0 = ");
-            Serial.print(q[0]);
-            Serial.print(" qx = ");
-            Serial.print(q[1]);
-            Serial.print(" qy = ");
-            Serial.print(q[2]);
-            Serial.print(" qz = ");
-            Serial.println(q[3]);
-            Serial.print("mx = ");
-            Serial.print((int)1000 * mx);
-            Serial.print(" my = ");
-            Serial.print((int)1000 * my);
-            Serial.print(" mz = ");
-            Serial.print((int)1000 * mz);
-            Serial.println(" mG");
+            sprintf(buf, "a = {%5.1f, %5.1f, %5.1f} mg", 1000.0f * ax,
+                    1000.0f * ay, 1000.0f * az);
+            Serial.println(buf);
 
-            Serial.print("q0 = ");
-            Serial.print(q[0]);
-            Serial.print(" qx = ");
-            Serial.print(q[1]);
-            Serial.print(" qy = ");
-            Serial.print(q[2]);
-            Serial.print(" qz = ");
-            Serial.println(q[3]);
+            sprintf(buf, "g = {%5.1f, %5.1f, %5.1f} deg/s", gx, gy, gz);
+            Serial.println(buf);
+
+            sprintf(buf, "M = {%5.1f, %5.1f, %5.1f} mG", 1000.0f * mx,
+                    1000.0f * my, 1000.0f * mz);
+            Serial.println(buf);
+
+            sprintf(buf, "q = {%5.3f, %5.3f, %5.3f, %5.3f}", q[0], q[1], q[2],
+                    q[3]);
+            Serial.println(buf);
         }
 
         if (SerialDebug) {
@@ -594,110 +932,65 @@ void loop() {
             Serial.print(loopCount);
             Serial.println("");
         }
-    }
 
-    Gtemperature = ((float)ICM42688Data[0]) / 132.48f +
-                   25.0f;  // Gyro chip temperature in degrees Centigrade
-    // Print temperature in degrees Centigrade
-    if (SerialDebug) {
-        Serial.print("Gyro temperature is ");
-        Serial.print(Gtemperature, 1);
-        Serial.println(" degrees C");  // Print T values to tenths of s degree C
-    }
+        // Print temperature in degrees Centigrade
+        if (SerialDebug) {
+            Serial.print("Gyro temperature is ");
+            Serial.print(imuTemp_C, 1);
+            Serial.println(" degC");
+        }
 
 #ifdef notdef
-    MMC5983MAtemperature = mmc.readTemperature();  // this is not working....
-    Mtemperature = (((float)MMC5983MAtemperature) * 0.80f) -
-                   75.0f;  // Mag chip temperature in degrees Centigrade
-    // Print temperature in degrees Centigrade
-    if (SerialDebug) {
-        Serial.print("Mag temperature is ");
-        Serial.print(Mtemperature, 1);
-        Serial.println(" degrees C");  // Print T values to tenths of s degree C
-    }
+        MMC5983MAtemperature =
+            mmc.readTemperature();  // this is not working....
+        Mtemperature = (((float)MMC5983MAtemperature) * 0.80f) -
+                       75.0f;  // Mag chip temperature in degrees Centigrade
+        // Print temperature in degrees Centigrade
+        if (SerialDebug) {
+            Serial.print("Mag temperature is ");
+            Serial.print(Mtemperature, 1);
+            Serial.println(
+                " degrees C");  // Print T values to tenths of s degree C
+        }
 #endif
 
-#ifdef notdef
+        a12 = 2.0f * (q[1] * q[2] + q[0] * q[3]);
+        a22 = q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3];
+        a31 = 2.0f * (q[0] * q[1] + q[2] * q[3]);
+        a32 = 2.0f * (q[1] * q[3] - q[0] * q[2]);
+        a33 = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3];
+        pitch = -asinf(a32);
+        roll = atan2f(a31, a33);
+        yaw = atan2f(a12, a22);
+        pitch *= 180.0f / pi;
+        yaw *= 180.0f / pi;
+        yaw += 0.0f;  // no magnetic declination correction for now
+        if (yaw < 0) yaw += 360.0f;  // Ensure yaw stays between 0 and 360
+        roll *= 180.0f / pi;
+        lin_ax = ax + a31;
+        lin_ay = ay + a32;
+        lin_az = az - a33;
 
-    a12 = 2.0f * (q[1] * q[2] + q[0] * q[3]);
-    a22 = q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3];
-    a31 = 2.0f * (q[0] * q[1] + q[2] * q[3]);
-    a32 = 2.0f * (q[1] * q[3] - q[0] * q[2]);
-    a33 = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3];
-    pitch = -asinf(a32);
-    roll = atan2f(a31, a33);
-    yaw = atan2f(a12, a22);
-    pitch *= 180.0f / pi;
-    yaw *= 180.0f / pi;
-    yaw += 0.0f;                 // no magnetic declination correction for now
-    if (yaw < 0) yaw += 360.0f;  // Ensure yaw stays between 0 and 360
-    roll *= 180.0f / pi;
-    lin_ax = ax + a31;
-    lin_ay = ay + a32;
-    lin_az = az - a33;
+        char pbuf[128];
 
-    if (SerialDebug) {
-        Serial.print("Yaw, Pitch, Roll: ");
-        Serial.print(yaw, 2);
-        Serial.print(", ");
-        Serial.print(pitch, 2);
-        Serial.print(", ");
-        Serial.println(roll, 2);
+        sprintf(
+            pbuf,
+            "Yaw      Pitch    Roll (deg) Press(hPa)\n%6.2f   %6.2f   %6.2f     %7.1f",
+            yaw, pitch, roll, pressure_hPa);
+        Serial.println(pbuf);
 
-        Serial.print("Grav_x, Grav_y, Grav_z: ");
-        Serial.print(-a31 * 1000.0f, 2);
-        Serial.print(", ");
-        Serial.print(-a32 * 1000.0f, 2);
-        Serial.print(", ");
-        Serial.print(a33 * 1000.0f, 2);
-        Serial.println(" mg");
-        Serial.print("Lin_ax, Lin_ay, Lin_az: ");
-        Serial.print(lin_ax * 1000.0f, 2);
-        Serial.print(", ");
-        Serial.print(lin_ay * 1000.0f, 2);
-        Serial.print(", ");
-        Serial.print(lin_az * 1000.0f, 2);
-        Serial.println(" mg");
+        sprintf(pbuf,
+                "loopCount  IntCount ISROverflow  AvgFIFO  invalidFIFO\n %8d   %7d    %8d  %7d   %6d\n---",
+                loopCount, imuIntCount, imuISROverflow, fifoTotal/loopTotal, imuInvalidSamples);
+        Serial.println(pbuf);
 
-        // Serial.print("rate = "); Serial.print((float)sumCount/sum, 2);
-        // Serial.println(" Hz");
+        imuIntCount = 0;
+        loopCount = 0;
+
+        ledState = !ledState;
+        digitalWrite(RED_LED, (ledState ? HIGH : LOW));
     }
 
-    // For plotting comma-delimited Euler angles in a spreadsheet
-    // Serial.print(millis()/1000);Serial.print(",");
-    Serial.print(yaw, 2);
-    Serial.print(", ");
-    Serial.print(pitch, 2);
-    Serial.print(", ");
-    Serial.print(roll, 2);
-    Serial.print(", ");
-    Serial.println(Pressure, 2);
-#endif
-
-    Serial.print("q0 = ");
-    Serial.print(q[0]);
-    Serial.print(" qx = ");
-    Serial.print(q[1]);
-    Serial.print(" qy = ");
-    Serial.print(q[2]);
-    Serial.print(" qz = ");
-    Serial.print(q[3]);
-    Serial.print(", p = ");
-    Serial.println(pressure_hPa, 2);
-    // Serial.print("rate = "); Serial.print((float)sumCount/sum, 2);
-    // Serial.println(" Hz");
-    Serial.print("imuISROverflow = ");
-    Serial.print(imuISROverflow);
-    Serial.println("");
-
-    imuISRCount = 0;
-    loopCount = 0;
-
-    sum = 0;
-
-    // digitalWrite(myLed, HIGH); delay(1); digitalWrite(myLed, LOW);  // toggle
-    // led
-
-    ledState = !ledState;
-    digitalWrite(RED_LED, (ledState ? HIGH : LOW));
+    greenLedState = !greenLedState;
+    digitalWrite(GREEN_LED, (greenLedState ? HIGH : LOW));
 }
