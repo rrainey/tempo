@@ -1,14 +1,12 @@
-/* 01/14/2022 Copyright Tlera Corporation
-
-    Created by Kris Winer
-
-  This sketch uses SDA/SCL on pins 21/20 (Ladybug default), respectively, and it uses the Ladybug STM32L432 Breakout Board.
-  The ICM42688 is a combo sensor with embedded accel and gyro, here used as 6 DoF in a 9 DoF absolute orientation solution.
-
-  Library may be used freely and without limit with attribution.
-
-*/
-
+/* 
+ * 
+ * ICM42688 class with interrupt, FIFO support, and enhanced
+ * error reporting in a few critical locations.
+ *
+ * Based on code created by Kris Winer
+ * 01/14/2022 Copyright Tlera Corporation
+ * Library may be used freely and without limit with attribution.
+ */
 #include "ICM42688.h"
 
 ICM42688::ICM42688( TwoWire * i2c )

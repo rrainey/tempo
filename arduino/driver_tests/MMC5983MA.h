@@ -14,7 +14,6 @@
 
 #include "Arduino.h"
 #include <Wire.h>
-#include "I2Cdev.h"
 
 //Register map for MMC5983MA'
 //http://www.memsic.com/userfiles/files/DataSheets/Magnetic-Sensors-Datasheets/MMC5983MA_Datasheet.pdf
@@ -88,8 +87,11 @@ All bits R/W
 class MMC5983MA
 {
   public:
-  MMC5983MA(I2Cdev* i2c_bus);
+  MMC5983MA(uint8_t devAddress = MMC5983MA_ADDRESS, TwoWire *i2c = &Wire);
+
+  // Reads the device ID from the chip
   uint8_t getChipID();
+
   void init(uint8_t MODR, uint8_t MBW, uint8_t MSET);
   void offsetBias(float * dest1, float * dest2);
   void reset();
@@ -103,10 +105,20 @@ class MMC5983MA
   void getOffset(float * destination);
   void powerDown();
   void powerUp(uint8_t MODR);
+
+  // Deprecated call
+  void writeByte(uint8_t devAddr, uint8_t regAddr, uint8_t data);
+
+  // Deprecated call
+  uint8_t readByte(uint8_t devAddr, uint8_t subAddress);
+
+  // Deprecated call
+  void readBytes(uint8_t devAddr, uint8_t subAddress, uint8_t count, uint8_t * dest);
   
   private:
   float _mRes;
-  I2Cdev* _i2c_bus;
+  TwoWire*  _i2c;
+  uint8_t   _deviceAddress;
 
   // these registers are write-only on the device
   // so we save what was written to them here

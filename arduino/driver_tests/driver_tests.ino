@@ -14,8 +14,8 @@
 
 #include <Arduino.h>
 #include <stdio.h>
+#include <avr/dtostrf.h>
 
-#include "I2Cdev.h"
 #include "ICM42688.h"
 #include "MMC5983MA.h"
 #include "bmp3.h"
@@ -312,9 +312,6 @@ extern void IRAM_ATTR MadgwickQuaternionUpdate(float ax, float ay, float az,
                                                float mx, float my, float mz);
 
 
-I2Cdev i2c_0(&Wire);  // Instantiate the I2Cdev object and point to the
-                         // desired I2C bus
-
 /* Specify sensor parameters (sample rate is twice the bandwidth)
  * choices are:
       AFS_2G, AFS_4G, AFS_8G, AFS_16G
@@ -374,7 +371,7 @@ float MMC5983MA_offset = 131072.0f;
 
 volatile bool newMMC5983MAData = false;
 
-MMC5983MA mmc(&i2c_0);  // instantiate MMC5983MA class
+MMC5983MA mmc(MMC5983MA_ADDRESS, &Wire); 
 
 #define SEALEVELPRESSURE_HPA (1013.25)
 
@@ -426,6 +423,8 @@ unsigned long imuISROverflow = 0;
 unsigned long loopCount = 0;
 // track number of invalid samples received in FIFO
 unsigned long imuInvalidSamples = 0;
+// FIFO header does not match expected bit pattern
+unsigned long imuFifoEmpty = 0;
 // total number of packets processed from FIFO
 unsigned long fifoTotal = 0;
 // total number of passes through loop()
@@ -460,7 +459,7 @@ void setup() {
     digitalWrite(RED_LED, HIGH);
 
     Wire.begin();           // set master mode
-    Wire.setClock(100000);  // I2C frequency at 400 kHz
+    Wire.setClock(100000);  // I2C frequency at 100 kHz
 
     myGNSS.begin();
 
@@ -792,6 +791,8 @@ void loop() {
             // valid sample?
 
             if ((pBuf->header & ICM42688_FIFO_HEADER_MSG) == 0) {
+              if ((pBuf->header & (ICM42688_FIFO_HEADER_ACCEL | ICM42688_FIFO_HEADER_GYRO)) == 
+                (ICM42688_FIFO_HEADER_ACCEL | ICM42688_FIFO_HEADER_GYRO)) {
                 if (!(PACKET3_SAMPLE_MARKED_INVALID(pBuf->gx) ||
                       PACKET3_SAMPLE_MARKED_INVALID(pBuf->gy) ||
                       PACKET3_SAMPLE_MARKED_INVALID(pBuf->gz) ||
@@ -817,6 +818,11 @@ void loop() {
                 } else {
                     imuInvalidSamples++;
                 }
+                } else {
+                  imuInvalidSamples++;
+                }
+            } else {
+                imuFifoEmpty++;
             }
         }
     }
@@ -971,12 +977,21 @@ void loop() {
         lin_ay = ay + a32;
         lin_az = az - a33;
 
-        char pbuf[128];
-
+        
+#ifdef SPRINTF_HAS_FLOAT_SUPPORT
         sprintf(
             pbuf,
             "Yaw      Pitch    Roll (deg) Press(hPa)\n%6.2f   %6.2f   %6.2f     %7.1f",
             yaw, pitch, roll, pressure_hPa);
+#else
+        char pbuf[128];
+        char xp[16], yp[16], zp[16], ap[16];
+        sprintf(
+            pbuf,
+            "Yaw      Pitch    Roll (deg) Press(hPa)\n%s   %s   %s     %s",
+            dtostrf(yaw,6,2,xp), dtostrf(pitch,6,2,yp), dtostrf(roll,6,2,zp), 
+            dtostrf(pressure_hPa,7,1,ap));
+#endif
         Serial.println(pbuf);
 
         sprintf(pbuf,

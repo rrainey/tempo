@@ -10,11 +10,12 @@
 */
 
 #include "MMC5983MA.h"
-#include "I2Cdev.h"
+#include <Wire.h>
 
-MMC5983MA::MMC5983MA(I2Cdev* i2c_bus)
+MMC5983MA::MMC5983MA(uint8_t devAddress, TwoWire *i2c)
 {
-  _i2c_bus = i2c_bus;
+  _i2c = i2c;
+  _deviceAddress = devAddress;
 
   for( int i=0; i<4; ++i) {
     shadowControlRegisters[i] = 0;
@@ -24,7 +25,7 @@ MMC5983MA::MMC5983MA(I2Cdev* i2c_bus)
 
 uint8_t MMC5983MA::getChipID()
 {
-  uint8_t c = _i2c_bus->readByte(MMC5983MA_ADDRESS, MMC5983MA_PRODUCT_ID);
+  uint8_t c = readByte(_deviceAddress, MMC5983MA_PRODUCT_ID);
   return c;
 }
 
@@ -32,7 +33,7 @@ uint8_t MMC5983MA::getChipID()
 void MMC5983MA::reset()
 {
   // reset device
-  _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_1, (1<<7)); // Set bit 7 to 1 to reset MMC5983MA
+  writeByte(_deviceAddress, MMC5983MA_CONTROL_1, (1<<7)); // Set bit 7 to 1 to reset MMC5983MA
   delay(11); // Wait 10 ms for all registers to reset 
 
   for( int i=0; i<4; ++i) {
@@ -44,18 +45,18 @@ void MMC5983MA::reset()
 void MMC5983MA::init(uint8_t MODR, uint8_t MBW, uint8_t MSET)
 {
  // enable data ready interrupt (bit2 == 1), enable auto set/reset (bit 5 == 1)
- _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, CONTROL0_INT_DONE_EN | CONTROL0_AUTO_SR_EN );
+ writeByte(_deviceAddress, MMC5983MA_CONTROL_0, CONTROL0_INT_DONE_EN | CONTROL0_AUTO_SR_EN );
 
   shadowControlRegisters[0] = CONTROL0_INT_DONE_EN | CONTROL0_AUTO_SR_EN;
 
  // set magnetometer bandwidth
- _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_1, MBW);
+ writeByte(_deviceAddress, MMC5983MA_CONTROL_1, MBW);
 
  shadowControlRegisters[1] = MBW;
 
  // enable continuous measurement mode (bit 3 == 1), set sample rate
  // enable automatic Set/Reset (bit 7 == 1), set set/reset rate
- _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_2, 0x80 | (MSET << 4) | (1<<3) | MODR);  
+ writeByte(_deviceAddress, MMC5983MA_CONTROL_2, 0x80 | (MSET << 4) | (1<<3) | MODR);  
 
  shadowControlRegisters[2] = 0x80 | (MSET << 4) | (1<<3) | MODR;
 }
@@ -68,28 +69,28 @@ void MMC5983MA::selfTest()
     uint32_t delta_data[3] = {0};
     
    // clear control registers
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, 0x00);  
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_1, 0x00);  
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_2, 0x00);
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_0, 0x00);  
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_1, 0x00);  
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_2, 0x00);
 
    for( int i=0; i<3; ++i) {
     shadowControlRegisters[i] = 0;
   }
 
    SET(); // enable set current
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, CONTROL0_TM_M);  //enable one-time mag measurement
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_0, CONTROL0_TM_M);  //enable one-time mag measurement
    delay(10);
    
-   _i2c_bus->readBytes(MMC5983MA_ADDRESS, MMC5983MA_XOUT_0, 6, &rawData[0]);  // Read the 6 raw data registers into data array
+   readBytes(_deviceAddress, MMC5983MA_XOUT_0, 6, &rawData[0]);  // Read the 6 raw data registers into data array
    data_set[0] = (uint16_t) (((uint16_t) rawData[0] << 8) | rawData[1]); // x-axis
    data_set[1] = (uint16_t) (((uint16_t) rawData[2] << 8) | rawData[3]); // y-axis
    data_set[2] = (uint16_t) (((uint16_t) rawData[4] << 8) | rawData[5]); // z-axis
 
    RESET(); // enable reset current
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, CONTROL0_TM_M);  //enable one-time mag measurement
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_0, CONTROL0_TM_M);  //enable one-time mag measurement
    delay(10);
    
-   _i2c_bus->readBytes(MMC5983MA_ADDRESS, MMC5983MA_XOUT_0, 6, &rawData[0]);  // Read the 6 raw data registers into data array
+   readBytes(_deviceAddress, MMC5983MA_XOUT_0, 6, &rawData[0]);  // Read the 6 raw data registers into data array
    data_reset[0] = (uint16_t) (((uint16_t) rawData[0] << 8) | rawData[1]); // x-axis
    data_reset[1] = (uint16_t) (((uint16_t) rawData[2] << 8) | rawData[3]); // y-axis
    data_reset[2] = (uint16_t) (((uint16_t) rawData[4] << 8) | rawData[5]); // z-axis
@@ -120,19 +121,19 @@ void MMC5983MA::selfTest()
    powerDown();
  
    SET(); // enable set current
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, CONTROL0_TM_M);  //enable one-time mag measurement
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_0, CONTROL0_TM_M);  //enable one-time mag measurement
    delay(11);
    
-   _i2c_bus->readBytes(MMC5983MA_ADDRESS, MMC5983MA_XOUT_0, 6, &rawData[0]);  // Read the 6 raw data registers into data array
+   readBytes(_deviceAddress, MMC5983MA_XOUT_0, 6, &rawData[0]);  // Read the 6 raw data registers into data array
    data_set[0] = (uint16_t) (((uint16_t) rawData[0] << 8) | rawData[1]); // x-axis
    data_set[1] = (uint16_t) (((uint16_t) rawData[2] << 8) | rawData[3]); // y-axis
    data_set[2] = (uint16_t) (((uint16_t) rawData[4] << 8) | rawData[5]); // z-axis
 
    RESET(); // enable reset current
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, CONTROL0_TM_M);  //enable one-time mag measurement
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_0, CONTROL0_TM_M);  //enable one-time mag measurement
    delay(11);
    
-   _i2c_bus->readBytes(MMC5983MA_ADDRESS, MMC5983MA_XOUT_0, 6, &rawData[0]);  // Read the 6 raw data registers into data array
+   readBytes(_deviceAddress, MMC5983MA_XOUT_0, 6, &rawData[0]);  // Read the 6 raw data registers into data array
    data_reset[0] = (uint16_t) (((uint16_t) rawData[0] << 8) | rawData[1]); // x-axis
    data_reset[1] = (uint16_t) (((uint16_t) rawData[2] << 8) | rawData[3]); // y-axis
    data_reset[2] = (uint16_t) (((uint16_t) rawData[4] << 8) | rawData[5]); // z-axis
@@ -146,14 +147,14 @@ void MMC5983MA::selfTest()
 
 void MMC5983MA::SET()
 {
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, 0x08);  
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_0, 0x08);  
    delay(1); // self clearing after 500 us
 }
 
 
 void MMC5983MA::RESET()
 {
-   _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, 0x10);  
+   writeByte(_deviceAddress, MMC5983MA_CONTROL_0, 0x10);  
    delay(1); // self clearing after 500 us
 }
 
@@ -161,7 +162,7 @@ void MMC5983MA::RESET()
 uint8_t MMC5983MA::status()
 {
   // Read status register
-  uint8_t temp = _i2c_bus->readByte(MMC5983MA_ADDRESS, MMC5983MA_STATUS);
+  uint8_t temp = readByte(_deviceAddress, MMC5983MA_STATUS);
   return temp;
 }
 
@@ -169,14 +170,14 @@ uint8_t MMC5983MA::status()
 void MMC5983MA::clearInt()
 {
   // Clear data ready interrupts
-  _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_STATUS, STATUS_MEAS_M_DONE | STATUS_MEAS_T_DONE);
+  writeByte(_deviceAddress, MMC5983MA_STATUS, STATUS_MEAS_M_DONE | STATUS_MEAS_T_DONE);
 }
 
 
 void MMC5983MA::readData(uint32_t * destination)  
 {
   uint8_t rawData[7];  // x/y/z mag register data stored here
-  _i2c_bus->readBytes(MMC5983MA_ADDRESS, MMC5983MA_XOUT_0, 7, &rawData[0]);  // Read the 7 raw data registers into data array
+  readBytes(_deviceAddress, MMC5983MA_XOUT_0, 7, &rawData[0]);  // Read the 7 raw data registers into data array
   destination[0] = (uint32_t)(rawData[0] << 10 | rawData[1] << 2 | (rawData[6] & 0xC0) >> 6); // Turn the 18 bits into a unsigned 32-bit value
   destination[1] = (uint32_t)(rawData[2] << 10 | rawData[3] << 2 | (rawData[6] & 0x30) >> 4); // Turn the 18 bits into a unsigned 32-bit value
   destination[2] = (uint32_t)(rawData[4] << 10 | rawData[5] << 2 | (rawData[6] & 0x0C) >> 2); // Turn the 18 bits into a unsigned 32-bit value
@@ -187,14 +188,14 @@ uint8_t MMC5983MA::readTemperature()
 {
   uint8_t temp;
 
-  _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_0, shadowControlRegisters[0] | CONTROL0_TM_T);   //enable one-time temp measurement
+  writeByte(_deviceAddress, MMC5983MA_CONTROL_0, shadowControlRegisters[0] | CONTROL0_TM_T);   //enable one-time temp measurement
 
   delay (2);
-  while (_i2c_bus->readByte(MMC5983MA_ADDRESS, MMC5983MA_STATUS) & STATUS_MEAS_T_DONE == 0) {
+  while (readByte(_deviceAddress, MMC5983MA_STATUS) & STATUS_MEAS_T_DONE == 0) {
     delay (1);
   }
 
-  temp = _i2c_bus->readByte(MMC5983MA_ADDRESS, MMC5983MA_TOUT);  // Read the raw temperature register 
+  temp = readByte(_deviceAddress, MMC5983MA_TOUT);  // Read the raw temperature register 
   return temp;
 }
 
@@ -247,7 +248,7 @@ void MMC5983MA::offsetBias(float * dest1, float * dest2)
 void MMC5983MA::powerDown()
 {
   shadowControlRegisters[2] = shadowControlRegisters[2] & 0xf0; 
-  _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_2,  shadowControlRegisters[2]);
+  writeByte(_deviceAddress, MMC5983MA_CONTROL_2,  shadowControlRegisters[2]);
   delay(20); // make sure to finish the lest measurement
 
 }
@@ -256,5 +257,38 @@ void MMC5983MA::powerDown()
 void MMC5983MA::powerUp(uint8_t MODR)
 {
   shadowControlRegisters[2] = (shadowControlRegisters[2] & 0xf0) | (1<<3) | MODR;
-  _i2c_bus->writeByte(MMC5983MA_ADDRESS, MMC5983MA_CONTROL_2, shadowControlRegisters[2]);
+  writeByte(_deviceAddress, MMC5983MA_CONTROL_2, shadowControlRegisters[2]);
+}
+
+uint8_t MMC5983MA::readByte(uint8_t address, uint8_t subAddress)
+{
+  uint8_t data = 0;                         
+  _i2c->beginTransmission(address);
+  _i2c->write(subAddress);
+  _i2c->endTransmission(false);
+  _i2c->requestFrom(address, (uint8_t) 1);
+  data = _i2c->read();
+  return data;
+  
+}
+
+void MMC5983MA::readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t * dest)
+{  
+  _i2c->beginTransmission(address);   // Initialize the Tx buffer
+  _i2c->write(subAddress);            // Put slave register address in Tx buffer
+  _i2c->endTransmission(false);       // Send the Tx buffer, but send a restart to keep connection alive
+  uint8_t i = 0;
+  _i2c->requestFrom(address, count);  // Read bytes from slave register address 
+  while (_i2c->available()) {
+        dest[i++] = _i2c->read(); 
+  }   // Put read results in the Rx buffer
+}
+
+// Legacy calling signature
+void MMC5983MA::writeByte(uint8_t devAddr, uint8_t regAddr, uint8_t data)
+{
+  _i2c->beginTransmission(devAddr);  // Initialize the Tx buffer
+  _i2c->write(regAddr);           // Put slave register address in Tx buffer
+  _i2c->write(data);                 // Put data in Tx buffer
+  _i2c->endTransmission();           // Send the Tx buffer
 }

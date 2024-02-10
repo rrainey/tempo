@@ -469,10 +469,11 @@ class ICM42688 {
     // Deprecated call
     void writeByte(uint8_t devAddr, uint8_t regAddr, uint8_t data);
 
-    uint8_t readByte(uint8_t address, uint8_t subAddress);
+    // Deprecated call
+    uint8_t readByte(uint8_t devAddr, uint8_t subAddress);
 
     // Deprecated call
-    void readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t * dest);
+    void readBytes(uint8_t devAddr, uint8_t subAddress, uint8_t count, uint8_t * dest);
 
 
    protected:
