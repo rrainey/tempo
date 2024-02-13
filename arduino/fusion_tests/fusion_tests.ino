@@ -21,6 +21,8 @@
 #include "bmp3.h"
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 
+#include "Fusion.h"
+
 SFE_UBLOX_GNSS myGNSS;
 
 #define GPS_I2C_ADDR      0x42  // SAM-M10Q
@@ -281,28 +283,20 @@ float pi = 3.141592653589793238462643383279502884f;
 float GyroMeasError =
     pi * (40.0f /
           180.0f);  // gyroscope measurement error in rads/s (start at 40 deg/s)
-float GyroMeasDrift =
-    pi *
-    (0.0f /
-     180.0f);  // gyroscope measurement drift in rad/s/s (start at 0.0 deg/s/s)
-float beta = sqrtf(3.0f / 4.0f) * GyroMeasError;  // compute beta
-float zeta =
-    sqrtf(3.0f / 4.0f) *
-    GyroMeasDrift;  // compute zeta, the other free parameter in the Madgwick
-                    // scheme usually set to a small or zero value
-float pitch, yaw, roll;  // absolute orientation
-float a12, a22, a31, a32,
-    a33;  // rotation matrix coefficients for Euler angles and gravity
-          // components
-float deltat = 0.0f,
-      sum = 0.0f;  // integration interval for both filter schemes
-uint32_t lastUpdate = 0,
-         firstUpdate = 0;  // used to calculate integration interval
-uint32_t Now = 0;          // used to calculate integration interval
+
+// gyroscope measurement drift in rad/s/s (start at 0.0 deg/s/s)
+float GyroMeasDrift = pi * (0.0f / 180.0f);
+// compute beta
+float beta = sqrtf(3.0f / 4.0f) * GyroMeasError;
+// compute zeta, the other free parameter in the Madgwick
+// scheme usually set to a small or zero value
+float zeta = sqrtf(3.0f / 4.0f) * GyroMeasDrift;
+// components
+// float deltat = 0.0f,
+//       sum = 0.0f;  // integration interval for both filter schemes
 float lin_ax, lin_ay,
     lin_az;  // linear acceleration (acceleration with gravity component
              // subtracted)
-float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};  // vector to hold quaternion
 float eInt[3] = {0.0f, 0.0f,
                  0.0f};  // vector to hold integral error for Mahony method
 
@@ -341,6 +335,11 @@ float imuTemp_C;  // Stores the real internal gyro temperature in degrees
 float ax, ay, az, gx, gy,
     gz;  // variables to hold latest accel/gyro data values
 
+/**
+ * A counter to track the number of IMU interrupts since the last invocation of loop().
+ * Ideally between 0 and 1, but the samples are store in the FIFO, so nothing gets
+ * lost. Reset to zero in each loop() pass.
+ */
 volatile uint16_t imuISRCount = 0;
 
 ICM42688 imu(&Wire);
@@ -378,7 +377,7 @@ volatile bool pressureSampleAvailable = false;
 
 void IRAM_ATTR BMPSampleReadyHandler() { pressureSampleAvailable = true; }
 
-/*
+/**
  * BMP390 globals
  */
 int8_t rslt;
@@ -397,8 +396,8 @@ uint8_t Seconds, Minutes, Hours, Day, Month, Year;
 ESP32Time RTC(0);
 ESP32Timer ITimer0(0);
 
-// five second status reports to Serial
-#define ESP32_TIMER_INTERVAL_USEC (5000 * 1000)
+// one second status reports to Serial
+#define ESP32_TIMER_INTERVAL_USEC (1000 * 1000)
 #endif
 
 bool IRAM_ATTR TimerHandler(void* timerNo) {
@@ -406,9 +405,7 @@ bool IRAM_ATTR TimerHandler(void* timerNo) {
     return true;
 }
 
-void IRAM_ATTR myinthandler1() {
-    ++imuISRCount;
-}
+void IRAM_ATTR myinthandler1() { ++imuISRCount; }
 
 void IRAM_ATTR myinthandler2() { newMMC5983MAData = true; }
 
@@ -436,6 +433,26 @@ float pressure_hPa = 1000.0f;
 float bmpTemperature_degC = 15.0f;
 float bmpAltitude_m = 0.0f;
 
+/**
+ * Fusion constants and  globals
+ */
+
+#define SAMPLE_RATE (100)   // samples per second
+#define CLOCKS_PER_SEC 1
+
+const FusionMatrix gyroscopeMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+const FusionVector gyroscopeSensitivity = {1.0f, 1.0f, 1.0f};
+const FusionVector gyroscopeOffset = {0.0f, 0.0f, 0.0f};
+const FusionMatrix accelerometerMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+const FusionVector accelerometerSensitivity = {1.0f, 1.0f, 1.0f};
+const FusionVector accelerometerOffset = {0.0f, 0.0f, 0.0f};
+const FusionMatrix softIronMatrix = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+const FusionVector hardIronOffset = {0.0f, 0.0f, 0.0f};
+
+// Initialise algorithms
+FusionOffset offset;
+FusionAhrs ahrs;
+
 void setup() {
 
     delay(2000);
@@ -458,7 +475,7 @@ void setup() {
     digitalWrite(RED_LED, HIGH);
 
     Wire.begin();           // set master mode
-    Wire.setClock(100000);  // I2C frequency at 100 kHz
+    Wire.setClock(400000);  // I2C frequency at 400 kHz
 
     myGNSS.begin();
 
@@ -698,7 +715,24 @@ void setup() {
     // ICM42688 INT1/INT interrupt 
     attachInterrupt(ICM42688_intPin1, myinthandler1, RISING); 
 
-    imu.enableFifoMode( 3 );
+    // Receive IMU samples via FIFO
+    if (ICM42688_RETURN_OK != imu.enableFifoMode( 3 )) {
+        Serial.println("enableFifoMode() failed");
+    }
+
+    FusionOffsetInitialise(&offset, SAMPLE_RATE);
+    FusionAhrsInitialise(&ahrs);
+
+    // Set AHRS algorithm settings
+    const FusionAhrsSettings settings = {
+            .convention = FusionConventionNed,
+            .gain = 0.5f,
+            .gyroscopeRange = 250.0f, /* replace this with actual gyroscope range in degrees/s */
+            .accelerationRejection = 4.0f, // We're operating on a 4g sampling scale, so this should likely be lower that full scale value
+            .magneticRejection = 10.0f,     // Gauss units
+            .recoveryTriggerPeriod = 5 * SAMPLE_RATE, /* 5 seconds */
+    };
+    FusionAhrsSetSettings(&ahrs, &settings);
 
     digitalWrite(GREEN_LED, LOW);
 }
@@ -714,16 +748,13 @@ void loop() {
 
         MMC5983MAstatus = mmc.status();
         if (MMC5983MAstatus & STATUS_MEAS_M_DONE) {
-          mmc.clearInt();  //  clear mmc interrupts
+          mmc.clearInt(); 
           mmc.readData(MMC5983MAData);
 
-          // Now we'll calculate the magnetometer value into actual Gauss
-          mx = ((float)MMC5983MAData[0] - MMC5983MA_offset) * mRes -
-                magBias[0];  // get actual mag value
-          my = ((float)MMC5983MAData[1] - MMC5983MA_offset) * mRes -
-                magBias[1];
-          mz = ((float)MMC5983MAData[2] - MMC5983MA_offset) * mRes -
-                magBias[2];
+          // Now we'll calculate the magnetometer value (units Gauss; typ. 25 - 65)
+          mx = ((float)MMC5983MAData[0] - MMC5983MA_offset) * mRes - magBias[0];
+          my = ((float)MMC5983MAData[1] - MMC5983MA_offset) * mRes - magBias[1];
+          mz = ((float)MMC5983MAData[2] - MMC5983MA_offset) * mRes - magBias[2];
           mx *= magScale[0];
           my *= magScale[1];
           mz *= magScale[2];
@@ -771,8 +802,6 @@ void loop() {
         // Read status bits to clear interrupt (see definition of INT_CONFIG0)
         uint8_t intStatus = imu.readIntStatus();
 
-        deltat = fSampleInterval_sec;
-
         uint8_t status;
         icm42688::fifo_packet3 sampleBuf[140], *pBuf;
         uint16_t packetCount;
@@ -798,6 +827,9 @@ void loop() {
                       PACKET3_SAMPLE_MARKED_INVALID(pBuf->ax) ||
                       PACKET3_SAMPLE_MARKED_INVALID(pBuf->ay) ||
                       PACKET3_SAMPLE_MARKED_INVALID(pBuf->az))) {
+
+                    ++ fifoTotal;
+
                     ax = (float)pBuf->ax * aRes - accelBias[0];
                     ay = (float)pBuf->ay * aRes - accelBias[1];
                     az = (float)pBuf->az * aRes - accelBias[2];
@@ -811,17 +843,52 @@ void loop() {
 
                     // signs and axes if mag values corrected for IC placement
                     // on the peakick V1 board
-                    MadgwickQuaternionUpdate(ay, ax, az, gy * pi / 180.0f,
-                                             gx * pi / 180.0f, gz * pi / 180.0f,
-                                             -mx, my, -mz);
+                    //MadgwickQuaternionUpdate(ay, ax, az, gy * pi / 180.0f,
+                    //                         gx * pi / 180.0f, gz * pi / 180.0f,
+                    //                         -mx, my, -mz);
+
+                    {
+                        //const clock_t timestamp_sec = clock();
+                        // deg/sec
+                        FusionVector gyroscope = { gx, gy, gz };
+                        // g's
+                        FusionVector accelerometer = { ax, ay, az };
+                        // TODO: we use Gauss here, but might need to switch to uT
+                        FusionVector magnetometer = { -mx, my, -mz };
+
+                        // Apply calibration
+                        gyroscope = FusionCalibrationInertial(
+                            gyroscope, gyroscopeMisalignment,
+                            gyroscopeSensitivity, gyroscopeOffset);
+
+                        accelerometer = FusionCalibrationInertial(
+                            accelerometer, accelerometerMisalignment,
+                            accelerometerSensitivity, accelerometerOffset);
+
+                        magnetometer = FusionCalibrationMagnetic(
+                            magnetometer, softIronMatrix, hardIronOffset);
+
+                        // Update gyroscope offset correction algorithm
+                        gyroscope = FusionOffsetUpdate(&offset, gyroscope);
+
+                        // Calculate delta time (in seconds) to account for
+                        // gyroscope sample clock error
+                        //static clock_t previousTimestamp_sec;
+                        //const float deltaTime =
+                        //    (float)(timestamp_sec - previousTimestamp_sec) /
+                        //    (float)CLOCKS_PER_SEC;
+                        //previousTimestamp_sec = timestamp_sec;
+
+                        // Update gyroscope AHRS algorithm
+                        FusionAhrsUpdate(&ahrs, gyroscope, accelerometer,
+                                         magnetometer, fSampleInterval_sec);
+
+                    }
                 } else {
                     imuInvalidSamples++;
-                    Serial.print("HEADER BITS (binary): ");
-                    Serial.println(pBuf->header, 2);
                 }
                 } else {
                   imuInvalidSamples++;
-                  Serial.println("HEADER_MSG UNSET");
                 }
             } else {
                 imuFifoEmpty++;
@@ -914,10 +981,6 @@ void loop() {
             sprintf(buf, "M = {%5.1f, %5.1f, %5.1f} mG", 1000.0f * mx,
                     1000.0f * my, 1000.0f * mz);
             Serial.println(buf);
-
-            sprintf(buf, "q = {%5.3f, %5.3f, %5.3f, %5.3f}", q[0], q[1], q[2],
-                    q[3]);
-            Serial.println(buf);
         }
 
         if (SerialDebug) {
@@ -962,37 +1025,32 @@ void loop() {
         }
 #endif
 
-        a12 = 2.0f * (q[1] * q[2] + q[0] * q[3]);
-        a22 = q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3];
-        a31 = 2.0f * (q[0] * q[1] + q[2] * q[3]);
-        a32 = 2.0f * (q[1] * q[3] - q[0] * q[2]);
-        a33 = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3];
-        pitch = -asinf(a32);
-        roll = atan2f(a31, a33);
-        yaw = atan2f(a12, a22);
-        pitch *= 180.0f / pi;
-        yaw *= 180.0f / pi;
-        yaw += 0.0f;  // no magnetic declination correction for now
-        if (yaw < 0) yaw += 360.0f;  // Ensure yaw stays between 0 and 360
-        roll *= 180.0f / pi;
-        lin_ax = ax + a31;
-        lin_ay = ay + a32;
-        lin_az = az - a33;
+        // Print algorithm outputs
+        const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+        const FusionVector earth = FusionAhrsGetEarthAcceleration(&ahrs);
 
-        
+        //printf(
+        //    "Roll %0.1f, Pitch %0.1f, Yaw %0.1f, X %0.1f, Y "
+        //    "%0.1f, Z %0.1f\n",
+        //    euler.angle.roll, euler.angle.pitch,
+        //    euler.angle.yaw, earth.axis.x, earth.axis.y,
+        //    earth.axis.z);
+
 #ifdef SPRINTF_HAS_FLOAT_SUPPORT
         sprintf(
             pbuf,
             "Yaw      Pitch    Roll (deg) Press(hPa)\n%6.2f   %6.2f   %6.2f     %7.1f",
-            yaw, pitch, roll, pressure_hPa);
+            euler.angle.yaw, euler.angle.pitch, euler.angle.roll, pressure_hPa);
 #else
         char pbuf[128];
         char xp[16], yp[16], zp[16], ap[16];
         sprintf(
             pbuf,
             "Yaw      Pitch    Roll (deg) Press(hPa)\n%s   %s   %s     %s",
-            dtostrf(yaw,6,2,xp), dtostrf(pitch,6,2,yp), dtostrf(roll,6,2,zp), 
+            dtostrf(euler.angle.yaw,6,2,xp), dtostrf(euler.angle.pitch,6,2,yp), dtostrf(euler.angle.roll,6,2,zp), 
             dtostrf(pressure_hPa,7,1,ap));
+        //Serial.println(pbuf);
+        //sprintf(pbuf, "M = {%s, %s, %s} G",  dtostrf(mx,6,2,xp), dtostrf(my,6,2,yp), dtostrf(mz,6,2,zp));
 #endif
         Serial.println(pbuf);
 
@@ -1001,9 +1059,10 @@ void loop() {
                 loopCount, imuIntCount, imuISROverflow, fifoTotal/imuIntCount, imuInvalidSamples);
         Serial.println(pbuf);
 
+
         imuIntCount = 0;
-        fifoTotal = 0;
         loopCount = 0;
+        fifoTotal = loopTotal = 0;
 
         ledState = !ledState;
         digitalWrite(RED_LED, (ledState ? HIGH : LOW));

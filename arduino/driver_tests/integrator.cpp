@@ -18,7 +18,7 @@
 
 __attribute__((optimize("O3"))) void IRAM_ATTR MadgwickQuaternionUpdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz)
         {
-            float q1 = q[0], q2 = q[1], q3 = q[2], q4 = q[3];   // short name local variable for readability
+            float q1 = q[0], q2 = q[1], q3 = q[2], q4 = q[3];
             float norm;
             float hx, hy, _2bx, _2bz;
             float s1, s2, s3, s4;
@@ -49,20 +49,24 @@ __attribute__((optimize("O3"))) void IRAM_ATTR MadgwickQuaternionUpdate(float ax
             float q4q4 = q4 * q4;
 
             // Normalise accelerometer measurement
+            // zero is treated as a zero-vector
             norm = sqrtf(ax * ax + ay * ay + az * az);
-            if (norm == 0.0f) return; // handle NaN
-            norm = 1.0f/norm;
-            ax *= norm;
-            ay *= norm;
-            az *= norm;
+            if (norm != 0.0f) {
+                norm = 1.0f/norm;
+                ax *= norm;
+                ay *= norm;
+                az *= norm;
+            }
 
             // Normalise magnetometer measurement
+            // zero is treated as a zero-vector
             norm = sqrtf(mx * mx + my * my + mz * mz);
-            if (norm == 0.0f) return; // handle NaN
-            norm = 1.0f/norm;
-            mx *= norm;
-            my *= norm;
-            mz *= norm;
+            if (norm != 0.0f) {
+                norm = 1.0f/norm;
+                mx *= norm;
+                my *= norm;
+                mz *= norm;
+            }
 
             // Reference direction of Earth's magnetic field
             _2q1mx = 2.0f * q1 * mx;
