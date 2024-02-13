@@ -20273,7 +20273,7 @@
     )
     (pin "1" (uuid eeaf8eeb-baf2-49cf-8dde-56b21d7c2981))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY011") (unit 1)
         )
@@ -20298,7 +20298,7 @@
     )
     (pin "1" (uuid ff333fae-ab54-42b9-84dc-34756a232c49))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY06") (unit 1)
         )
@@ -20332,7 +20332,7 @@
           (reference "R9") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R13") (unit 1)
         )
@@ -20362,7 +20362,7 @@
           (reference "#GND010") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND06") (unit 1)
         )
@@ -20392,7 +20392,7 @@
           (reference "#SUPPLY12") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY015") (unit 1)
         )
@@ -20426,7 +20426,7 @@
           (reference "C14") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C20") (unit 1)
         )
@@ -20460,7 +20460,7 @@
           (reference "C2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C10") (unit 1)
         )
@@ -20490,7 +20490,7 @@
           (reference "#PWR01") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#PWR01") (unit 1)
         )
@@ -20520,7 +20520,7 @@
           (reference "#SUPPLY12") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY018") (unit 1)
         )
@@ -20559,7 +20559,7 @@
           (reference "J3") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "J3") (unit 1)
         )
@@ -20589,7 +20589,7 @@
           (reference "#SUPPLY8") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY020") (unit 1)
         )
@@ -20619,7 +20619,7 @@
           (reference "#SUPPLY22") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY07") (unit 1)
         )
@@ -20649,7 +20649,7 @@
           (reference "#SUPPLY13") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY021") (unit 1)
         )
@@ -20679,7 +20679,7 @@
           (reference "#GND08") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND01") (unit 1)
         )
@@ -20709,7 +20709,7 @@
           (reference "#U$017") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$04") (unit 1)
         )
@@ -20734,7 +20734,7 @@
     )
     (pin "1" (uuid b9b714f0-5b56-4328-95f0-04a5b2d7e246))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY013") (unit 1)
         )
@@ -20768,7 +20768,7 @@
           (reference "R3") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R9") (unit 1)
         )
@@ -20798,7 +20798,7 @@
           (reference "#GND14") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND012") (unit 1)
         )
@@ -20835,7 +20835,7 @@
           (reference "C10") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C7") (unit 1)
         )
@@ -20860,7 +20860,7 @@
     )
     (pin "1" (uuid a12f85ed-0994-456b-b565-11d31f782d00))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY02") (unit 1)
         )
@@ -20887,7 +20887,7 @@
       (effects (font (size 1.27 1.27)) hide)
     )
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "H2") (unit 1)
         )
@@ -20912,7 +20912,7 @@
     )
     (pin "1" (uuid 86411e0d-98b8-4e72-9841-058a2eb6341f))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY01") (unit 1)
         )
@@ -20942,7 +20942,7 @@
           (reference "#GND13") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND011") (unit 1)
         )
@@ -20989,7 +20989,7 @@
           (reference "X1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "X2") (unit 1)
         )
@@ -21032,7 +21032,7 @@
           (reference "L1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "LED1") (unit 1)
         )
@@ -21080,7 +21080,7 @@
           (reference "U5") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "U1") (unit 1)
         )
@@ -21117,7 +21117,7 @@
           (reference "C10") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C4") (unit 1)
         )
@@ -21151,7 +21151,7 @@
           (reference "R1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R8") (unit 1)
         )
@@ -21181,7 +21181,7 @@
           (reference "#SUPPLY7") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY017") (unit 1)
         )
@@ -21211,7 +21211,7 @@
           (reference "#GND8") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND010") (unit 1)
         )
@@ -21241,7 +21241,7 @@
           (reference "#GND11") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND020") (unit 1)
         )
@@ -21268,7 +21268,7 @@
       (effects (font (size 1.27 1.27)) hide)
     )
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "LOGO2") (unit 1)
         )
@@ -21298,7 +21298,7 @@
           (reference "#U$026") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$03") (unit 1)
         )
@@ -21347,7 +21347,7 @@
     (pin "14" (uuid f8c49f27-dde7-400e-829d-bc765f77f6d9))
     (pin "9" (uuid e049dbdb-96cb-47af-b453-fbb1956fe40c))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "U4") (unit 1)
         )
@@ -21377,7 +21377,7 @@
           (reference "#U$025") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$07") (unit 1)
         )
@@ -21406,7 +21406,7 @@
     (pin "1" (uuid d4966865-a04a-4e8e-bc62-16e251457f86))
     (pin "2" (uuid d90fbecc-8e15-465b-8b69-c4a32124e474))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C1") (unit 1)
         )
@@ -21436,7 +21436,7 @@
           (reference "#SUPPLY2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY019") (unit 1)
         )
@@ -21482,7 +21482,7 @@
           (reference "X2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "J1") (unit 1)
         )
@@ -21512,7 +21512,7 @@
           (reference "#GND012") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND08") (unit 1)
         )
@@ -21546,7 +21546,7 @@
           (reference "C10") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C16") (unit 1)
         )
@@ -21576,7 +21576,7 @@
           (reference "#U$014") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$01") (unit 1)
         )
@@ -21611,6 +21611,9 @@
     (property "MANUFACTURER" "Amphenol" (at 59.69 245.11 0)
       (effects (font (size 1.27 1.27)) (justify bottom) hide)
     )
+    (property "MPN" "10103594-0001LF" (at 59.69 245.11 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
     (pin "1" (uuid 9720e616-70bc-4a01-82b6-6f5bb38506e4))
     (pin "10" (uuid 0e68f08b-5df6-4cb3-a899-4cf2be69c464))
     (pin "11" (uuid 5d2b22d4-d1b0-4160-8748-9fc2ec97a76b))
@@ -21625,7 +21628,7 @@
     (pin "S1" (uuid da768b1f-4d27-4a6a-a530-a4a4395ae428))
     (pin "S2" (uuid d1213d5b-118c-42f5-9c8c-79f4c72ef95a))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "J4") (unit 1)
         )
@@ -21655,7 +21658,7 @@
           (reference "#SUPPLY1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY026") (unit 1)
         )
@@ -21695,7 +21698,7 @@
           (reference "D1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "LED4") (unit 1)
         )
@@ -21720,7 +21723,7 @@
     )
     (pin "1" (uuid efd38741-3d7d-4470-93ee-468bf01ce405))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY03") (unit 1)
         )
@@ -21750,7 +21753,7 @@
           (reference "#SUPPLY9") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY028") (unit 1)
         )
@@ -21787,7 +21790,7 @@
           (reference "C12") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C3") (unit 1)
         )
@@ -21824,7 +21827,7 @@
           (reference "R10") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R3") (unit 1)
         )
@@ -21861,7 +21864,7 @@
           (reference "C13") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C2") (unit 1)
         )
@@ -21891,7 +21894,7 @@
           (reference "#GND09") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND03") (unit 1)
         )
@@ -21931,7 +21934,7 @@
           (reference "U1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "U7") (unit 1)
         )
@@ -21965,7 +21968,7 @@
           (reference "R4") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R14") (unit 1)
         )
@@ -21999,7 +22002,7 @@
           (reference "R2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R7") (unit 1)
         )
@@ -22036,7 +22039,7 @@
           (reference "C10") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C8") (unit 1)
         )
@@ -22070,7 +22073,7 @@
           (reference "C9") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C13") (unit 1)
         )
@@ -22100,7 +22103,7 @@
           (reference "#GND9") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND019") (unit 1)
         )
@@ -22125,7 +22128,7 @@
     )
     (pin "1" (uuid 1e2e9fd6-19c1-4da7-8833-cc0b3d52df20))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY04") (unit 1)
         )
@@ -22155,7 +22158,7 @@
           (reference "#U$3") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$011") (unit 1)
         )
@@ -22189,7 +22192,7 @@
           (reference "C19") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C21") (unit 1)
         )
@@ -22233,7 +22236,7 @@
           (reference "Q1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "Q1") (unit 1)
         )
@@ -22270,7 +22273,7 @@
           (reference "Y1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "Y1") (unit 1)
         )
@@ -22306,7 +22309,7 @@
     (pin "2" (uuid 831dcf33-cf7a-4d01-b181-e53313236de9))
     (pin "3" (uuid 6826dff2-0e8d-4d86-b159-c686b1e78fa6))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "SW1") (unit 1)
         )
@@ -22340,7 +22343,7 @@
           (reference "C15") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C18") (unit 1)
         )
@@ -22370,7 +22373,7 @@
           (reference "#SUPPLY25") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY025") (unit 1)
         )
@@ -22400,7 +22403,7 @@
           (reference "#GND28") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND013") (unit 1)
         )
@@ -22425,7 +22428,7 @@
     )
     (pin "1" (uuid 58e5a968-056a-42a9-8be1-35fe432719a6))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY010") (unit 1)
         )
@@ -22451,6 +22454,12 @@
     (property "PACKAGE" "SOD-323" (at 328.93 46.99 0)
       (effects (font (size 1.27 1.27)) hide)
     )
+    (property "MANUFACTURER" "ST Microelectronics" (at 328.93 46.99 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "MPN" "BAT20JFILM" (at 328.93 46.99 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
     (pin "A" (uuid b203916a-a84f-4689-9350-852f89d54219))
     (pin "C" (uuid eaf6cfa8-96f9-4af5-9f04-12f6f1b2b99d))
     (instances
@@ -22459,7 +22468,7 @@
           (reference "D2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "D1") (unit 1)
         )
@@ -22489,7 +22498,7 @@
           (reference "#GND15") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND014") (unit 1)
         )
@@ -22519,7 +22528,7 @@
           (reference "#SUPPLY12") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY08") (unit 1)
         )
@@ -22589,7 +22598,7 @@
           (reference "U2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "U2") (unit 1)
         )
@@ -22619,7 +22628,7 @@
           (reference "#U$2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$010") (unit 1)
         )
@@ -22656,7 +22665,7 @@
           (reference "C11") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C6") (unit 1)
         )
@@ -22686,7 +22695,7 @@
           (reference "#GND12") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND021") (unit 1)
         )
@@ -22716,7 +22725,7 @@
           (reference "#GND2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND016") (unit 1)
         )
@@ -22746,7 +22755,7 @@
           (reference "#U$015") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$05") (unit 1)
         )
@@ -22780,7 +22789,7 @@
           (reference "C3") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C14") (unit 1)
         )
@@ -22814,7 +22823,7 @@
           (reference "C1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C9") (unit 1)
         )
@@ -22844,7 +22853,7 @@
           (reference "#U$024") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$06") (unit 1)
         )
@@ -22878,7 +22887,7 @@
           (reference "C11") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C15") (unit 1)
         )
@@ -22921,7 +22930,7 @@
           (reference "L2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "LED2") (unit 1)
         )
@@ -22955,7 +22964,7 @@
           (reference "C13") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C19") (unit 1)
         )
@@ -22985,7 +22994,7 @@
           (reference "#SUPPLY3") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY022") (unit 1)
         )
@@ -23012,7 +23021,7 @@
       (effects (font (size 1.27 1.27)) hide)
     )
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "H3") (unit 1)
         )
@@ -23042,7 +23051,7 @@
           (reference "#SUPPLY15") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY027") (unit 1)
         )
@@ -23079,7 +23088,7 @@
           (reference "C14") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C5") (unit 1)
         )
@@ -23116,7 +23125,7 @@
           (reference "S1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "S1") (unit 1)
         )
@@ -23159,7 +23168,7 @@
           (reference "B1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "B1") (unit 1)
         )
@@ -23193,7 +23202,7 @@
           (reference "C12") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C17") (unit 1)
         )
@@ -23223,7 +23232,7 @@
           (reference "#GND21") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND015") (unit 1)
         )
@@ -23253,7 +23262,7 @@
           (reference "#GND012") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND09") (unit 1)
         )
@@ -23283,7 +23292,7 @@
           (reference "#SUPPLY10") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY023") (unit 1)
         )
@@ -23326,7 +23335,7 @@
           (reference "L3") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "LED3") (unit 1)
         )
@@ -23351,7 +23360,7 @@
     )
     (pin "1" (uuid 92574d93-0381-46d3-9ba3-2e02c1011582))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#FLG01") (unit 1)
         )
@@ -23378,7 +23387,7 @@
       (effects (font (size 1.27 1.27)) hide)
     )
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "H1") (unit 1)
         )
@@ -23421,7 +23430,7 @@
           (reference "L1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "L1") (unit 1)
         )
@@ -23520,7 +23529,7 @@
           (reference "U2") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "U6") (unit 1)
         )
@@ -23550,7 +23559,7 @@
           (reference "#U$1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$012") (unit 1)
         )
@@ -23587,7 +23596,7 @@
           (reference "R8") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R1") (unit 1)
         )
@@ -23621,7 +23630,7 @@
           (reference "R6") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R11") (unit 1)
         )
@@ -23655,7 +23664,7 @@
           (reference "R5") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R12") (unit 1)
         )
@@ -23685,7 +23694,7 @@
           (reference "#GND6") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND023") (unit 1)
         )
@@ -23722,7 +23731,7 @@
           (reference "R8") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R2") (unit 1)
         )
@@ -23756,7 +23765,7 @@
           (reference "C7") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C11") (unit 1)
         )
@@ -23783,7 +23792,7 @@
       (effects (font (size 1.27 1.27)) hide)
     )
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "FRAME1") (unit 2)
         )
@@ -23808,7 +23817,7 @@
     )
     (pin "1" (uuid f4a1d971-cf45-4e59-8417-5a0a7ae54cef))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY012") (unit 1)
         )
@@ -23838,7 +23847,7 @@
           (reference "#GND26") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND02") (unit 1)
         )
@@ -23872,7 +23881,7 @@
           (reference "C8") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C12") (unit 1)
         )
@@ -23897,7 +23906,7 @@
     )
     (pin "1" (uuid 171edbee-73f1-41a6-a6bf-f5aeb3569654))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#FLG02") (unit 1)
         )
@@ -23927,7 +23936,7 @@
           (reference "#SUPPLY27") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY016") (unit 1)
         )
@@ -23988,7 +23997,7 @@
           (reference "U6") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "U3") (unit 1)
         )
@@ -24031,7 +24040,7 @@
           (reference "U3") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "U5") (unit 1)
         )
@@ -24065,7 +24074,7 @@
           (reference "R7") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "R6") (unit 1)
         )
@@ -24107,7 +24116,7 @@
           (reference "J4") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "J2") (unit 1)
         )
@@ -24141,7 +24150,7 @@
           (reference "C6") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "C22") (unit 1)
         )
@@ -24171,7 +24180,7 @@
           (reference "#GND1") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND024") (unit 1)
         )
@@ -24201,7 +24210,7 @@
           (reference "#GND011") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND07") (unit 1)
         )
@@ -24231,7 +24240,7 @@
           (reference "#GND41") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND017") (unit 1)
         )
@@ -24261,7 +24270,7 @@
           (reference "#U$023") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$02") (unit 1)
         )
@@ -24286,7 +24295,7 @@
     )
     (pin "1" (uuid 6bd10747-a822-4ac9-a531-dbbc97fae710))
     (instances
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY014") (unit 1)
         )
@@ -24316,7 +24325,7 @@
           (reference "#U$017") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#U$09") (unit 1)
         )
@@ -24346,7 +24355,7 @@
           (reference "#GND012") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND05") (unit 1)
         )
@@ -24376,7 +24385,7 @@
           (reference "#GND06") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#GND04") (unit 1)
         )
@@ -24406,7 +24415,7 @@
           (reference "#SUPPLY14") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY031") (unit 1)
         )
@@ -24436,7 +24445,7 @@
           (reference "#SUPPLY23") (unit 1)
         )
       )
-      (project "peakick"
+      (project "tempo"
         (path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
           (reference "#SUPPLY024") (unit 1)
         )
