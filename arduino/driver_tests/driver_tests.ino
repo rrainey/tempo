@@ -14,26 +14,33 @@
 
 #include <Arduino.h>
 #include <stdio.h>
-#include <avr/dtostrf.h>
 
 #include "ICM42688.h"
 #include "MMC5983MA.h"
 #include "bmp3.h"
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 
+// set to 'true' to calibrate magnetometer sensor during setup
+#define PERFORM_MAG_CALIBRATION false
+
+// Set I2C speed here.
+// The most important peripheral ICs in this build are limited to 400K (e.g., SAM-M10Q, MMC5983MA, ICM42688)
+// Take care: 100K may only be viable for lower IMU Output Data Rates
+#define I2C_BIT_RATE    100000
+
+// Set to "true" for extended serial debugging messages
+#define SerialDebug false
+
 SFE_UBLOX_GNSS myGNSS;
 
 #define GPS_I2C_ADDR      0x42  // SAM-M10Q
-
-// "true" for extended Serial debugging messages
-#define SerialDebug false
 
 volatile bool alarmFlag = false;  // for RTC alarm interrupt
 
 #if defined(ESP32)
 
 #include <ESP32Time.h>
-#include "ESP32TimerInterrupt.h"
+#include <ESP32TimerInterrupt.h>
 
 // Sparkfun ESP32 Thing Plus C
 #define RED_LED           13
@@ -92,7 +99,7 @@ void rtc_SecondsCB(void *data)
 #endif
 
 #if defined(SAMD51_THING_PLUS)
-
+#include <avr/dtostrf.h>
 /**
  * Sparkfun Thing Plus SAMD51 
  * 
@@ -276,35 +283,23 @@ void myISR() {
         Serial.println("Error returned from " func); \
     }
 
-// global constants for 9 DoF fusion and AHRS
+// global constants for 9-DoF fusion and AHRS
 float pi = 3.141592653589793238462643383279502884f;
-float GyroMeasError =
-    pi * (40.0f /
-          180.0f);  // gyroscope measurement error in rads/s (start at 40 deg/s)
-float GyroMeasDrift =
-    pi *
-    (0.0f /
-     180.0f);  // gyroscope measurement drift in rad/s/s (start at 0.0 deg/s/s)
+float GyroMeasError = pi * (40.0f / 180.0f);  // gyroscope measurement error in rads/s (start at 40 deg/s)
+float GyroMeasDrift = pi * (0.0f / 180.0f);  // gyroscope measurement drift in rad/s/s (start at 0.0 deg/s/s)
 float beta = sqrtf(3.0f / 4.0f) * GyroMeasError;  // compute beta
-float zeta =
-    sqrtf(3.0f / 4.0f) *
-    GyroMeasDrift;  // compute zeta, the other free parameter in the Madgwick
-                    // scheme usually set to a small or zero value
+float zeta = sqrtf(3.0f / 4.0f) * GyroMeasDrift;  // compute zeta, the other free parameter in the Madgwick
+                                                  // scheme usually set to a small or zero value
 float pitch, yaw, roll;  // absolute orientation
 float a12, a22, a31, a32,
     a33;  // rotation matrix coefficients for Euler angles and gravity
           // components
-float deltat = 0.0f,
-      sum = 0.0f;  // integration interval for both filter schemes
-uint32_t lastUpdate = 0,
-         firstUpdate = 0;  // used to calculate integration interval
-uint32_t Now = 0;          // used to calculate integration interval
+float deltat = 0.0f;       // integration interval for both filter schemes
 float lin_ax, lin_ay,
     lin_az;  // linear acceleration (acceleration with gravity component
              // subtracted)
 float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};  // vector to hold quaternion
-float eInt[3] = {0.0f, 0.0f,
-                 0.0f};  // vector to hold integral error for Mahony method
+float eInt[3] = {0.0f, 0.0f, 0.0f};     // vector to hold integral error for Mahony method
 
 extern void IRAM_ATTR MadgwickQuaternionUpdate(float ax, float ay, float az,
                                                float gx, float gy, float gz,
@@ -322,9 +317,12 @@ extern void IRAM_ATTR MadgwickQuaternionUpdate(float ax, float ay, float az,
  GODR_1kHz, GODR_2kHz, GODR_4kHz, GODR_8kHz, GODR_16kHz, GODR_32kHz
 */
 uint8_t Ascale = AFS_4G, Gscale = GFS_250DPS, AODR = AODR_200Hz,
-        GODR = GODR_200Hz, aMode = aMode_LN, gMode = gMode_LN;
+        GODR = GODR_200Hz;
 
-// must be set to match accel/gyro samples
+icm42688AccelPowerMode aMode = aMode_LN;
+icm42688GyroPowerMode gMode = gMode_LN;
+
+// must be set to match accel/gyro samples  (must match ODR rates selected above)
 float fSampleInterval_sec = 1 / 200.0f;
 
 float aRes, gRes;  // scale resolutions per LSB for the accel and gyro sensor2
@@ -457,8 +455,8 @@ void setup() {
 
     digitalWrite(RED_LED, HIGH);
 
-    Wire.begin();           // set master mode
-    Wire.setClock(100000);  // I2C frequency at 100 kHz
+    Wire.begin();
+    Wire.setClock(I2C_BIT_RATE);
 
     myGNSS.begin();
 
@@ -507,6 +505,10 @@ void setup() {
         digitalWrite(RED_LED, LOW);
 
         imu.reset();
+
+        // allow gyro sensors to stabilize
+        // See [1] section 3.1 "GYROSCOPE SPECIFICATIONS", "Gyroscope Start-Up Time"
+        delay(30);
 
         // set sensor resolutions for self test
         aRes = 4.0f / 32768.0f;
@@ -559,7 +561,6 @@ void setup() {
         Serial.print(STratio[6] * 100.0f, 0);
         Serial.println(" %");
         Serial.println("Should be between 50 and 150%");
-        delay(2000);
 
         // get sensor resolutions for user settings, only need to do this once
         aRes = imu.getAres(Ascale);
@@ -572,7 +573,6 @@ void setup() {
         Serial.println(
             "Sampling accel and gyro offset biases: keep device flat and "
             "motionless");
-        delay(1000);
 
         imu.offsetBias(accelBias, gyroBias);
         Serial.println("accel biases (mg)");
@@ -583,7 +583,7 @@ void setup() {
         Serial.println(gyroBias[0]);
         Serial.println(gyroBias[1]);
         Serial.println(gyroBias[2]);
-        delay(1000);
+        delay(200);
 
         Serial.println("");
         Serial.println("Magnetometer Calibration");
@@ -603,6 +603,8 @@ void setup() {
         attachInterrupt(MMC5983MA_intPin, myinthandler2, RISING);
 
         mmc.init(MODR, MBW, MSET);
+
+#if PERFORM_MAG_CALIBRATION
         mmc.offsetBias(magBias, magScale);
         Serial.println("mag biases (mG)");
         Serial.println(1000.0f * magBias[0]);
@@ -612,6 +614,18 @@ void setup() {
         Serial.println(magScale[0]);
         Serial.println(magScale[1]);
         Serial.println(magScale[2]);
+#else
+        // Use recent calibration results.
+
+        // mag biases (mG)
+        magBias[0] = 16.91f / 1000.0f;
+        magBias[1] = -109.62f / 1000.0f;
+        magBias[2] = 131.41f / 1000.0f;
+        //mag scale 
+        magScale[0] = 1.33f;
+        magScale[0] = 0.96f;
+        magScale[0] = 0.82f;
+#endif
 
 
         // initialize BMP390 per datasheet, section 3.4.1 for "Drone"
@@ -698,7 +712,8 @@ void setup() {
     // ICM42688 INT1/INT interrupt 
     attachInterrupt(ICM42688_intPin1, myinthandler1, RISING); 
 
-    imu.enableFifoMode( 3 );
+    imu.startFifoSampling( 3 );
+    delay (10);
 
     digitalWrite(GREEN_LED, LOW);
 }
@@ -790,38 +805,40 @@ void loop() {
             // valid sample?
 
             if ((pBuf->header & ICM42688_FIFO_HEADER_MSG) == 0) {
-              if ((pBuf->header & (ICM42688_FIFO_HEADER_ACCEL | ICM42688_FIFO_HEADER_GYRO)) == 
-                (ICM42688_FIFO_HEADER_ACCEL | ICM42688_FIFO_HEADER_GYRO)) {
-                if (!(PACKET3_SAMPLE_MARKED_INVALID(pBuf->gx) ||
-                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->gy) ||
-                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->gz) ||
-                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->ax) ||
-                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->ay) ||
-                      PACKET3_SAMPLE_MARKED_INVALID(pBuf->az))) {
-                    ax = (float)pBuf->ax * aRes - accelBias[0];
-                    ay = (float)pBuf->ay * aRes - accelBias[1];
-                    az = (float)pBuf->az * aRes - accelBias[2];
+                if ((pBuf->header & (ICM42688_FIFO_HEADER_ACCEL |
+                                     ICM42688_FIFO_HEADER_GYRO)) ==
+                    (ICM42688_FIFO_HEADER_ACCEL | ICM42688_FIFO_HEADER_GYRO)) {
+                    if (!(PACKET3_SAMPLE_MARKED_INVALID(pBuf->gx) ||
+                          PACKET3_SAMPLE_MARKED_INVALID(pBuf->gy) ||
+                          PACKET3_SAMPLE_MARKED_INVALID(pBuf->gz) ||
+                          PACKET3_SAMPLE_MARKED_INVALID(pBuf->ax) ||
+                          PACKET3_SAMPLE_MARKED_INVALID(pBuf->ay) ||
+                          PACKET3_SAMPLE_MARKED_INVALID(pBuf->az))) {
+                        ax = (float)pBuf->ax * aRes - accelBias[0];
+                        ay = (float)pBuf->ay * aRes - accelBias[1];
+                        az = (float)pBuf->az * aRes - accelBias[2];
 
-                    // Convert the gyro value into degrees per second
-                    gx = (float)pBuf->gx * gRes - gyroBias[0];
-                    gy = (float)pBuf->gy * gRes - gyroBias[1];
-                    gz = (float)pBuf->gz * gRes - gyroBias[2];
+                        // Convert the gyro value into degrees per second
+                        gx = (float)pBuf->gx * gRes - gyroBias[0];
+                        gy = (float)pBuf->gy * gRes - gyroBias[1];
+                        gz = (float)pBuf->gz * gRes - gyroBias[2];
 
-                    imuTemp_C = ((float)pBuf->temp / 2.07f) + 25.0f;
+                        imuTemp_C = ((float)pBuf->temp / 2.07f) + 25.0f;
 
-                    // signs and axes if mag values corrected for IC placement
-                    // on the peakick V1 board
-                    MadgwickQuaternionUpdate(ay, ax, az, gy * pi / 180.0f,
-                                             gx * pi / 180.0f, gz * pi / 180.0f,
-                                             -mx, my, -mz);
+                        // signs and axes if mag values corrected for IC
+                        // placement on the peakick V1 board
+                        MadgwickQuaternionUpdate(
+                            ay, ax, az, gy * pi / 180.0f, gx * pi / 180.0f,
+                            gz * pi / 180.0f, -mx, my, -mz);
+                    } else {
+                        imuInvalidSamples++;
+                        Serial.print("one or more sample values marked invalid; packet ignored");
+                    }
                 } else {
                     imuInvalidSamples++;
-                    Serial.print("HEADER BITS (binary): ");
-                    Serial.println(pBuf->header, 2);
-                }
-                } else {
-                  imuInvalidSamples++;
-                  Serial.println("HEADER_MSG UNSET");
+                    Serial.println("samples not both available");
+                    Serial.print("header bits (binary): 0x");
+                    Serial.println(pBuf->header, 16);
                 }
             } else {
                 imuFifoEmpty++;
@@ -979,26 +996,26 @@ void loop() {
         lin_ay = ay + a32;
         lin_az = az - a33;
 
-        
 #ifdef SPRINTF_HAS_FLOAT_SUPPORT
-        sprintf(
-            pbuf,
-            "Yaw      Pitch    Roll (deg) Press(hPa)\n%6.2f   %6.2f   %6.2f     %7.1f",
-            yaw, pitch, roll, pressure_hPa);
+        sprintf(pbuf,
+                "Yaw      Pitch    Roll (deg) Press(hPa)\n%6.2f   %6.2f   "
+                "%6.2f     %7.1f",
+                yaw, pitch, roll, pressure_hPa);
 #else
         char pbuf[128];
         char xp[16], yp[16], zp[16], ap[16];
-        sprintf(
-            pbuf,
-            "Yaw      Pitch    Roll (deg) Press(hPa)\n%s   %s   %s     %s",
-            dtostrf(yaw,6,2,xp), dtostrf(pitch,6,2,yp), dtostrf(roll,6,2,zp), 
-            dtostrf(pressure_hPa,7,1,ap));
+        sprintf(pbuf,
+                "Yaw      Pitch    Roll (deg) Press(hPa)\n%s   %s   %s     %s",
+                dtostrf(yaw, 6, 2, xp), dtostrf(pitch, 6, 2, yp),
+                dtostrf(roll, 6, 2, zp), dtostrf(pressure_hPa, 7, 1, ap));
 #endif
         Serial.println(pbuf);
 
         sprintf(pbuf,
-                "loopCount  IntCount ISROverflow  AvgFIFO  invalidFIFO\n %8d   %7d    %8d  %7d   %6d\n---",
-                loopCount, imuIntCount, imuISROverflow, fifoTotal/imuIntCount, imuInvalidSamples);
+                "loopCount  IntCount ISROverflow  AvgFIFO  invalidFIFO\n %8d   "
+                "%7d    %8d  %7d   %6d\n---",
+                loopCount, imuIntCount, imuISROverflow, fifoTotal / imuIntCount,
+                imuInvalidSamples);
         Serial.println(pbuf);
 
         imuIntCount = 0;
@@ -1009,6 +1026,8 @@ void loop() {
         digitalWrite(RED_LED, (ledState ? HIGH : LOW));
     }
 
-    greenLedState = !greenLedState;
-    digitalWrite(GREEN_LED, (greenLedState ? HIGH : LOW));
+    delay(2);
+
+    //greenLedState = !greenLedState;
+    //digitalWrite(GREEN_LED, (greenLedState ? HIGH : LOW));
 }

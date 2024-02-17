@@ -83,6 +83,30 @@ https://media.digikey.com/pdf/Data%20Sheets/TDK%20PDFs/ICM-42688-P_DS_Rev1.2.pdf
 #define ICM42688_REG_BANK_SEL              0x76
 
 /*
+ * DEVICE_CONFIG settings
+ */
+#define ICM42688_DEVICE_CONFIG_SPI_MODE (1<<4)
+#define ICM42688_DEVICE_CONFIG_SOFT_RESET_CONFIG (1<<0)
+
+/*
+ * INT_CONFIG0 settings
+ */
+#define ICM42688_INT_CONFIG0_UI_DRDY_INT_CLEAR_STATUS_ONLY     (0x1 << 4)
+#define ICM42688_INT_CONFIG0_UI_DRDY_INT_CLEAR_READ_ONLY       (0x2 << 4)
+#define ICM42688_INT_CONFIG0_UI_DRDY_INT_CLEAR_STATUS_AND_READ (0x3 << 4)
+#define ICM42688_INT_CONFIG0_UI_DRDY_INT_CLEAR_MASK            (0x3 << 4)
+
+#define ICM42688_INT_CONFIG0_FIFO_THS_INT_CLEAR_STATUS_ONLY     (0x1 << 2)
+#define ICM42688_INT_CONFIG0_FIFO_THS_INT_CLEAR_READ_ONLY       (0x2 << 2)
+#define ICM42688_INT_CONFIG0_FIFO_THS_INT_CLEAR_STATUS_AND_READ (0x3 << 2)
+#define ICM42688_INT_CONFIG0_FIFO_THS_INT_CLEAR_MASK            (0x3 << 2)
+
+#define ICM42688_INT_CONFIG0_FIFO_FULL_INT_CLEAR_STATUS_ONLY      (0x1 << 0)
+#define ICM42688_INT_CONFIG0_FIFO_FULL_INT_CLEAR_READ_ONLY        (0x2 << 0)
+#define ICM42688_INT_CONFIG0_FIFO_FULL_INT_CLEAR_STATUS_AND_READ  (0x3 << 0)
+#define ICM42688_INT_CONFIG0_FIFO_FULL_INT_CLEAR_MASK             (0x3 << 0)
+
+/*
  * INT_SOURCE0 bits
  */
 #define ICM42688_INT_SOURCE0_RESET_DONE_INT1_EN  (1<<4)
@@ -167,6 +191,12 @@ typedef enum {
   ICM426XX_FIFO_CONFIG_STOP_ON_FULL2 = (3<<6),
 } ICM426XX_FIFO_CONFIG_FIFO_MODE_t;
 
+
+#define ICM42688_SIGNAL_PATH_RESET_DMP_INIT_EN      (1<<6)
+#define ICM42688_SIGNAL_PATH_RESET_DMP_MEM_RESET_EN (1<<5)
+#define ICM42688_SIGNAL_PATH_RESET_ABORT_AND_RESET  (1<<3)
+#define ICM42688_SIGNAL_PATH_RESET_TMST_STROBE      (1<<2)
+#define ICM42688_SIGNAL_PATH_RESET_FIFO_FLUSH       (1<<1)
 
 // User Bank 1
 #define ICM42688_SENSOR_CONFIG0            0x03
@@ -273,13 +303,20 @@ typedef enum {
 #define GODR_25Hz   0x0A
 #define GODR_12_5Hz 0x0B
 
-#define aMode_OFF 0x01
-#define aMode_LP  0x02
-#define aMode_LN  0x03
+typedef enum __AccelPowerMode {
+    aMode_OFF = 0,
+    aMode_SBY = 1,
+    aMode_LP = 2,
+    aMode_LN = 3
+} icm42688AccelPowerMode;
 
-#define gMode_OFF 0x00
-#define gMode_SBY 0x01
-#define gMode_LN  0x03
+typedef enum _GyroPowerMode {
+    gMode_OFF = 0,
+    gMode_SBY = 1,
+    gMode_LP = 2,
+    gMode_LN = 3
+} icm42688GyroPowerMode;
+
 
 // FIFO is empty
 #define ICM42688_FIFO_HEADER_MSG                     (1<<7)
@@ -409,6 +446,7 @@ typedef struct fifo_packet4 {
 #define ICM42688_RETURN_OK  0
 #define ICM42688_RETURN_ERR 0xff
 
+#define TIMESPEC_OFF 0xffffffff
 
 class ICM42688 {
    public:
@@ -416,34 +454,60 @@ class ICM42688 {
 
     // Configure the device for operation
     void init(uint8_t Ascale, uint8_t Gscale, uint8_t AODR, uint8_t GODR,
-              uint8_t aMode, uint8_t gMode, bool CLKIN);
+                icm42688AccelPowerMode aMode,
+                icm42688GyroPowerMode gMode,
+                bool CLKIN);
+
+    // Invoke the chip's reset function
+    void reset(void);
+
+    // Invoke the chip's FIFO flush operation
+    // see [1] section 14.33
+    uint8_t flushFifo();
+
+    // Invoke the timestamp strobe function which latches the timestamp counter into the
+    // timestamp register.
+    // see [1] section 14.33
+    uint8_t latchTimestamp();
+
+    void selfTest(int16_t* accelDiff, int16_t* gyroDiff, float* ratio);
 
     float getAres(uint8_t Ascale);
+
     float getGres(uint8_t Gscale);
 
     // return the chip identifier reported by the device; 0x47 for ICM-42688-P
     uint8_t getChipID(void);
 
     void offsetBias(float* dest1, float* dest2);
-    void reset(void);
+
+    // return current time in uSec
+    //
+    // System clock will eventually roll over.
+    // Where the system clock returns TIMESPEC_OFF, this function returns 0.
+    uint32_t getUsecTimestamp() {
+        uint32_t n = micros();
+        if (n == TIMESPEC_OFF) {
+            n = 0;
+        }
+        return n;
+    }
 
     // return interrupt status register bits
     uint8_t readIntStatus(void);
-    
-    void selfTest(int16_t* accelDiff, int16_t* gyroDiff, float* ratio);
 
     // Read a sample when not in FIFO mode
     void readData(int16_t* destination);
 
-
     void setTiltDetect(void);
+
     void setWakeonMotion(void);
 
-    // Configure the device for the desired FIFO packet mode.
+    // Sample via the FIFO
     //
-    // Call after calling init(). Currently only modes 3 and 4 are supported.
+    // Call after calling init(). Currently only mode 3 is supported.
     // returns 0 on success, 0xff on any error
-    uint8_t enableFifoMode(uint8_t mode);
+    uint8_t startFifoSampling(uint8_t mode);
     //uint8_t disableFifoMode(void);
 
     // Read and unpack all packets available in FIFO
@@ -454,6 +518,11 @@ class ICM42688 {
     // Read and unpack all packets available in FIFO
     // returns ICM42688_RETURN_OK or ICM42688_RETURN_ERR if not configured for FIFO mode 4
     uint8_t readFiFo(icm42688::fifo_packet4 *pBuf, uint16_t *pPacketCount);
+
+    // Configure sensors for operation
+    // temperature always enabled in FIFO mode
+    uint8_t setSensorState(icm42688AccelPowerMode newAccelStatus,
+                          icm42688GyroPowerMode newGyroStatus);
 
     uint16_t APEXStatus();
 
@@ -475,7 +544,6 @@ class ICM42688 {
     // Deprecated call
     void readBytes(uint8_t devAddr, uint8_t subAddress, uint8_t count, uint8_t * dest);
 
-
    protected:
     float       _aRes, _gRes;
     // Wire interface used for I/O
@@ -488,6 +556,13 @@ class ICM42688 {
 
     // number of bytes expected in each FIFO packet, based on the configuration we set
     uint8_t     _fifo_packet_size;
+
+    // system time when gyro last enabled
+    uint32_t    _gyro_on_time_us;
+    // system time when gyro last enabled
+    uint32_t    _accel_on_time_us;
+
+    uint8_t     _cache_PWR_MGMT0;
 };
 
 #endif

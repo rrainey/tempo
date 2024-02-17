@@ -11,10 +11,13 @@
 
 ICM42688::ICM42688( TwoWire * i2c )
 {
-
   _i2c = i2c;
-  _fifo_packet_config = 0;
   _i2c_address = ICM42688_ADDRESS;
+
+  _fifo_packet_config = 0;
+  _gyro_on_time_us = TIMESPEC_OFF;
+  _accel_on_time_us = TIMESPEC_OFF;
+  _cache_PWR_MGMT0 = 0;
 }
 
 
@@ -87,67 +90,190 @@ float ICM42688::getGres(uint8_t Gscale) {
   }
 }
 
-
-void ICM42688::reset()
-{
-  // reset device
-  writeByte( ICM42688_DEVICE_CONFIG,  0x01);
-  delay(1);
+void ICM42688::reset() {
+    writeByte(ICM42688_DEVICE_CONFIG, ICM42688_DEVICE_CONFIG_SOFT_RESET_CONFIG);
+    delay(1);
 }
 
-
-uint8_t ICM42688::readIntStatus()
-{
-  uint8_t temp;
-  uint8_t status = readByte(ICM42688_INT_STATUS, &temp);  
-  if (status != 1) {
-    Serial.println("DRStatus read failed");
-  }
-  return temp;
+uint8_t ICM42688::flushFifo() {
+    return writeByte(ICM42688_SIGNAL_PATH_RESET,
+                     ICM42688_SIGNAL_PATH_RESET_FIFO_FLUSH);
 }
 
+uint8_t ICM42688::latchTimestamp() {
+    return writeByte(ICM42688_SIGNAL_PATH_RESET,
+                     ICM42688_SIGNAL_PATH_RESET_TMST_STROBE);
+}
 
-void ICM42688::init(uint8_t Ascale, uint8_t Gscale, uint8_t AODR, uint8_t GODR, uint8_t aMode, uint8_t gMode, bool CLKIN)
-{
-  writeByte( ICM42688_REG_BANK_SEL, 0x00); // select register bank 0
+uint8_t ICM42688::readIntStatus() {
+    uint8_t temp;
+    uint8_t status = readByte(ICM42688_INT_STATUS, &temp);
+    if (status != 1) {
+        Serial.println("Interrupt status read failed");
+    }
+    return temp;
+}
 
-  writeByte( ICM42688_PWR_MGMT0,  gMode << 2 | aMode); // set accel and gyro modes
-  delay(1);
+uint8_t ICM42688::setSensorState(icm42688AccelPowerMode newAccelStatus,
+                                 icm42688GyroPowerMode newGyroStatus) {
+    icm42688AccelPowerMode curAccelMode =
+        (icm42688AccelPowerMode)(_cache_PWR_MGMT0 & 0x3);
+    icm42688GyroPowerMode curGyroMode =
+        (icm42688GyroPowerMode)((_cache_PWR_MGMT0 >> 2) & 0x3);
 
-  writeByte( ICM42688_ACCEL_CONFIG0, Ascale << 5 | AODR); // set accel ODR and FS
-  
-  writeByte( ICM42688_GYRO_CONFIG0,  Gscale << 5 | GODR); // set gyro ODR and FS
-  
-  //RBR: used defaults since we're using LN data rates
-  //writeByte( ICM42688_GYRO_ACCEL_CONFIG0,  0x44); // set gyro and accel bandwidth to ODR/10
- 
-   // interrupt handling
-  writeByte( ICM42688_INT_CONFIG, 0x18 | 0x03 );      // push-pull, pulsed, active HIGH interrupts
+    bool powerStateChanged = false;
 
-  uint8_t temp;
-  uint8_t status = readByte(ICM42688_INT_CONFIG1, &temp);
+    uint32_t curTime = micros();
 
-  temp &= ~(1<<4);              // clear bit 4 to allow async interrupt reset (required for proper interrupt operation)
-  if (AODR <= AODR_4kHz || GODR <= GODR_4kHz) {
-    temp |= (1<<5) | (1<<6);    // shorten interrupt pulse/deassertion duration for higher data rates (required; see [1] 14.5)
-  }
-  writeByte( ICM42688_INT_CONFIG1, temp);
-  writeByte( ICM42688_INT_SOURCE0, ICM42688_INT_SOURCE0_UI_DRDY_INT1_EN );
-  
-  // Use external clock source
-  if(CLKIN) {
+    if (curAccelMode != newAccelStatus) {
+        powerStateChanged = true;
+        switch (curAccelMode) {
+            // "OFF" modes
+            case aMode_OFF:
+            case aMode_SBY:
+                switch (newAccelStatus) {
+                    // "OFF" modes
+                    case aMode_OFF:
+                    case aMode_SBY:
+                        // no change to "on" time
+                        break;
+                    // "On" Modes
+                    case aMode_LN:
+                    case aMode_LP: {
+                        _accel_on_time_us = curTime;
+                    } break;
+                }
+                break;
+
+            case aMode_LN:
+            case aMode_LP:
+                switch (newAccelStatus) {
+                    // "OFF" modes
+                    case aMode_OFF:
+                    case aMode_SBY:
+                        _accel_on_time_us = TIMESPEC_OFF;
+                        break;
+                    // "On" Modes
+                    case aMode_LN:
+                    case aMode_LP:
+                        // must be switching modes; record time
+                        _accel_on_time_us = curTime;
+                        break;
+                }
+                break;
+        }
+    }
+
+    if (curGyroMode != newGyroStatus) {
+        powerStateChanged = true;
+
+        switch (curGyroMode) {
+            // "OFF" modes
+            case gMode_OFF:
+            case gMode_SBY:
+                switch (newAccelStatus) {
+                    // "OFF" modes
+                    case gMode_OFF:
+                    case gMode_SBY:
+                        // no change to "on" time
+                        break;
+                    // "On" Modes
+                    case gMode_LN:
+                    case gMode_LP: {
+                        _gyro_on_time_us = curTime;
+                    } break;
+                }
+                break;
+
+            case gMode_LN:
+            case gMode_LP:
+                switch (newAccelStatus) {
+                    // "OFF" modes
+                    case gMode_OFF:
+                    case gMode_SBY:
+                        _gyro_on_time_us = TIMESPEC_OFF;
+                        break;
+                    // "On" Modes
+                    case gMode_LN:
+                    case gMode_LP:
+                        // must be switching modes; record time
+                        _gyro_on_time_us = curTime;
+                        break;
+                }
+                break;
+        }
+    }
+
+    if (powerStateChanged) {
+        _cache_PWR_MGMT0 =
+            (uint8_t)newGyroStatus << 2 | (uint8_t)newAccelStatus;
+
+        writeByte(ICM42688_PWR_MGMT0, _cache_PWR_MGMT0);
+        delay(1);
+    }
+    return ICM42688_RETURN_OK;
+}
+
+void ICM42688::init(uint8_t Ascale, uint8_t Gscale, uint8_t AODR, uint8_t GODR,
+                    icm42688AccelPowerMode aMode, icm42688GyroPowerMode gMode,
+                    bool CLKIN) {
+    writeByte(ICM42688_REG_BANK_SEL, 0x00);  // select register bank 0
+
+    /*
+     * "Gyroscope needs to be kept ON for a minimum of 45ms. When transitioning
+     * from OFF to any of the other modes, do not issue any register writes for
+     * 200µs"
+     */
+    setSensorState(aMode, gMode);
+
+    writeByte(ICM42688_ACCEL_CONFIG0, Ascale << 5 | AODR);
+
+    writeByte(ICM42688_GYRO_CONFIG0, Gscale << 5 | GODR);
+
+    // RBR: used defaults since we're using LN data rates
+    // writeByte( ICM42688_GYRO_ACCEL_CONFIG0,  0x44); // set gyro and accel
+    // bandwidth to ODR/10
+
+    // interrupt handling
+    writeByte(ICM42688_INT_CONFIG,
+              0x18 | 0x03);  // push-pull, pulsed, active HIGH interrupts
+
+    // The rules for clearing an interrupt are configurable.
+    //
+    // Require both an interrupt status register read and a data read to clear these two interrupts
+    // The default is to only require a interrupt status register read.
+    // Configuration of other registers will only permit one of these two interrupt types
+    // to be enabled at the same time.
+    writeByte(ICM42688_INT_CONFIG0,
+              ICM42688_INT_CONFIG0_UI_DRDY_INT_CLEAR_STATUS_AND_READ  | 
+              ICM42688_INT_CONFIG0_FIFO_THS_INT_CLEAR_STATUS_AND_READ ); 
+
+    uint8_t temp;
+    uint8_t status = readByte(ICM42688_INT_CONFIG1, &temp);
+
+    temp &= ~(1 << 4);  // clear bit 4 to allow async interrupt reset (required
+                        // for proper interrupt operation)
+    if (AODR <= AODR_4kHz || GODR <= GODR_4kHz) {
+        temp |= (1 << 5) |
+                (1 << 6);  // shorten interrupt pulse/deassertion duration for
+                           // higher data rates (required; see [1] 14.5)
+    }
+    writeByte(ICM42688_INT_CONFIG1, temp);
+    writeByte(ICM42688_INT_SOURCE0, ICM42688_INT_SOURCE0_UI_DRDY_INT1_EN);
+
+    // Use external clock source
+    if (CLKIN) {
+        writeByte(ICM42688_REG_BANK_SEL, 0x00);  // select register bank 0
+
+        writeByte(ICM42688_INTF_CONFIG1, 0x95);  // enable RTC
+
+        writeByte(ICM42688_REG_BANK_SEL, 0x01);  // select register bank 1
+
+        writeByte(ICM42688_INTF_CONFIG5, 0x04);  // use CLKIN as clock source
+    }
+
     writeByte( ICM42688_REG_BANK_SEL, 0x00); // select register bank 0
-
-    writeByte( ICM42688_INTF_CONFIG1, 0x95); // enable RTC
-
-    writeByte( ICM42688_REG_BANK_SEL, 0x01); // select register bank 1
-
-    writeByte( ICM42688_INTF_CONFIG5, 0x04); // use CLKIN as clock source
-  }
-
-    writeByte( ICM42688_REG_BANK_SEL, 0x00); // select register bank 0
 }
-
 
 void ICM42688::selfTest(int16_t * accelDiff, int16_t * gyroDiff, float * ratio)
 {
@@ -287,6 +413,7 @@ void ICM42688::offsetBias(float * dest1, float * dest2)
 void ICM42688::readData(int16_t * destination)
 {
   uint8_t rawData[14];  // x/y/z accel register data stored here
+  //char pbuf[64];
   readBytes(ICM42688_ADDRESS, ICM42688_TEMP_DATA1, 14, &rawData[0]);  // Read the 14 raw data registers into data array
   destination[0] = ((int16_t)rawData[0] << 8) | rawData[1] ;  // Turn the MSB and LSB into a signed 16-bit value
   destination[1] = ((int16_t)rawData[2] << 8) | rawData[3] ;  
@@ -295,9 +422,11 @@ void ICM42688::readData(int16_t * destination)
   destination[4] = ((int16_t)rawData[8] << 8) | rawData[9] ;  
   destination[5] = ((int16_t)rawData[10] << 8) | rawData[11] ;  
   destination[6] = ((int16_t)rawData[12] << 8) | rawData[13] ; 
+  //sprintf(pbuf, "%02.2x %02.2x %02.2x %02.2x %02.2x %02.2x", rawData[0], rawData[1], rawData[2], rawData[3],  rawData[4], rawData[5]);
+  //Serial.println(pbuf);
 }
 
-uint8_t ICM42688::enableFifoMode(uint8_t mode) {
+uint8_t ICM42688::startFifoSampling(uint8_t mode) {
 
   uint8_t status;
   uint8_t data;
@@ -323,6 +452,8 @@ uint8_t ICM42688::enableFifoMode(uint8_t mode) {
 	data |= (uint8_t)ICM426XX_FIFO_CONFIG1_GYRO_EN;
   data |= (uint8_t)ICM426XX_FIFO_CONFIG1_TEMP_EN;
   data |= (uint8_t)ICM426XX_FIFO_CONFIG1_WM_GT_TH_EN;
+
+  // partial reads are needed as the Arduino Wire I/F is limited to 32 byte requests
   data |= (uint8_t)BIT_FIFO_CONFIG1_RESUME_PARTIAL_RD_MASK;
 
   //data |= (uint8_t)ICM426XX_FIFO_CONFIG1_TMST_FSYNC_EN;
@@ -386,6 +517,11 @@ uint8_t ICM42688::readFiFo(icm42688::fifo_packet3 *pBuf, uint16_t *pPacketCount)
 
   uint16_t packets = bytes / _fifo_packet_size;
   uint16_t actualPackets = 0;
+
+  if (bytes % _fifo_packet_size != 0) {
+    Serial.print("assertion error: avalable bytes not a multiple of FIFO packet size: ");
+    Serial.println(bytes);
+  }
 
   if (packets > 139) {
     Serial.print("assertion error: greater than 139 packets in FIFO: ");
