@@ -165,6 +165,7 @@ uint32_t tStart_ms = 0;
 uint32_t tStop_ms = 120 * 1000;
 
 void setup() {
+
     delay(1000);
 
     Serial.begin(115200);
@@ -185,6 +186,8 @@ void setup() {
     pinMode(MMC5983MA_intPin, INPUT);
     pinMode(BMP390_intPin, INPUT);
 
+    digitalWrite(RED_LED, HIGH);
+
     if (!sd.cardBegin(SD_CONFIG)) {
         cout << F(
             "\nSD initialization failed.\n"
@@ -196,16 +199,54 @@ void setup() {
                 "Is SD_CS_PIN set to the correct value?\n"
                 "Does another SPI device need to be disabled?\n");
         }
+
+        // loop forever
+        while (true) {
+            delay(100);
+        }
+    }
+
+    if (!sd.card()->readCID(&cid) || !sd.card()->readCSD(&csd) ||
+        !sd.card()->readOCR(&ocr) || !sd.card()->readSCR(&scr)) {
+        cout << F("readInfo failed\n");
+        errorPrint();
+        return;
     }
 
     printSdCardInfo();
+
+    cout << F("sdSpecVer: ") << 0.01 * scr.sdSpecVer() << endl;
+    cout << F("HighSpeedMode: ");
+    if (scr.sdSpecVer() && sd.card()->cardCMD6(0X00FFFFFF, cmd6Data) &&
+        (2 & cmd6Data[13])) {
+        cout << F("true\n");
+    } else {
+        cout << F("false\n");
+    }
+
+    if (!sd.volumeBegin()) {
+        cout << F("\nvolumeBegin failed. Is the card formatted?\n");
+        errorPrint();
+        while (true) {
+            delay(100);
+        }
+    }
+
     printSdVolumeInfo();
+
+    if (logger.startLogging() != BinaryLogger::APIResult::Success) {
+        Serial.println("Could not start logging; halting");
+        while (true) {
+            delay(100);
+        }
+    }
 
     clearSerialInput();
 
-    cout << F("\ntype any character to stop\n");
+    cout << F("\n\ntype any character to stop\n");
 
-    logger.startLogging();
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(GREEN_LED, LOW);
 }
 
 void loop() {
@@ -214,11 +255,14 @@ void loop() {
     if (logger.getOperatingState() == BinaryLogger::OperatingState::Running) {
         if (Serial.available()) {
             logger.stopLogging();
+            digitalWrite(GREEN_LED, HIGH);
         }
 
         // Stop automatically after roughly 120 seconds
         if ((millis() - tStart_ms) > tStop_ms) {
             logger.stopLogging();
+
+            digitalWrite(GREEN_LED, HIGH);
         }
     }
 

@@ -100,7 +100,7 @@ void SFE_UBLOX_GNSS::processNMEA(char incoming) {
     pSingleton->processNMEAx(incoming);
 }
 
-int BinaryLogger::startLogging() { 
+BinaryLogger::APIResult BinaryLogger::startLogging() { 
 
     uint8_t Ascale = AFS_4G;
     uint8_t Gscale = GFS_250DPS;
@@ -114,7 +114,6 @@ int BinaryLogger::startLogging() {
     mmc5983ma_bandwidth_t MBW = MBW_100Hz;
     mmc5983ma_sr_Interval_t MSET = MSET_2000;
 
-    digitalWrite(RED_LED, HIGH);
 
     Wire.begin();           // set master mode
     Wire.setClock(100000);  // I2C frequency at 100 kHz
@@ -137,6 +136,7 @@ int BinaryLogger::startLogging() {
     if (myGNSS.setDynamicModel(DYN_MODEL_AIRBORNE2g) == false) 
     {
         Serial.println(F("Warning: GNSS setDynamicModel() failed"));
+        return APIResult::GenericError;
     }
     else
     {
@@ -147,6 +147,9 @@ int BinaryLogger::startLogging() {
     //myGNSS.setNMEAOutputPort(Serial);
 
     myGNSS.setNavigationFrequency(1);
+
+    imu.reset();
+    mmc.reset();
 
     Serial.println("ICM42688 ");
     byte ICM42688ID = imu.getChipID(); 
@@ -163,8 +166,9 @@ int BinaryLogger::startLogging() {
 
     if (allSensorsAcknowledged) {
 
-        if (logManager.openLogfile(logfile) != 0) {
-            return -1;
+        if (logManager.openLogfile(logfile) != LogfileManager::APIResult::Success) {
+            Serial.println("Could not create log file");
+            return APIResult::CannotCreateLogfile;
         }
 
         logfileDateSet = false;
@@ -172,8 +176,6 @@ int BinaryLogger::startLogging() {
         Serial.println(" ");
         Serial.println("All peripherals are operational");
         Serial.println(" ");
-
-        digitalWrite(RED_LED, LOW);
 
         mmc.reset();
 
@@ -196,6 +198,7 @@ int BinaryLogger::startLogging() {
         // Receive IMU samples via FIFO
         if (ICM42688_RETURN_OK != imu.startFifoSampling( 3 )) {
             Serial.println("enableFifoMode() failed");
+            return APIResult::SensorFault;
         }
         delay (10);
 
@@ -207,6 +210,7 @@ int BinaryLogger::startLogging() {
         rslt = bmp3_init(&dev);
         if (rslt != BMP3_OK) {                             
             Serial.println("Error returned from " "bmp3_init");
+            return APIResult::SensorFault;
         }
 
         settings.int_settings.drdy_en = BMP3_ENABLE;
@@ -225,6 +229,7 @@ int BinaryLogger::startLogging() {
         rslt = bmp3_set_sensor_settings(settings_sel, &settings, &dev);
         if (rslt != BMP3_OK) {                             
             Serial.println("Error returned from " "bmp3_set_sensor_settings");
+            return APIResult::SensorFault;
         }
 
         attachInterrupt(BMP390_intPin, BMPSampleReadyHandler, RISING);
@@ -233,15 +238,17 @@ int BinaryLogger::startLogging() {
         rslt = bmp3_set_op_mode(&settings, &dev);
         if (rslt != BMP3_OK) {                             
             Serial.println("Error returned from " "bmp3_set_op_mode");
+            return APIResult::SensorFault;
         }
 
         setOperatingState( OperatingState::Running );
 
-        digitalWrite(GREEN_LED, LOW);
-
+    }
+    else {
+        return APIResult::SensorFault;
     }
 
-    return 0; 
+    return APIResult::Success; 
 }
 
 void BinaryLogger::stopLogging() {

@@ -29,10 +29,17 @@ class BinaryLogger {
     public:
         enum class OperatingState { Initialized, Running, Stopped };
 
+        enum class APIResult {
+            Success = 0,
+            GenericError = -1,
+            CannotCreateLogfile = -2,
+            SensorFault = -3
+        };
+
         BinaryLogger(SdFs &sd);
 
         // Create a new logfile on the SD Card and begin logging raw peripheral data to the file
-        int startLogging();
+        APIResult startLogging();
 
         // Stop logging and close the log file on the SD Card
         void stopLogging();

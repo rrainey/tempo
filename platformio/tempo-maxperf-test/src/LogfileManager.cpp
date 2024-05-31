@@ -23,30 +23,33 @@ LogfileManager::LogfileManager(SdFs *pSd) {
     this->pSd = pSd;
 }
 
-int LogfileManager::openLogfile(FsFile& file) { 
-    char path[128];
+LogfileManager::APIResult LogfileManager::openLogfile(FsFile& file) { 
     bool found = false;
     if (!pSd->exists(DEFAULT_LOGDIR)) {
         if (pSd->mkdir(DEFAULT_LOGDIR, true)) {
-            return -3;
+            Serial.println("mkdir failed");
+            return APIResult::CannotCreateDirectory;
         }
     }
     strcpy(dirname, DEFAULT_LOGDIR);
     strcat (dirname, "\\");
     while(!found) {
         strcpy(path, dirname);
-        sprintf (path+strlen(dirname), "log%05d.tbs", nextIndex++);
+        sprintf (path+strlen(dirname), "LOG%05d.TBS", nextIndex++);
         found = !pSd->exists(path);
     }
     if (!file.open(path, O_RDWR | O_CREAT | O_TRUNC)) {
-        return -1;
+        Serial.print("open failed: " );
+        Serial.println(path);
+        return APIResult::CannotOpenFile;
     }
     if (LOGFILE_PREALLOCATE > 0 && !file.preAllocate(LOGFILE_PREALLOCATE)) {
-        return -2;
+        Serial.println("preallocate failed");
+        return APIResult::SpacePreallocationFailed;
     }
 
     file.seek( 0 );
     
-    return 0;
+    return APIResult::Success;
 }
 

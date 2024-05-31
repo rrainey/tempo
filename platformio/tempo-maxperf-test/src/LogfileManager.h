@@ -22,6 +22,7 @@
 #define DEFAULT_LOGDIR "\\DCIM\\100TEMPO"
 
 class Logfile : public FsFile {
+public:
     Logfile(FsFile &file) {
         this->pFile = &file;
         actualLength = 0;
@@ -47,12 +48,20 @@ class Logfile : public FsFile {
 
 class LogfileManager {
     public:
-        LogfileManager(SdFs *pSd);
+     enum class APIResult {
+         Success = 0,
+         CannotOpenFile = -1,
+         SpacePreallocationFailed = -2,
+         CannotCreateDirectory = -3
+     };
 
-        int openLogfile(FsFile &file);
+     LogfileManager(SdFs *pSd);
+
+     APIResult openLogfile(FsFile &file);
 
     protected:
         char dirname[32];
+        char path[128];
         unsigned short nextIndex;
         SdFs *pSd;
 };
