@@ -2,17 +2,20 @@
 
 ### Experiments in audible feedback for skydivers.
 
-This project is designed to experiment with real-time audible feedback to a skydiver in freefall. It stacks a [SparkFun ESP32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) atop a custom GNSS/sensor combo board. The SparkFun board supports an audio connection to Bluetooth earbuds or headphones.
+This project is designed to experiment with real-time audible feedback to a skydiver in freefall. The original Peakick design stacks a [SparkFun ESP32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) atop a custom GNSS/sensor combo board. The SparkFun board supports an audio connection to Bluetooth earbuds or headphones.
+
+That design was subsequently replaced with a stand-alone "Tempo" board, which has the same
+sensors, but adds an integrated SAMD51 MCU.
 
 ### Sensors and Capabilites
 
 - GPS/GNSS via u-blox SAM-M10Q
-- 6-DOF Inertial measurement / gyro via ICM-42688
+- 6-DOF Inertial measurement / gyro via ICM-42688-V
 - Barometric pressure / temperature via BPM390
 - 3-DOF Compass/Magnetic measurement via MMC5983
-- Bluetooth audio output (to be added)
+- Bluetooth audio output (Peakick assembly only; to be added)
 
-I am just getting started with this project, so all I'm doing for now is velidating the sensor board design and experimenting with basic BT audio capabilities.
+I am just getting started with this project, so all I'm doing for now is velidating the sensor board designs and (soon) experimenting with basic BT audio capabilities.
 
 ![temp assembly](images/tempo-assembly.png)
 
@@ -21,9 +24,11 @@ I am just getting started with this project, so all I'm doing for now is velidat
 | Folder      | Description |
 | ----------- | ----------- |
 | hardware    | KiCad PCB projects (using KiCad 7)    |
-| hardware/peakick | u-blox GNSS + IMU + Barometric sensor PCB |
+| hardware/peakick | (original) u-blox GNSS + IMU + Barometric sensor PCB |
+| hardware/tempo |(newer design)  SAMD51 + u-blox GNSS + IMU + Barometric sensor PCB |
 | enclosure    | 3D-printable enclosure (Fusion360 format)
 | firmware    | Arduino sketches       |
+| platformio  | Platformio test and operational projects for Tempo board |
 
 ## Enclosure
 
@@ -37,7 +42,7 @@ This board was created using KiCad 7.0.  In order to get the header alignment be
 
 I prefer 1 oz. Copper with ENIG finish. I ordered the V1 PCB from OSHPark and stencils from OSH as well.
 
-## Parts List
+## Peakick Assembly Parts List
 
 | QTY | MPN      | Description |
 |----| ----------- | ----------- |
