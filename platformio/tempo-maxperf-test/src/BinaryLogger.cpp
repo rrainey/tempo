@@ -115,7 +115,7 @@ BinaryLogger::APIResult BinaryLogger::startLogging() {
     mmc5983ma_sr_Interval_t MSET = MSET_2000;
 
 
-    Wire.begin();           // set master mode
+    Wire.begin();          
     Wire.setClock(100000);  // I2C frequency at 100 kHz
 
     SPI.begin();
@@ -151,7 +151,7 @@ BinaryLogger::APIResult BinaryLogger::startLogging() {
     imu.reset();
     mmc.reset();
 
-    Serial.println("ICM42688 ");
+    Serial.println("ICM42688");
     byte ICM42688ID = imu.getChipID(); 
 
     Serial.println("MMC5983MA");

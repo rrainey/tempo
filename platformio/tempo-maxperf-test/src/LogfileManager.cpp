@@ -26,16 +26,29 @@ LogfileManager::LogfileManager(SdFs *pSd) {
 LogfileManager::APIResult LogfileManager::openLogfile(FsFile& file) { 
     bool found = false;
     if (!pSd->exists(DEFAULT_LOGDIR)) {
-        if (pSd->mkdir(DEFAULT_LOGDIR, true)) {
-            Serial.println("mkdir failed");
-            return APIResult::CannotCreateDirectory;
+
+        if (!pSd->exists("DCIM")) {
+
+            if (pSd->mkdir("DCIM", true)) {
+            }
         }
+
+        pSd->chdir("DCIM");
+
+        if (!pSd->exists("100TEMPO")) {
+
+            if (pSd->mkdir("100TEMPO", true)) {
+            }
+        }
+
+        pSd->chdir("100TEMPO");
+
     }
     strcpy(dirname, DEFAULT_LOGDIR);
     strcat (dirname, "\\");
     while(!found) {
         strcpy(path, dirname);
-        sprintf (path+strlen(dirname), "LOG%05d.TBS", nextIndex++);
+        sprintf (path, "LOG%05d.TBS", nextIndex++);
         found = !pSd->exists(path);
     }
     if (!file.open(path, O_RDWR | O_CREAT | O_TRUNC)) {
