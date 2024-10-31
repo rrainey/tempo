@@ -85,7 +85,7 @@ enum BlinkState {
  *
  * State 3: LANDED1  like state 2 - if any conditions are vioated, return to
  * state 2(JUMPING), go to state 0 when timer 1 reaches 60 seconds, set GNSS
- * update rate set to 1Hz, close logfile log data otherwise
+ * update rate set to 1Hz, close logfile
  */
 typedef enum { WAIT, IN_FLIGHT, JUMPING, LANDED1 } JumpState;
 
@@ -187,9 +187,9 @@ class CombinedLogger : public BinaryLogger {
      *
      * Timer 1: used in landing state machine (OFF initially)
      *
-     * Timer 2: periodic check of battery state
+     * Timer 2: periodic check of battery state [unused in Tempo V1 hardware]
      *
-     * Timer 3: blink controller for RED LED  (OFF initially)
+     * Timer 3: blink controller for RED LED  (OFF initially) [obsolete in Tempo]
      *
      * Timer 4: IMU sensor logging interval timer  (OFF initially)
      *
