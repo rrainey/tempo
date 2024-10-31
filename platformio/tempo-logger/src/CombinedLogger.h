@@ -125,6 +125,8 @@ class CombinedLogger : public BinaryLogger {
      */
     void setBlinkState(enum BlinkState newState);
 
+    MorseBlinker &getBlinker() { return morseBlinker; }
+
     // call this exactly once from the main Arduino application loop() function
     void loop();
 

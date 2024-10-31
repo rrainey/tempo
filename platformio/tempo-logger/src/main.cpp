@@ -31,25 +31,22 @@
 #include <sdios.h>
 
 #include "tempo-arduino-pins.h"
+#include "MorseBlinker.h"
 
+/**
+ * Tempo V1 board has a dedicated SPI interface for the SD card running at 16 MHz
+ */
 SPIClass spiflash(&PERIPH_SPI1, SDCARD_MISO_PIN, SDCARD_SCK_PIN,
                   SDCARD_MOSI_PIN, PAD_SPI1_TX, PAD_SPI1_RX);
 
 /*
-  Set DISABLE_CS_PIN to disable a second SPI device.
+  Set DISABLE_CS_PIN to disable a second SPI device on a common SPI interface.
   For example, with the Ethernet shield, set DISABLE_CS_PIN
   to 10 to disable the Ethernet controller.
 */
 const int8_t DISABLE_CS_PIN = -1;
-/*
-  Change the value of SD_CS_PIN if you are using SPI
-  and your hardware does not use the default value, SS.
-  Common values are:
-  Arduino Ethernet shield: pin 4
-  Sparkfun SD shield: pin 8
-  Adafruit SD shields and modules: pin 10
-*/
-// SDCARD_SS_PIN is defined for the built-in SD on some boards.
+
+// SDCARD_SS_PIN is defined for the built-in SD on the Tempo V1 board.
 
 #ifndef SDCARD_SS_PIN
 const uint8_t SD_CS_PIN = SS;
@@ -57,7 +54,7 @@ const uint8_t SD_CS_PIN = SS;
 const uint8_t SD_CS_PIN = SDCARD_SS_PIN;
 #endif  // SDCARD_SS_PIN
 
-// Try to select the best SD card configuration.
+// Automatically select the SD card configuration settings (SD_CONFIG)
 #if HAS_SDIO_CLASS
 #define SD_CONFIG SdioConfig(FIFO_SDIO)
 #elif ENABLE_DEDICATED_SPI
@@ -76,6 +73,9 @@ uint32_t eraseSize;
 uint32_t ocr;
 static ArduinoOutStream cout(Serial);
 
+/**
+ * The CombinedLogger class drives the Tempo V1 logger application.
+ */
 CombinedLogger logger(sd);
 
 //------------------------------------------------------------------------------
@@ -156,11 +156,8 @@ void printSdVolumeInfo() {
     }
 }
 
-uint32_t tStart_ms = 0;
 
-// Define the point in time at which we'll automatically stop 
-// (120 seconds here)
-uint32_t tStop_ms = 120 * 1000;
+uint32_t tStart_ms = 0;
 
 void setup() {
 
@@ -177,7 +174,6 @@ void setup() {
     }
 
     tStart_ms = millis();
-    tStop_ms += tStart_ms;
 
     // Configure LEDs and other GPIO pins
     pinMode(RED_LED, OUTPUT);
@@ -187,6 +183,7 @@ void setup() {
     pinMode(MMC5983MA_intPin, INPUT);
     pinMode(BMP390_intPin, INPUT);
 
+    // Signal start of configuration
     digitalWrite(RED_LED, HIGH);
 
     if (!sd.cardBegin(SD_CONFIG)) {
@@ -201,9 +198,13 @@ void setup() {
                 "Does another SPI device need to be disabled?\n");
         }
 
+        // BlinkState::BLINK_STATE_NO_SDCARD
+        logger.setBlinkState(BlinkState::BLINK_STATE_NO_SDCARD);
+
         // loop forever
         while (true) {
-            delay(100);
+            delay(10);
+            logger.getBlinker().loop();
         }
     }
 
@@ -211,7 +212,14 @@ void setup() {
         !sd.card()->readOCR(&ocr) || !sd.card()->readSCR(&scr)) {
         cout << F("readInfo failed\n");
         errorPrint();
-        return;
+
+        logger.setBlinkState(BlinkState::BLINK_STATE_NO_SDCARD);
+
+        // loop forever
+        while (true) {
+            delay(10);
+            logger.getBlinker().loop();
+        }
     }
 
     printSdCardInfo();
@@ -228,8 +236,12 @@ void setup() {
     if (!sd.volumeBegin()) {
         cout << F("\nvolumeBegin failed. Is the card formatted?\n");
         errorPrint();
+
+        logger.setBlinkState(BlinkState::BLINK_STATE_BAD_FILESYSTEM);
+
         while (true) {
-            delay(100);
+            delay(10);
+            logger.getBlinker().loop();
         }
     }
 
@@ -243,8 +255,12 @@ void setup() {
 
     if (logger.configureSensors() != BinaryLogger::APIResult::Success) {
         Serial.println("Could not configure sensors; halting");
+
+        logger.setBlinkState(BlinkState::BLINK_STATE_INIT_FAILED);
+
         while (true) {
-            delay(100);
+            delay(10);
+            logger.getBlinker().loop();
         }
     }
 
@@ -258,28 +274,5 @@ void loop() {
      * state machine
      */
     logger.loop();
-
-    if (logger.getOperatingState() == BinaryLogger::OperatingState::Running) {
-
-        if (Serial.available()) {
-            logger.stopLogging();
-            digitalWrite(GREEN_LED, HIGH);
-        }
-
-        /*
-         * Stop automatically after roughly 120 seconds
-         * (this is only valid for early testing; in full operation, we'd loop indefinitely)
-         */
-
-        if ((millis() - tStart_ms) > tStop_ms) {
-            logger.stopLogging();
-
-            digitalWrite(GREEN_LED, HIGH);
-
-            while (true) {
-                delay(1000);
-            }
-        }
-    }
 
 }
