@@ -331,7 +331,7 @@ void BinaryLogger::processIMUInterrupts() {
     // IMU Sample available?
 
     if (imuUnservicedISRCount > 0) {
-        longTime_t itime_us;
+        longTime_t itime_us = 0;
 
         noInterrupts();
         int res = imuTimestamps.pop(&itime_us);
