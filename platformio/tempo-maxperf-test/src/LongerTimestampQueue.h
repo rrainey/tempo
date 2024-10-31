@@ -22,13 +22,31 @@
 
 #define IMU_TIME_RING_SIZE 16
 
+/**
+ * @class LongerTimestampQueue
+ * @brief A queue for storing and retrieving timestamps.
+ * 
+ * The LongerTimestampQueue class provides a queue data structure for storing and retrieving timestamps.
+ * It supports operations such as pushing a timestamp into the queue, popping and retrieving the next timestamp from the queue,
+ * and counting the number of elements in the queue.
+ */
 class LongerTimestampQueue {
     public:
+        /**
+         * @brief Default constructor.
+         * 
+         * Initializes the timestamp queue with default values.
+         */
         LongerTimestampQueue() {
             timestampRingFront = 0;
             timestampRingBack = 0;
         }
 
+        /**
+         * @brief Returns the number of elements in the timestamp queue.
+         *
+         * @return The number of elements in the timestamp queue.
+         */
         int count() {
             int res;
             if (timestampRingFront >= timestampRingBack) {
@@ -40,6 +58,12 @@ class LongerTimestampQueue {
             return res;
         }
 
+        /**
+         * @brief Pushes a timestamp into the queue.
+         * 
+         * @param t_us The timestamp to be pushed, in microseconds.
+         * @return 0 if the timestamp was successfully pushed, -1 if the queue is full.
+         */
         int push(longTime_t t_us) {
             int ret = 0;
             if (count() == IMU_TIME_RING_SIZE-1) {
@@ -52,6 +76,15 @@ class LongerTimestampQueue {
             return ret;
         }
 
+        /**
+         * @brief Pops and retrieves the next timestamp from the queue.
+         * 
+         * This function removes the next timestamp from the queue and stores it in the provided pointer.
+         * If the queue is empty, the function returns 0.
+         * 
+         * @param pt_us Pointer to a variable where the retrieved timestamp will be stored.
+         * @return 1 if a timestamp was successfully retrieved, 0 if the queue is empty.
+         */
         int pop(longTime_t *pt_us) {
             int ret = 0;
             if (timestampRingFront != timestampRingBack) {
@@ -65,9 +98,9 @@ class LongerTimestampQueue {
         }
 
     protected:
-        unsigned short timestampRingFront;
-        unsigned short timestampRingBack;
-        LongerTimestamp timestamps_us[IMU_TIME_RING_SIZE];
+        unsigned short timestampRingFront; /**< The front index of the timestamp ring buffer. */
+        unsigned short timestampRingBack; /**< The back index of the timestamp ring buffer. */
+        LongerTimestamp timestamps_us[IMU_TIME_RING_SIZE]; /**< The array of timestamps. */
 };
 
 #endif

@@ -36,6 +36,14 @@ class BinaryLogger {
             SensorFault = -3
         };
 
+        /**
+         * @brief Constructs a BinaryLogger object.
+         *
+         * This constructor initializes the BinaryLogger object with the provided SdFs object.
+         * It also initializes various member variables to their default values.
+         *
+         * @param Sd A reference to the SD Card used for logging.
+         */
         BinaryLogger(SdFs &sd);
 
         // Create a new logfile on the SD Card and begin logging raw peripheral data to the file
