@@ -41,6 +41,8 @@ CombinedLogger::CombinedLogger(SdFs& sd) : BinaryLogger(sd)
     ulLogfileOriginMillis = 0;
 
     morseBlinker.initialize(RED_LED, 250);
+    
+    mx = my = mz = 0.0f;
 }
 
 BinaryLogger::APIResult CombinedLogger::startLogging(LogfileSlotID slot) { 
@@ -135,9 +137,79 @@ void CombinedLogger::updateHDot(float H_feet) {
   }
 }
 
-void CombinedLogger::handleIMUSample(icm42688::fifo_packet3* pSample) {}
 
-void CombinedLogger::handleMagSample(uint32_t sample[3]) {}
+/// @brief Accept an IMU sample and update the AHRS algorithm
+/// @param pSample incoming IMU sample from ICM42688
+void CombinedLogger::handleIMUSample(icm42688::fifo_packet3* pSample) {
+
+    float aRes = 4.0f / 32768.0f;
+    float gRes = 250.0f / 32768.0f;
+
+    float ax, ay, az, gx, gy, gz;
+    float imuTemp_C;
+
+    ax = (float)pSample->ax * aRes - accelBias[0];
+    ay = (float)pSample->ay * aRes - accelBias[1];
+    az = (float)pSample->az * aRes - accelBias[2];
+
+    // Convert the gyro value into degrees per second
+    gx = (float)pSample->gx * gRes - gyroBias[0];
+    gy = (float)pSample->gy * gRes - gyroBias[1];
+    gz = (float)pSample->gz * gRes - gyroBias[2];
+
+    imuTemp_C = ((float)pSample->temp / 2.07f) + 25.0f;
+
+    (void)imuTemp_C;
+
+    // const clock_t timestamp_sec = clock();
+    //  deg/sec
+    FusionVector gyroscope = {gx, gy, gz};
+    // g's
+    FusionVector accelerometer = {ax, ay, az};
+    // TODO: we use Gauss here, but might need to switch to uT
+    FusionVector magnetometer = {mx, my, -mz};
+
+    // Apply calibration
+    gyroscope =
+        FusionCalibrationInertial(gyroscope, gyroscopeMisalignment,
+                                  gyroscopeSensitivity, gyroscopeOffset);
+
+    accelerometer = FusionCalibrationInertial(
+        accelerometer, accelerometerMisalignment, accelerometerSensitivity,
+        accelerometerOffset);
+
+    if (USE_MAGNETIC_SAMPLING) {
+        magnetometer = FusionCalibrationMagnetic(magnetometer, softIronMatrix,
+                                                 hardIronOffset);
+    } else {
+        magnetometer = FusionCalibrationMagnetic(
+            magnetometerZeroes, softIronMatrix, hardIronOffset);
+    }
+
+    // Update gyroscope offset correction algorithm
+    gyroscope = FusionOffsetUpdate(&offset, gyroscope);
+
+    // Calculate delta time (in seconds) to account for
+    // gyroscope sample clock error
+    // static clock_t previousTimestamp_sec;
+    // const float deltaTime =
+    //    (float)(timestamp_sec - previousTimestamp_sec) /
+    //    (float)CLOCKS_PER_SEC;
+    // previousTimestamp_sec = timestamp_sec;
+
+    // Update gyroscope AHRS algorithm
+    FusionAhrsUpdate(&ahrs, gyroscope, accelerometer, magnetometer,
+                     fSampleInterval_sec);
+}
+
+void CombinedLogger::handleMagSample(uint32_t sample[3]) {
+    mx = (((int32_t)sample[0] - (int32_t)softIronOffset[0])) * softIronScale[0] *
+        100000.0f;
+    my = (((int32_t)sample[1] - (int32_t)softIronOffset[1])) *
+         softIronScale[1] * 100000.0f;
+    mz = (((int32_t)sample[2] - (int32_t)softIronOffset[2])) *
+         softIronScale[2] * 100000.0f;
+}
 
 void CombinedLogger::handleBaroSample(bmp3_data* pData) {
     dStaticPressure_hPa = pData->pressure / 100.0f;

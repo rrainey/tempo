@@ -10,6 +10,8 @@
 #include "BinaryLogger.h"
 #include "MorseBlinker.h"
 
+#define USE_MAGNETIC_SAMPLING false
+
 /*
  * Application build configuration
  *
@@ -132,7 +134,7 @@ class CombinedLogger : public BinaryLogger {
      *
      * @param pSample pointer to the IMU sample (from IMU FIFO)
      */
-    void handleIMUSample(icm42688::fifo_packet3 *pSample);
+    virtual void handleIMUSample(icm42688::fifo_packet3 *pSample);
 
     /**
      * @brief Receive magnetometer sample, maintain pose state, and log data
@@ -171,6 +173,21 @@ class CombinedLogger : public BinaryLogger {
     const FusionMatrix softIronMatrix = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
                                          0.0f, 0.0f, 0.0f, 1.0f};
     const FusionVector hardIronOffset = {0.0f, 0.0f, 0.0f};
+
+    const FusionVector magnetometerZeroes = {0, 0, 0};
+    
+    // magnetometer reading (units TBD)
+    float mx, my, mz;
+
+    float accelBias[3] = {0.0f, 0.0f, 0.0f};
+    float gyroBias[3] = {0.0f, 0.0f, 0.0f};
+
+    /*
+     * WARNING: These contants are specific for my test device
+     * They should be calibrated for each device
+     */
+    uint32_t softIronOffset[3] = {139525, 132218, 133466};
+    float softIronScale[3] = {0.00052652f, 0.00049533f, 0.00044927f};
 
     // Initialise algorithms
     FusionOffset offset;
