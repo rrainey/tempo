@@ -20,6 +20,9 @@
 
 #include <Arduino.h>
 
+// default time unit driving the output rate (milliseconds)
+#define MORSE_DEFAULT_TIME_UNIT_MS 250
+
 /*
  * Flash an LED, repeating a given Morse Code character.
  */
@@ -27,12 +30,12 @@ class MorseBlinker {
 
 public:
     MorseBlinker() {
-        unitTime = 250;
+        unitTime = MORSE_DEFAULT_TIME_UNIT_MS;
         reset();
     }
 
     // Initialize function to set the LED pin and basic time unit
-    void initialize(int pin, unsigned long timeUnit = 100) {
+    void initialize(int pin, unsigned long timeUnit = MORSE_DEFAULT_TIME_UNIT_MS) {
         ledPin = pin;
         unitTime = timeUnit;
         pinMode(ledPin, OUTPUT);
@@ -66,20 +69,20 @@ public:
             char morseChar = morseSequence[currentIndex++];
             if (morseChar == '.') {
                 digitalWrite(ledPin, HIGH);
-                currentDelay = unitTime;  // dot duration
+                currentDelay = unitTime;        // Morse DOT
             } else if (morseChar == '-') {
                 digitalWrite(ledPin, HIGH);
-                currentDelay = 3 * unitTime;  // dash duration
+                currentDelay = 3 * unitTime;    // Dash
             } else { // gap
                 digitalWrite(ledPin, LOW);
-                currentDelay = unitTime;  // inter-symbol gap
+                currentDelay = unitTime;        // inter-symbol gap
             }
 
             // Turn off LED after dot or dash
             if (currentIndex < sequenceLength) {
                 digitalWrite(ledPin, LOW);
                 lastUpdate += currentDelay;
-                currentDelay = unitTime;  // gap between elements
+                currentDelay = unitTime;        // gap between dot/dash elements
             }
         }
     }
@@ -141,6 +144,7 @@ protected:
             case '8': return "---..";
             case '9': return "----.";
             case '0': return "-----";
+            default: return "";  // space for no output
             case ' ': return "";  // space for no output
         }
     }

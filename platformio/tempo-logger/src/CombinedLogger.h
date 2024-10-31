@@ -11,28 +11,41 @@
 #include "MorseBlinker.h"
 
 /*
- * Operating mode
+ * Application build configuration
+ *
+ * The app may be build in any of three forms. OPS_FLIGHT is the normal mode of operation.
+ * The other two build configurations are designed for testing/debugging purposes.
  */
-#define OPS_FLIGHT 0  // normal mode; altimeter used to detect motion
-#define OPS_STATIC_TEST 1  // for testing; time based simulation of vertical motion (preferred test
-                           // mode)
+#define OPS_FLIGHT 0        // normal mode; altimeter used to detect motion
+#define OPS_STATIC_TEST 1   // for testing; time based simulation of vertical motion (preferred test
+                            // mode)
 #define OPS_GROUND_TEST  2  // for testing; uses GPS horizontal movement as an analogue to altitude
                             // changes
 
+/*
+ * Select operating mode for this build of the firmware here
+ */
+#define OPS_MODE OPS_STATIC_TEST
+
+/*
+ * The V1 Tempo board includes a red and green LED that together provide status information.
+ * A solid red LED indicates an error condition. A solid green LED indicates normal operation.
+ * This enum defines the various valid states of these LEDs.
+ */
 enum BlinkState {
   BLINK_STATE_OFF = 0,
-  BLINK_STATE_BATTERY,
+  BLINK_STATE_BATTERY,  // unused on Tempo V1 hardware
   BLINK_STATE_LOGGING,
   BLINK_STATE_NO_SDCARD,
+  BLINK_STATE_SDCARD_FILE_ERROR,
   BLINK_STATE_BAD_FILESYSTEM,
   BLINK_STATE_INIT_FAILED
 };
 
 /*
- * Set operating mode for this build of the firmware here
+ * The version numbers referenced here are a continuation of the versioning scheme originally
+ * used in Dropkick log files. These version numbers appear at the start of each TXT log file.
  */
-#define OPS_MODE OPS_STATIC_TEST
-
 #define APP_STRING "Tempo, version 0.155"
 #define LOG_VERSION 2
 #define NMEA_APP_STRING "$PVER,\"Tempo, version 0.155\",155"
@@ -76,10 +89,10 @@ enum BlinkState {
  */
 typedef enum { WAIT, IN_FLIGHT, JUMPING, LANDED1 } JumpState;
 
-// used in Fusion code
-#define SAMPLE_RATE (200)  // IMU samples per second
-// must be set to match accel/gyro samples
-float fSampleInterval_sec = 1.0f / SAMPLE_RATE;
+// used to configure the Fusion module
+#define SAMPLE_RATE (200)   // IMU samples per second
+                            // must match accel/gyro sample rate
+#define fSampleInterval_sec (1.0f / SAMPLE_RATE)
 
 class CombinedLogger : public BinaryLogger {
    public:
@@ -94,7 +107,7 @@ class CombinedLogger : public BinaryLogger {
      */
     CombinedLogger(SdFs &sd);
 
-    BinaryLogger::APIResult startLogging();
+    BinaryLogger::APIResult startLogging(LogfileSlotID slot);
 
     // Stop logging and close the log file on the SD Card
     void stopLogging();
@@ -133,7 +146,7 @@ class CombinedLogger : public BinaryLogger {
      *
      * @param pData barometer sample
      */
-    void handleBaroSample(bmp3_data *pData);
+    virtual void handleBaroSample(bmp3_data *pData);
 
     /**
      * @brief Receive Next GNSS NMEA sentence, log it.
@@ -145,7 +158,7 @@ class CombinedLogger : public BinaryLogger {
 /**
  * Fusion constants and globals
  */
-#define CLOCKS_PER_SEC 1
+//#define CLOCKS_PER_SEC 1
 
     const FusionMatrix gyroscopeMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
                                                 0.0f, 0.0f, 0.0f, 1.0f};
@@ -210,6 +223,13 @@ class CombinedLogger : public BinaryLogger {
 
     bool bTimer5Active = false;
     int32_t timer5_ms = 0;
+
+    /*
+     * last Barometer sample
+     */
+    double dStaticPressure_hPa;
+    double dBaroTemp_degC;
+    double dBaroAltitude_m;
 
     /*
      * Estimated MSL altitude, based on standard day pressure @ sea level

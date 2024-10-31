@@ -28,7 +28,7 @@
 #include "tempo-arduino-pins.h"
 #include "tempo-logfile-format.h"
 
-SFE_UBLOX_GNSS myGNSS;
+SFE_UBLOX_GNSS gnss;
 ICM42688 imu(SPI, ICM42688_SPI_CS);
 MMC5983MA mmc(MMC5983MA_ADDRESS, &Wire); 
 
@@ -121,19 +121,19 @@ BinaryLogger::APIResult BinaryLogger::configureSensors() {
     SPI.begin();
     imu.begin();
 
-    myGNSS.begin();
+    gnss.begin();
 
-    myGNSS.setUART1Output(0);
-    myGNSS.setUART2Output(0);
+    gnss.setUART1Output(0);
+    gnss.setUART2Output(0);
 
-    myGNSS.setI2COutput(COM_TYPE_NMEA);
-    myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); //Save (only) the communications port settings to flash and BBR
+    gnss.setI2COutput(COM_TYPE_NMEA);
+    gnss.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); //Save (only) the communications port settings to flash and BBR
 
     // Idle reporting will be at 0.5 Hz
-    myGNSS.setMeasurementRate(2000);
-    myGNSS.setNavigationRate(1);
+    gnss.setMeasurementRate(2000);
+    gnss.setNavigationRate(1);
 
-    if (myGNSS.setDynamicModel(DYN_MODEL_AIRBORNE2g) == false) 
+    if (gnss.setDynamicModel(DYN_MODEL_AIRBORNE2g) == false) 
     {
         Serial.println(F("Warning: GNSS setDynamicModel() failed"));
         return APIResult::GenericError;
@@ -146,7 +146,7 @@ BinaryLogger::APIResult BinaryLogger::configureSensors() {
     //This will pipe all NMEA sentences to the serial port so we can see them
     //myGNSS.setNMEAOutputPort(Serial);
 
-    myGNSS.setNavigationFrequency(1);
+    gnss.setNavigationFrequency(1);
 
     imu.reset();
     mmc.reset();
@@ -236,7 +236,7 @@ BinaryLogger::APIResult BinaryLogger::configureSensors() {
             return APIResult::SensorFault;
         }
 
-        setOperatingState( OperatingState::Stopped );
+        setOperatingState( OperatingState::Idle );
 
     }
     else {
@@ -269,7 +269,7 @@ void BinaryLogger::stopLogging() {
         tbsLogFile.truncate();
         tbsLogFile.sync();
         tbsLogFile.close();
-        setOperatingState( OperatingState::Stopped );
+        setOperatingState( OperatingState::Idle );
         
     }
 }
@@ -437,7 +437,7 @@ void BinaryLogger::pollGNSS() {
     // Where a full sentence is received, extra processing ensues which may
     // trigger a change in operating state
     // @see override of SFE_UBLOX_GNSS::processNMEA
-    myGNSS.checkUblox();
+    gnss.checkUblox();
 }
 
 void BinaryLogger::processNMEAx(char incoming) {
