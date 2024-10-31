@@ -90,11 +90,15 @@ void CombinedLogger::loop() {
         lastTime_ms = curTime_ms;
     }
 
+    // periodically flush the log file to SD card if active
+    flushLog();
+
     // Call the base class loop() function
     // Which will -- in turn -- invoke sample reporting for both this class and
     // the binary logger
     BinaryLogger::loop();
 
+    // Update application state machine
     if (OPS_MODE == OPS_GROUND_TEST) {
         updateTestStateMachine();
     }
@@ -225,13 +229,33 @@ void CombinedLogger::handleNMEASentence(const char* pSentence) {
 }
 
 void CombinedLogger::startLogFileFlushing() {
-    // Implementation of stopLogFileFlushing
-    // Add your code here to stop the log file flushing
+    if (!bTimer5Active) {
+        timer5_ms = TIMER5_INTERVAL_MS;
+        bTimer5Active = true;
+    }
 }
 
 void CombinedLogger::stopLogFileFlushing() {
-    // Implementation of stopLogFileFlushing
-    // Add your code here to stop the log file flushing
+    if (bTimer5Active) {
+        timer5_ms = 0;
+        bTimer5Active = false;
+    }
+
+    if (txtLogFile) {
+        txtLogFile.flush();
+    }
+}
+
+void CombinedLogger::flushLog() {
+    if (bTimer5Active && timer5_ms <= 0) {
+        // Serial.println( "Log flushing" );
+
+        timer5_ms = TIMER5_INTERVAL_MS;
+
+        if (txtLogFile) {
+            txtLogFile.flush();
+        }
+    }
 }
 
 void CombinedLogger::updateFlightStateMachine() {

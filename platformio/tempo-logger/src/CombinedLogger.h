@@ -294,6 +294,8 @@ class CombinedLogger : public BinaryLogger {
     void startLogFileFlushing();
 
     void stopLogFileFlushing();
+
+    void flushLog();
 };
 
 #endif
