@@ -411,97 +411,109 @@ void CombinedLogger::setBlinkState(enum BlinkState newState) {
     }
 }
 
-    void updateTestStateMachine() {
-        /**
-         * State machine appropriate for ground testing
-         */
-        switch (nAppState) {
-            case JumpState::WAIT:
-                if (nmea.isValid() &&
-                    nmea.getSpeed() >= TEST_SPEED_THRESHOLD_KTS * 1000) {
-                    Serial.println("Switching to STATE_IN_FLIGHT");
-
-                    // open log file
-                    generateLogname(logpath);
-                    logFile = SD.open(logpath, FILE_WRITE);
-
-                    logFile.println(NMEA_APP_STRING);
-
-                    // Activate altitude / battery sensor logging
-                    bTimer4Active = true;
-                    timer4_ms = TIMER4_INTERVAL_MS;
-
-                    // Activate periodic log file flushing
-                    startLogFileFlushing();
-
-                    // set nav update rate to 4Hz
-                    myGNSS.setNavigationFrequency(4);
-
-                    // Activate "in flight" LED blinking
-                    setBlinkState(BLINK_STATE_LOGGING);
-
-                    nAppState = JumpState::IN_FLIGHT;
-                }
-                break;
-
-            case JumpState::IN_FLIGHT: {
-                if (nmea.isValid() &&
-                    nmea.getSpeed() < TEST_SPEED_THRESHOLD_KTS * 1000) {
-                    Serial.println("Switching to STATE_LANDED_1");
-                    nAppState = JumpState::LANDED1;
-                    timer1_ms = TIMER1_INTERVAL_MS;
-                    bTimer1Active = true;
-                }
-            } break;
-
-            case JumpState::LANDED1: {
-                if (nmea.isValid() &&
-                    nmea.getSpeed() >= TEST_SPEED_THRESHOLD_KTS * 1000) {
-                    Serial.println("Switching to STATE_IN_FLIGHT");
-                    nAppState = JumpState::IN_FLIGHT;
-                    bTimer1Active = false;
-                } else if (bTimer1Active && timer1_ms <= 0) {
-                    // GPS.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);
-                    // GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
-                    bTimer4Active = false;
-                    Serial.println("Switching to STATE_WAIT");
-                    setBlinkState(BLINK_STATE_OFF);
-                    nAppState = JumpState::WAIT;
-                    bTimer1Active = false;
-
-                    // set nav update rate to 1Hz
-                    myGNSS.setNavigationFrequency(1);
-
-                    stopLogFileFlushing();
-                    logFile.close();
-                }
-
-            } break;
+void CombinedLogger::updateTestStateMachine() {
+    /**
+     * State machine appropriate for ground testing
+     */
+    switch (nAppState) {
+        case JumpState::WAIT:
+            if (nmea.isValid() &&
+                nmea.getSpeed() >= TEST_SPEED_THRESHOLD_KTS * 1000) {
+                Serial.println("Switching to STATE_IN_FLIGHT");
 
                 /*
-                case JumpState::LANDED2:
-                  {
+                 * Open both log files
+                 */
+                LogfileSlotID slot;
 
-                    if (nmea.isValid() && nmea.getSpeed() >=
-                TEST_SPEED_THRESHOLD_KTS*1000) { nAppState =
-                JumpState::IN_FLIGHT; bTimer1Active = false;
-                    }
-                    else if (bTimer1Active && timer1_ms <= 0) {
-                      //GPS.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);
-                      //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
-                      bTimer4Active = false;
-                      setBlinkState ( BLINK_STATE_OFF );
-                      nAppState = STATE_WAIT;
-                      Serial.println("Switching to STATE_WAIT");
-                      bTimer1Active = false;
-                      bTimer5Active = false;
+                if (logManager.findNextLogfileSlot(&slot) !=
+                    LogfileManager::APIResult::Success) {
+                    // TODO: add "morse code" error message
+                    Serial.println("Could not find a log file slot");
+                    return;
+                }
 
-                      stopLogFileFlushing();
-                      logFile.close();
-                    }
-                  }
-                  break;
-                  */
-        }
+                // create and open the text log file
+                if (logManager.openLogfile(slot, "TXT", txtLogFile) !=
+                    LogfileManager::APIResult::Success) {
+                }
+
+                txtLogFile.println(NMEA_APP_STRING);
+
+                // Activate altitude / battery sensor logging
+                bTimer4Active = true;
+                timer4_ms = TIMER4_INTERVAL_MS;
+
+                // Activate periodic log file flushing
+                startLogFileFlushing();
+
+                // set nav update rate to 4Hz
+                myGNSS.setNavigationFrequency(4);
+
+                // Activate "in flight" LED blinking
+                setBlinkState(BLINK_STATE_LOGGING);
+
+                nAppState = JumpState::IN_FLIGHT;
+            }
+            break;
+
+        case JumpState::IN_FLIGHT: {
+            if (nmea.isValid() &&
+                nmea.getSpeed() < TEST_SPEED_THRESHOLD_KTS * 1000) {
+                Serial.println("Switching to STATE_LANDED_1");
+                nAppState = JumpState::LANDED1;
+                timer1_ms = TIMER1_INTERVAL_MS;
+                bTimer1Active = true;
+            }
+        } break;
+
+        case JumpState::LANDED1: {
+            if (nmea.isValid() &&
+                nmea.getSpeed() >= TEST_SPEED_THRESHOLD_KTS * 1000) {
+                Serial.println("Switching to STATE_IN_FLIGHT");
+                nAppState = JumpState::IN_FLIGHT;
+                bTimer1Active = false;
+            } else if (bTimer1Active && timer1_ms <= 0) {
+                // GPS.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);
+                // GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
+                bTimer4Active = false;
+                Serial.println("Switching to STATE_WAIT");
+                setBlinkState(BLINK_STATE_OFF);
+                nAppState = JumpState::WAIT;
+                bTimer1Active = false;
+
+                // set nav update rate to 1Hz
+                myGNSS.setNavigationFrequency(1);
+
+                stopLogFileFlushing();
+                txtLogFile.close();
+            }
+
+        } break;
+
+            /*
+            case JumpState::LANDED2:
+              {
+
+                if (nmea.isValid() && nmea.getSpeed() >=
+            TEST_SPEED_THRESHOLD_KTS*1000) { nAppState =
+            JumpState::IN_FLIGHT; bTimer1Active = false;
+                }
+                else if (bTimer1Active && timer1_ms <= 0) {
+                  //GPS.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);
+                  //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
+                  bTimer4Active = false;
+                  setBlinkState ( BLINK_STATE_OFF );
+                  nAppState = STATE_WAIT;
+                  Serial.println("Switching to STATE_WAIT");
+                  bTimer1Active = false;
+                  bTimer5Active = false;
+
+                  stopLogFileFlushing();
+                  logFile.close();
+                }
+              }
+              break;
+              */
     }
 }
