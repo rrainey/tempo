@@ -19846,7 +19846,7 @@
     (effects (font (size 2.54 2.54) (thickness 0.508) bold) (justify left bottom))
     (uuid 076c2837-770c-447d-a96e-226ac6d3a687)
   )
-  (text "SPI Connection - CS = D0\n" (at 172.72 17.78 0)
+  (text "SPI Connection - CS = D5\n" (at 172.72 17.78 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 09bbc53b-283f-4bd1-bc2f-509f6a8bc4be)
   )

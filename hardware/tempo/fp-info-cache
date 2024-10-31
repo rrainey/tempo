@@ -1,4 +1,4 @@
-22010915794045365
+22010916561584966
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -90993,13 +90993,6 @@ FIDUCIAL-MICRO
 1
 1
 peakick
-FOUR_LAYER_WARNING
-<h3>Four-Layer Board Warning - tDoc Layer</h3>{return}<p>Warning text which will appear on both the schematic and the board file, notifying viewers that the design is a four-layer PCB.</p>{return}<p>Devices using:{return}<ul><li>FOUR_LAYER_WARNING</li></ul></p>
-
-0
-0
-0
-peakick
 GND0
 
 
@@ -91174,6 +91167,13 @@ PWR0
 0
 0
 0
+peakick
+QFP50P1200X1200X120-64N
+
+
+0
+64
+64
 peakick
 QWIIC_5MM
 

@@ -474,7 +474,7 @@
       "idf": "",
       "netlist": "",
       "specctra_dsn": "",
-      "step": "models/peakick.step",
+      "step": "models/tempo.step",
       "vrml": ""
     },
     "page_layout_descr_file": ""
