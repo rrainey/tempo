@@ -1,27 +1,54 @@
 /* 
-
-  Test peripheral interfaces that we'll use with the Tempo hardware
-
-  This application is an amalgam of several open source Arduino projects.
-  It was used to test several different processor board with the Peakick sensor array.
-
-  Elements based on code by Kris Winer
-  "01/14/2022 Copyright Tlera Corporation"
-  "Library may be used freely and without limit with proper attribution."
-  see https://github.com/kriswiner/ICM42688
-
-*/
+ * Test peripherals and drivers that we use with the Tempo and Peakick boards.
+ *
+ * This application is an amalgam of several open source Arduino projects.
+ * It was used to test several different processor board with the Peakick sensor array.
+ *
+ * Code credits:
+ *
+ * Overall structure based on code by Kris Winer
+ * "01/14/2022 Copyright Tlera Corporation"
+ * "Library may be used freely and without limit with proper attribution."
+ * see https://github.com/kriswiner/ICM42688
+ *
+ * Arduino SAMD51 Timer module
+ * An interrupt timer based on the SAMD51 clock subsystem
+ * from https://github.com/Dennis-van-Gils/SAMD51_InterruptTime
+ * Dennis van Gils
+ * MIT License
+ */
 
 #include <Arduino.h>
 #include <stdio.h>
 #include <avr/dtostrf.h>
 
+#include <SparkFun_u-blox_GNSS_Arduino_Library.h>
+
 #include "ICM42688.h"
 #include "MMC5983MA.h"
 #include "bmp3.h"
-#include <SparkFun_u-blox_GNSS_Arduino_Library.h>
-
 #include "Fusion.h"
+#include "TC_Timer.h"
+
+/**
+ * Configure compilation for the hardware runtime environment
+ * 
+ * One of four possibilities:
+ * 
+ * 1) tempo board (#define TEMPO_V1)
+ * 2) peakick board along with SAMD51 Thing Plus C board (#define SAMD51_THING_PLUS)
+ * 3) peakick board along with ESP32 Thing Plus board (set Arduino board to ESP32 Dev)
+ * 4) peakick board along with STM32 Thing Plus board (set Arduino board to STM32 Thing Plus)
+ */
+
+#if defined(__SAMD51J20A__)
+
+// uncomment when compiling for tempo V1 board
+#define TEMPO_V1
+// define when using the SAM51 Thing Plus with a Peakick sensor board
+//#define SAMD51_THING_PLUS
+
+#endif
 
 SFE_UBLOX_GNSS myGNSS;
 
@@ -30,7 +57,8 @@ SFE_UBLOX_GNSS myGNSS;
 // "true" for extended Serial debugging messages
 #define SerialDebug false
 
-volatile bool alarmFlag = false;  // for RTC alarm interrupt
+// flags RTC interrupt
+volatile bool alarmFlag = false;
 
 #if defined(ESP32)
 
@@ -88,12 +116,7 @@ void rtc_SecondsCB(void *data)
 
 #endif
 
-// A small hack to automatically identify the Sparkfun SAMD51 board
-#if defined(_SAMD51J20A_)
-#define SAMD51_THING_PLUS
-#endif
-
-#if defined(SAMD51_THING_PLUS)
+#if defined(SAMD51_THING_PLUS) || defined(TEMPO_V1)
 
 /**
  * Sparkfun Thing Plus SAMD51 
@@ -106,172 +129,51 @@ void rtc_SecondsCB(void *data)
  * ICM42688  INT2      D5  
  * 
  */
+
+/**
+ * tempo board connections
+ * 
+ * BMP390    INT       D11
+ * MMC5983MA INT       D9  
+ * ICM42688  INT/INT1  D6  
+ * ICM42688  INT2      D5  
+ * 
+ */
 #define RED_LED           13
 #define GREEN_LED         12
-#define CLKOUT            5         // as a D51 output line     
 
 #define CPU_SUPPLIES_IMU_CLKIN  false
 
 #define ICM42688_intPin1 digitalPinToInterrupt(6)   // INT/INT1
-#define ICM42688_intPin2 digitalPinToInterrupt(5)   // INT2/CLKIN as an interrupt line
 #define MMC5983MA_intPin digitalPinToInterrupt(9)
+#if defined(TEMPO_V1)
+#define BMP390_intPin    digitalPinToInterrupt(11)  // 11 for tempo, 10 for Peakick
+#define ICM42688_intPin2 digitalPinToInterrupt(10)   // INT2/CLKIN as an interrupt line
+#define CLKOUT            10         // as a SAMD51 output line
+
+ICM42688 imu(SPI, 5);
+
+#else
+// SAMD51 Thing Plus
 #define BMP390_intPin    digitalPinToInterrupt(10)
+#define ICM42688_intPin2 digitalPinToInterrupt(5)   // INT2/CLKIN as an interrupt line
+#define CLKOUT            5         // as a SAMD51 output line
+
+ICM42688 imu(Wire);
+#endif
 
 #define IRAM_ATTR
 
-#define GCLK1_HZ 48000000
-#define TIMER_PRESCALER_DIV 1024
 
-static inline void TC3_wait_for_sync() {
-  while (TC3->COUNT16.SYNCBUSY.reg != 0) {}
-}
-
-class TC_Timer {
-  public:
-    TC_Timer() {
-        callback = NULL;
-    }
-    void startTimer(unsigned long period, void (*f)());
-    void stopTimer();
-    void restartTimer(unsigned long period);
-    void setPeriod(unsigned long period);
-
-public:
-    void (*callback)();
-};
-
-TC_Timer TC;
-
-void TC_Timer::startTimer(unsigned long period, void (*f)()) {
-  // Enable the TC bus clock, use clock generator 1
-  GCLK->PCHCTRL[TC3_GCLK_ID].reg = GCLK_PCHCTRL_GEN_GCLK1_Val |
-                                   (1 << GCLK_PCHCTRL_CHEN_Pos);
-  while (GCLK->SYNCBUSY.reg > 0);
-
-  TC3->COUNT16.CTRLA.bit.ENABLE = 0;
-  
-  // Use match mode so that the timer counter resets when the count matches the
-  // compare register
-  TC3->COUNT16.WAVE.bit.WAVEGEN = TC_WAVE_WAVEGEN_MFRQ;
-  TC3_wait_for_sync();
-  
-   // Enable the compare interrupt
-  TC3->COUNT16.INTENSET.reg = 0;
-  TC3->COUNT16.INTENSET.bit.MC0 = 1;
-
-  // Enable IRQ
-  NVIC_EnableIRQ(TC3_IRQn);
-
-  this->callback = f;
-
-  setPeriod(period);
-}
-
-void TC_Timer::stopTimer() {
-  TC3->COUNT16.CTRLA.bit.ENABLE = 0;
-}
-
-void TC_Timer::restartTimer(unsigned long period) {
-  // Enable the TC bus clock, use clock generator 1
-  GCLK->PCHCTRL[TC3_GCLK_ID].reg = GCLK_PCHCTRL_GEN_GCLK1_Val |
-                                   (1 << GCLK_PCHCTRL_CHEN_Pos);
-  while (GCLK->SYNCBUSY.reg > 0);
-
-  TC3->COUNT16.CTRLA.bit.ENABLE = 0;
-  
-  // Use match mode so that the timer counter resets when the count matches the
-  // compare register
-  TC3->COUNT16.WAVE.bit.WAVEGEN = TC_WAVE_WAVEGEN_MFRQ;
-  TC3_wait_for_sync();
-  
-   // Enable the compare interrupt
-  TC3->COUNT16.INTENSET.reg = 0;
-  TC3->COUNT16.INTENSET.bit.MC0 = 1;
-
-  // Enable IRQ
-  NVIC_EnableIRQ(TC3_IRQn);
-
-  setPeriod(period);
-}
-
-void TC_Timer::setPeriod(unsigned long period) {
-  int prescaler;
-  uint32_t TC_CTRLA_PRESCALER_DIVN;
-
-  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_ENABLE;
-  TC3_wait_for_sync();
-  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV1024;
-  TC3_wait_for_sync();
-  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV256;
-  TC3_wait_for_sync();
-  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV64;
-  TC3_wait_for_sync();
-  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV16;
-  TC3_wait_for_sync();
-  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV4;
-  TC3_wait_for_sync();
-  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV2;
-  TC3_wait_for_sync();
-  TC3->COUNT16.CTRLA.reg &= ~TC_CTRLA_PRESCALER_DIV1;
-  TC3_wait_for_sync();
-
-  if (period > 300000) {
-    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV1024;
-    prescaler = 1024;
-  } else if (80000 < period && period <= 300000) {
-    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV256;
-    prescaler = 256;
-  } else if (20000 < period && period <= 80000) {
-    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV64;
-    prescaler = 64;
-  } else if (10000 < period && period <= 20000) {
-    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV16;
-    prescaler = 16;
-  } else if (5000 < period && period <= 10000) {
-    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV8;
-    prescaler = 8;
-  } else if (2500 < period && period <= 5000) {
-    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV4;
-    prescaler = 4;
-  } else if (1000 < period && period <= 2500) {
-    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV2;
-    prescaler = 2;
-  } else if (period <= 1000) {
-    TC_CTRLA_PRESCALER_DIVN = TC_CTRLA_PRESCALER_DIV1;
-    prescaler = 1;
-  }
-  TC3->COUNT16.CTRLA.reg |= TC_CTRLA_PRESCALER_DIVN;
-  TC3_wait_for_sync();
-
-  int compareValue = (int)(GCLK1_HZ / (prescaler/((float)period / 1000000))) - 1;
-
-  // Make sure the count is in a proportional position to where it was
-  // to prevent any jitter or disconnect when changing the compare value.
-  TC3->COUNT16.COUNT.reg = map(TC3->COUNT16.COUNT.reg, 0,
-                               TC3->COUNT16.CC[0].reg, 0, compareValue);
-  TC3->COUNT16.CC[0].reg = compareValue;
-  TC3_wait_for_sync();
-
-  TC3->COUNT16.CTRLA.bit.ENABLE = 1;
-  TC3_wait_for_sync();
-}
-
-void TC3_Handler() {
-  // If this interrupt is due to the compare register matching the timer count
-  if (TC3->COUNT16.INTFLAG.bit.MC0 == 1) {
-    TC3->COUNT16.INTFLAG.bit.MC0 = 1;
-    if (TC.callback != NULL) {
-        (*(TC.callback))();
-    }
-  }
-}
+/*
+ * end of Arduino SAMD51 Timer module
+ */
 
 void myISR() {
     alarmFlag = true;
 }
 
 #endif
-
 
 #define bmp3_check_rslt(func, r)                     \
     if (r != BMP3_OK) {                              \
@@ -316,10 +218,15 @@ extern void IRAM_ATTR MadgwickQuaternionUpdate(float ax, float ay, float az,
  GODR_1kHz, GODR_2kHz, GODR_4kHz, GODR_8kHz, GODR_16kHz, GODR_32kHz
 */
 uint8_t Ascale = AFS_4G, Gscale = GFS_250DPS, AODR = AODR_200Hz,
-        GODR = GODR_200Hz, aMode = aMode_LN, gMode = gMode_LN;
+        GODR = GODR_200Hz;
+
+icm42688AccelPowerMode aMode = aMode_LN;
+icm42688GyroPowerMode gMode = gMode_LN;
 
 // must be set to match accel/gyro samples
 float fSampleInterval_sec = 1 / 200.0f;
+// used in Fusion code
+#define SAMPLE_RATE (200)   // samples per second
 
 float aRes, gRes;  // scale resolutions per LSB for the accel and gyro sensor2
 float accelBias[3] = {0.0f, 0.0f, 0.0f},
@@ -330,10 +237,10 @@ float STratio[7] = {
     0.0f, 0.0f, 0.0f, 0.0f,
     0.0f, 0.0f, 0.0f};    // self-test results for the accel and gyro
 int16_t ICM42688Data[7];  // Stores the 16-bit signed sensor output
-float imuTemp_C;  // Stores the real internal gyro temperature in degrees
-                     // Celsius
-float ax, ay, az, gx, gy,
-    gz;  // variables to hold latest accel/gyro data values
+float imuTemp_C;  // Stores the real internal gyro temperature in deg C
+
+// variables to hold latest accel/gyro data values
+float ax, ay, az, gx, gy, gz;
 
 /**
  * A counter to track the number of IMU interrupts since the last invocation of loop().
@@ -341,8 +248,6 @@ float ax, ay, az, gx, gy,
  * lost. Reset to zero in each loop() pass.
  */
 volatile uint16_t imuISRCount = 0;
-
-ICM42688 imu(&Wire);
 
 /* Specify magnetic sensor parameters (continuous mode sample rate is dependent
  * on bandwidth) choices are: MODR_ONESHOT, MODR_1Hz, MODR_10Hz, MODR_20Hz,
@@ -436,8 +341,6 @@ float bmpAltitude_m = 0.0f;
 /**
  * Fusion constants and  globals
  */
-
-#define SAMPLE_RATE (100)   // samples per second
 #define CLOCKS_PER_SEC 1
 
 const FusionMatrix gyroscopeMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
@@ -475,7 +378,10 @@ void setup() {
     digitalWrite(RED_LED, HIGH);
 
     Wire.begin();           // set master mode
-    Wire.setClock(400000);  // I2C frequency at 400 kHz
+    Wire.setClock(100000);  // I2C frequency at 100 kHz
+
+    SPI.begin();
+    imu.begin();
 
     myGNSS.begin();
 
@@ -515,7 +421,7 @@ void setup() {
     uint8_t BMP390ID = dev.chip_id;
 
     bool allSensorsAcknowledged =
-        ICM42688ID == 0x47 && MMC5983ID == 0x30 && BMP390ID == 0x60;
+        (ICM42688ID == 0x47 || ICM42688ID == 0xDB) && MMC5983ID == 0x30 && BMP390ID == 0x60;
 
     if (allSensorsAcknowledged) {
         Serial.println("All peripherals are operating");
@@ -554,6 +460,7 @@ void setup() {
         Serial.println(" dps");
         Serial.println("Should be > 60 dps");
 
+        Serial.println("Comparing measurement with factory measurements");
         Serial.print("Ax ratio: ");
         Serial.print(STratio[1] * 100.0f, 0);
         Serial.println(" %");
@@ -563,7 +470,7 @@ void setup() {
         Serial.print("Az ratio: ");
         Serial.print(STratio[3] * 100.0f, 0);
         Serial.println(" %");
-        Serial.println("Should be between 50 and 150%");
+        Serial.println("Excursions outside of 50 and 150% indicate sensor damage");
 
         Serial.println("Gyro Self Test:");
         Serial.print("Gx ratio: ");
@@ -575,8 +482,7 @@ void setup() {
         Serial.print("Gz ratio: ");
         Serial.print(STratio[6] * 100.0f, 0);
         Serial.println(" %");
-        Serial.println("Should be between 50 and 150%");
-        delay(2000);
+        Serial.println("Excursions outside of 50 and 150% indicate sensor damage");
 
         // get sensor resolutions for user settings, only need to do this once
         aRes = imu.getAres(Ascale);
@@ -659,7 +565,7 @@ void setup() {
 
         digitalWrite(RED_LED, HIGH);
     } else {
-        if (ICM42688ID != 0x6A) Serial.println(" ICM42688 not functioning!");
+        if (ICM42688ID != 0x47 && ICM42688ID != 0xDB) Serial.println(" ICM42688 not functioning!");
         if (MMC5983ID != 0x30) Serial.println(" MMC5983MA not functioning!");
         if (BMP390ID != 0x60) Serial.println(" BMP390 not functioning!");
     }
@@ -679,8 +585,8 @@ void setup() {
 
 #endif
 
-#if defined(SAMD51_THING_PLUS)
-    TC.startTimer(1000000, myISR); // one second
+#if defined(SAMD51_THING_PLUS) || defined (TEMPO_V1)
+    TC.startTimer(1000000/50, myISR); // 50 Hz
 #endif
 
 #if defined(STM32F405xx)
@@ -716,9 +622,10 @@ void setup() {
     attachInterrupt(ICM42688_intPin1, myinthandler1, RISING); 
 
     // Receive IMU samples via FIFO
-    if (ICM42688_RETURN_OK != imu.enableFifoMode( 3 )) {
+    if (ICM42688_RETURN_OK != imu.startFifoSampling( 3 )) {
         Serial.println("enableFifoMode() failed");
     }
+    delay (10);
 
     FusionOffsetInitialise(&offset, SAMPLE_RATE);
     FusionAhrsInitialise(&ahrs);
@@ -854,7 +761,8 @@ void loop() {
                         // g's
                         FusionVector accelerometer = { ax, ay, az };
                         // TODO: we use Gauss here, but might need to switch to uT
-                        FusionVector magnetometer = { -mx, my, -mz };
+                        // also we adjust for installation orientation of ICs here
+                        FusionVector magnetometer = { mx, my, -mz };
 
                         // Apply calibration
                         gyroscope = FusionCalibrationInertial(
@@ -1029,13 +937,30 @@ void loop() {
         const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
         const FusionVector earth = FusionAhrsGetEarthAcceleration(&ahrs);
 
-        //printf(
-        //    "Roll %0.1f, Pitch %0.1f, Yaw %0.1f, X %0.1f, Y "
-        //    "%0.1f, Z %0.1f\n",
-        //    euler.angle.roll, euler.angle.pitch,
-        //    euler.angle.yaw, earth.axis.x, earth.axis.y,
-        //    earth.axis.z);
+#if true
 
+#ifdef SPRINTF_HAS_FLOAT_SUPPORT
+        sprintf(
+            pbuf,
+            "Yaw      Pitch    Roll (deg) Press(hPa)\n%6.2f   %6.2f   %6.2f     %7.1f",
+            euler.angle.yaw, euler.angle.pitch, euler.angle.roll, pressure_hPa);
+#else
+        char pbuf[128];
+        char xp[16], yp[16], zp[16], ap[16];
+        // Degrees
+        sprintf(
+            pbuf,
+            "EA,%s,%s,%s,N",
+            dtostrf(euler.angle.yaw,7,3,xp), dtostrf(euler.angle.pitch,7,3,yp), dtostrf(euler.angle.roll,7,3,zp));
+        Serial.println(pbuf);
+        // mG units
+        sprintf(pbuf, 
+            "MA,%s,%s,%s",  
+            dtostrf(mx,7,3,xp), dtostrf(my,7,3,yp), dtostrf(mz,7,3,zp));
+#endif
+        Serial.println(pbuf);
+
+#else
 #ifdef SPRINTF_HAS_FLOAT_SUPPORT
         sprintf(
             pbuf,
@@ -1049,15 +974,17 @@ void loop() {
             "Yaw      Pitch    Roll (deg) Press(hPa)\n%s   %s   %s     %s",
             dtostrf(euler.angle.yaw,6,2,xp), dtostrf(euler.angle.pitch,6,2,yp), dtostrf(euler.angle.roll,6,2,zp), 
             dtostrf(pressure_hPa,7,1,ap));
-        //Serial.println(pbuf);
         //sprintf(pbuf, "M = {%s, %s, %s} G",  dtostrf(mx,6,2,xp), dtostrf(my,6,2,yp), dtostrf(mz,6,2,zp));
+#endif
 #endif
         Serial.println(pbuf);
 
+#ifdef notdef
         sprintf(pbuf,
                 "loopCount  IntCount ISROverflow  AvgFIFO  invalidFIFO\n %8d   %7d    %8d  %7d   %6d\n---",
                 loopCount, imuIntCount, imuISROverflow, fifoTotal/imuIntCount, imuInvalidSamples);
         Serial.println(pbuf);
+#endif
 
 
         imuIntCount = 0;
