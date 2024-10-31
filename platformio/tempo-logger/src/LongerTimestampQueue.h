@@ -21,9 +21,13 @@
 #include "LongerTimestamp.h"
 
 // Maximum number of elements in the timestamp ring buffer.
+//
 // I am choosing a relatively large number here to account for time delays in some
-// SPI-based SD Card operations, especially when opening and closing a log file
-#define IMU_TIME_RING_SIZE 256
+// SPI-based SD Card operations, especially thinking about delays in opening and closing a log file.
+//
+// The practical upper bound of this number corresponds to the number of IMU samples storable in the
+// ICM42688's FIFO buffer - for our application configuration, this number is 128.
+#define IMU_TIME_RING_SIZE 128
 
 /**
  * @class LongerTimestampQueue
