@@ -20,7 +20,7 @@
  */
 
 #include <Arduino.h>
-#include <BinaryLogger.h>
+#include <CombinedLogger.h>
 #include <ICM42688.h>
 #include <LogfileManager.h>
 #include <LongerTimestamp.h>
@@ -76,7 +76,7 @@ uint32_t eraseSize;
 uint32_t ocr;
 static ArduinoOutStream cout(Serial);
 
-BinaryLogger logger(sd);
+CombinedLogger logger(sd);
 
 //------------------------------------------------------------------------------
 void printSdCardInfo() {
@@ -241,19 +241,14 @@ void setup() {
      * lifted off from the runway)
      */
 
-    if (logger.startLogging() != BinaryLogger::APIResult::Success) {
-        Serial.println("Could not start logging; halting");
+    if (logger.configureSensors() != BinaryLogger::APIResult::Success) {
+        Serial.println("Could not configure sensors; halting");
         while (true) {
             delay(100);
         }
     }
 
-    clearSerialInput();
-
-    cout << F("\n\ntype any character to stop\n");
-
-    digitalWrite(RED_LED, LOW);
-    digitalWrite(GREEN_LED, LOW);
+    logger.setBlinkState(BlinkState::BLINK_STATE_OFF);
 }
 
 void loop() {

@@ -99,6 +99,17 @@ class CombinedLogger : public BinaryLogger {
     // Stop logging and close the log file on the SD Card
     void stopLogging();
 
+    /**
+     * Control RED and GREEN status LEDs
+     * 
+     * These LEDs are used to indicate both the general operating status and specific states.
+     * An unblinking GREEN means the device is operational. When GREEN is illuminated, the RED LED
+     * blinks a status code.
+     * An unblinking RED means a fatal error was encounterd. When GREEN is illuminated, the GREEN LED
+     * blinks a status code.
+     */
+    void setBlinkState(enum BlinkState newState);
+
     // call this exactly once from the main Arduino application loop() function
     void loop();
 
@@ -236,17 +247,6 @@ class CombinedLogger : public BinaryLogger {
      * Rate of climb is re-estimated every 10 seconds.
      */
     void updateHDot(float H_feet);
-
-    /**
-     * Control RED and GREEN status LEDs
-     * 
-     * These LEDs are used to indicate both the general operating status and specific states.
-     * An unblinking GREEN means the device is operational. When GREEN is illuminated, the RED LED
-     * blinks a status code.
-     * An unblinking RED means a fatal error was encounterd. When GREEN is illuminated, the GREEN LED
-     * blinks a status code.
-     */
-    void setBlinkState(BlinkState newState);
 
     void updateTestStateMachine();
 

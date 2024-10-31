@@ -1,7 +1,11 @@
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
+#include <MicroNMEA.h>
 
 #include "CombinedLogger.h"
 #include "tempo-arduino-pins.h"
+
+char nmeaBuffer[100];
+MicroNMEA nmea(nmeaBuffer, sizeof(nmeaBuffer));
 
 /*
  * This GNSS class is built more for Arduino coding style than as a purer C++ class.  Definition lies
@@ -367,7 +371,7 @@ void CombinedLogger::sampleAndLogAltitude() {
     }
 }
 
-void setBlinkState(enum BlinkState newState) {
+void CombinedLogger::setBlinkState(enum BlinkState newState) {
     switch (newState) {
         case BlinkState::BLINK_STATE_OFF:
             digitalWrite(RED_LED, LOW);
