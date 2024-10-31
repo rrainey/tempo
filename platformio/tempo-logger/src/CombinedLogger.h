@@ -136,7 +136,7 @@ class CombinedLogger : public BinaryLogger {
      *
      * @param pSample pointer to the IMU sample (from IMU FIFO)
      */
-    virtual void handleIMUSample(icm42688::fifo_packet3 *pSample);
+    virtual void handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3 *pSample);
 
     /**
      * @brief Receive magnetometer sample, maintain pose state, and log data

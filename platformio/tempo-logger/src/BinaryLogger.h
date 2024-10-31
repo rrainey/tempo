@@ -90,7 +90,7 @@ class BinaryLogger {
          *
          * @param pSample Pointer to the IMU sample.
          */
-        virtual void handleIMUSample( icm42688::fifo_packet3 * pSample ) {};
+        virtual void handleIMUSample( longTime_t itime_us, icm42688::fifo_packet3 * pSample ) {};
 
         /**
          * @brief A stub to allow a derived class access to each magnetometer sample.

@@ -148,7 +148,7 @@ void CombinedLogger::updateHDot(float H_feet) {
 // TODO: the handleIMUSample function should also pass the high resolution timestamp
 // that is asociated with the incoming sample. We gave the data down in the BinaryLogger,
 // but we need to pass it up to the CombinedLogger.
-void CombinedLogger::handleIMUSample(icm42688::fifo_packet3* pSample) {
+void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3* pSample) {
 
     float aRes = 4.0f / 32768.0f;
     float gRes = 250.0f / 32768.0f;

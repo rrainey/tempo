@@ -380,7 +380,7 @@ void BinaryLogger::processIMUInterrupts() {
                         ++imuFIFOProcessed;
 
                         // Allow any derived class to process the IMU sample
-                        handleIMUSample(pBuf);
+                        handleIMUSample(itime_us, pBuf);
 
                         unsigned long gyro[3];
                         unsigned long acc[3];

@@ -20,7 +20,10 @@
 #include <Arduino.h>
 #include "LongerTimestamp.h"
 
-#define IMU_TIME_RING_SIZE 16
+// Maximum number of elements in the timestamp ring buffer.
+// I am choosing a relatively large number here to account for time delays in some
+// SPI-based SD Card operations, especially when opening and closing a log file
+#define IMU_TIME_RING_SIZE 256
 
 /**
  * @class LongerTimestampQueue
