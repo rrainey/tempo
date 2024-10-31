@@ -140,6 +140,10 @@ void CombinedLogger::updateHDot(float H_feet) {
 
 /// @brief Accept an IMU sample and update the AHRS algorithm
 /// @param pSample incoming IMU sample from ICM42688
+
+// TODO: the handleIMUSample function should also pass the high resolution timestamp
+// that is asociated with the incoming sample. We gave the data down in the BinaryLogger,
+// but we need to pass it up to the CombinedLogger.
 void CombinedLogger::handleIMUSample(icm42688::fifo_packet3* pSample) {
 
     float aRes = 4.0f / 32768.0f;
