@@ -59,13 +59,13 @@ class BinaryLogger {
         APIResult configureSensors();
 
         // Create a new logfile on the SD Card and begin logging raw peripheral data to the file
-        APIResult startLogging(LogfileSlotID slot);
+        virtual APIResult startLogging(LogfileSlotID slot);
 
         // Stop logging and close the log file on the SD Card
-        void stopLogging();
+        virtual void stopLogging();
 
         // call this exactly once from the main Arduino application loop() function
-        void loop();
+        virtual void loop();
 
         void processBarometerInterrupts();
 
@@ -109,9 +109,10 @@ class BinaryLogger {
         /**
          * @brief A stub to allow a derived class access to each NMEA sentence.
          *
+         * @param sentenceStartTime_ms millis() time at start of the sentence reception
          * @param pSentence The NMEA sentence.
          */
-        virtual void handleNMEASentence( const char * pSentence ) {};
+        virtual void handleNMEASentence( uint32_t sentenceStartTime_ms, const char * pSentence ) {};
 
         LongerTimestamp timestamp;
         FsFile  tbsLogFile;
@@ -124,6 +125,12 @@ class BinaryLogger {
         unsigned long imuFIFOProcessed;
         unsigned long loopCount;
         unsigned long loopTotal;
+
+        // millis() time at start of logging
+        uint32_t ulLogfileOriginMillis;
+
+        // millis() time at start of NMEA sentence, relative to ulLogfileOriginMillis
+        uint32_t lastNMEATime_ms;
 
         int8_t rslt;
         bmp3_dev dev;

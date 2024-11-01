@@ -255,6 +255,8 @@ BinaryLogger::APIResult BinaryLogger::startLogging(LogfileSlotID slot) {
 
     setOperatingState( OperatingState::Running );
 
+    ulLogfileOriginMillis = millis();
+
     return APIResult::Success;
 }
 
@@ -445,7 +447,7 @@ void BinaryLogger::processNMEAx(char incoming) {
      * New sentence arriving? record the time
      */
     if (bStartOfNMEA) {
-        //lastNMEATime_ms = millis() - ulLogfileOriginMillis;
+        lastNMEATime_ms = millis() - ulLogfileOriginMillis;
         bStartOfNMEA = false;
     }
     *pNMEA++ = incoming;
@@ -458,7 +460,7 @@ void BinaryLogger::processNMEAx(char incoming) {
         if ( getOperatingState() == OperatingState::Running ) {
 
             // Allow any derived class to process the NMEA sentence
-            handleNMEASentence( incomingNMEA );
+            handleNMEASentence( lastNMEATime_ms, incomingNMEA );
 
             writeNmeaSentence( incomingNMEA );
 

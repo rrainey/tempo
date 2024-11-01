@@ -106,48 +106,63 @@ void CombinedLogger::loop() {
         updateFlightStateMachine();
     }
 
+    /*
+     * Log IMU data
+     */
+    if (bTimer4Active && timer4_ms <= 0) {
+
+        reportIMU(txtLogFile);
+
+        timer4_ms = TIMER4_INTERVAL_MS;
+    }
+
+    /*
+     * Ground altitude estimation sample
+     */
+    if (bTimer6Active && timer6_ms <= 0) {
+        int nSampleIndex =
+            (nNextHSample == 0) ? NUM_H_SAMPLES - 1 : nNextHSample;
+
+        recordGroundAltitude(nHSample[nSampleIndex]);
+
+        timer6_ms = TIMER6_INTERVAL_MS;
+    }
 }
 
 void CombinedLogger::updateHDot(float H_feet) {
+    uint32_t ulMillis = millis();
+    int nLastHSample_feet;
+    int nInterval_ms = ulMillis - ulLastHSampleMillis;
 
-  uint32_t ulMillis = millis();
-  int nLastHSample_feet;
-  int nInterval_ms =  ulMillis - ulLastHSampleMillis;
+    /* update HDot every ten seconds */
+    if (nInterval_ms > 10000) {
+        if (!bFirstPressureSample) {
+            if (nNextHSample == 0) {
+                nLastHSample_feet = nHSample[NUM_H_SAMPLES - 1];
+            } else {
+                nLastHSample_feet = nHSample[nNextHSample - 1];
+            }
+            nHSample[nNextHSample] = H_feet;
+            nHDotSample[nNextHSample] =
+                (((long)H_feet - nLastHSample_feet) * 60000L) / nInterval_ms;
+            nHDot_fpm = nHDotSample[nNextHSample];
+        } else {
+            bFirstPressureSample = false;
+            nHSample[nNextHSample] = H_feet;
+            nHDotSample[nNextHSample] = 0;
+            nHDot_fpm = 0;
+            recordInitialGroundAltitude(H_feet);
+        }
 
-  /* update HDot every ten seconds */
-  if (nInterval_ms > 10000) {
-    if (!bFirstPressureSample) {
-      if (nNextHSample == 0) {
-        nLastHSample_feet = nHSample[NUM_H_SAMPLES-1];
-      }
-      else {
-        nLastHSample_feet = nHSample[nNextHSample-1];
-      }
-      nHSample[nNextHSample] = H_feet;
-      nHDotSample[nNextHSample] = (((long) H_feet - nLastHSample_feet) * 60000L) / nInterval_ms;
-      nHDot_fpm = nHDotSample[nNextHSample];
+        ulLastHSampleMillis = ulMillis;
+        if (++nNextHSample >= NUM_H_SAMPLES) {
+            nNextHSample = 0;
+        }
     }
-    else {
-      bFirstPressureSample = false;
-      nHSample[nNextHSample] = H_feet;
-      nHDotSample[nNextHSample] = 0;
-      nHDot_fpm = 0;
-    }
-
-    ulLastHSampleMillis = ulMillis;
-    if (++nNextHSample >= NUM_H_SAMPLES) {
-      nNextHSample = 0;
-    }
-  }
 }
-
 
 /// @brief Accept an IMU sample and update the AHRS algorithm
 /// @param pSample incoming IMU sample from ICM42688
-
-// TODO: the handleIMUSample function should also pass the high resolution timestamp
-// that is asociated with the incoming sample. We gave the data down in the BinaryLogger,
-// but we need to pass it up to the CombinedLogger.
 void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3* pSample) {
 
     float aRes = 4.0f / 32768.0f;
@@ -169,7 +184,6 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
 
     (void)imuTemp_C;
 
-    // const clock_t timestamp_sec = clock();
     //  deg/sec
     FusionVector gyroscope = {gx, gy, gz};
     // g's
@@ -225,7 +239,28 @@ void CombinedLogger::handleBaroSample(bmp3_data* pData) {
     dBaroAltitude_m = 44330.0f * (1.0 - pow(dStaticPressure_hPa / SEALEVELPRESSURE_HPA, 0.1903));
 }
 
-void CombinedLogger::handleNMEASentence(const char* pSentence) {
+void CombinedLogger::handleNMEASentence(uint32_t time_ms, const char* pSentence) {
+
+    if (txtLogFile) {
+      
+      txtLogFile.print( pSentence );
+
+      /*
+       * Include time hack for important GNSS messages.  This is
+       * designed to allow us to correlate GPS time and millis() time in the output stream.
+       */
+      if (strncmp( pSentence+3, "GGA", 3) == 0 || strncmp( pSentence+3, "GLL", 3) == 0) {
+        char sentence[128];
+        sprintf(sentence, "$PTH,%ld*", time_ms);
+        logfilePrintSentence( txtLogFile, sentence );
+      }
+      
+      flushLog();
+    }
+  
+    if ( printNMEA ) {
+      Serial.print( pSentence );
+    }
 }
 
 void CombinedLogger::startLogFileFlushing() {
@@ -359,6 +394,10 @@ void CombinedLogger::updateFlightStateMachine() {
         nAppState = WAIT;
         bTimer1Active = false;
 
+        // Activate surface altitude sampling (and immediately take a sample)
+        bTimer6Active = true;
+        timer6_ms = 0;
+
         stopLogFileFlushing();
         txtLogFile.close();
       }
@@ -409,7 +448,7 @@ void CombinedLogger::sampleAndLogAltitude() {
              * time and altitude readings for a idealized hop-n-pop
              */
             static struct _vals table[7] = {
-                {MINtoMS(0), 600},     {MINtoMS(2), 600},
+                {MINtoMS(0), 600},     {MINtoMS(2), 600},       // two minutes at 600 ft - this gives the GPS a chance to lock
                 {MINtoMS(12), 6500},   {MINtoMS(13), 6500},
                 {MINtoMS(13.5), 3500}, {MINtoMS(16.5), 600},
                 {MINtoMS(19), 600}};
@@ -448,26 +487,24 @@ void CombinedLogger::sampleAndLogAltitude() {
         /*
          * Update based on estimated altitude
          */
-
         updateHDot(dAlt_ft);
 
         /*
          * Output a record
          */
         if (nAppState != JumpState::WAIT) {
-            txtLogFile.print("$PENV,");
-            txtLogFile.print(millis() - ulLogfileOriginMillis);
-            txtLogFile.print(",");
-            txtLogFile.print(dPressure_hPa);
-            txtLogFile.print(",");
-            txtLogFile.print(dAlt_ft);
-            txtLogFile.print(",");
-            txtLogFile.println("-1");  // battery voltage not sampled
 
-        } else {
-            // When we're in WAIT mode, we can use the altitude
-            // to set ground altitude.
-            nHGround_feet = dAlt_ft;
+            char s1[10], s2[10], s3[10];
+            
+            char sentence[128];
+            sprintf(sentence, "$PENV,%ld,%s,%s,%s*", 
+                millis() - ulLogfileOriginMillis,
+                dtostrf(dPressure_hPa,5,5,s1),
+                dtostrf(dAlt_ft,3,3,s2),
+                dtostrf(-1.0,2,2,s3));
+            logfilePrintSentence( txtLogFile, sentence );
+    
+
         }
     }
 }
@@ -546,7 +583,14 @@ void CombinedLogger::updateTestStateMachine() {
                     LogfileManager::APIResult::Success) {
                 }
 
-                txtLogFile.println(NMEA_APP_STRING);
+                char sentence[128];
+                strcpy(sentence, NMEA_APP_STRING);
+                logfilePrintSentence(txtLogFile, sentence);
+
+                // Log estimated surface altitude (standard day conditions)
+
+                sprintf(sentence, "$PSFC,%d*", getGroundAltitude());
+                logfilePrintSentence(txtLogFile, sentence);
 
                 // Activate altitude / battery sensor logging
                 bTimer4Active = true;

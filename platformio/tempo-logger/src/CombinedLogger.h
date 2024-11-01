@@ -97,6 +97,7 @@ typedef enum { WAIT, IN_FLIGHT, JUMPING, LANDED1 } JumpState;
 #define fSampleInterval_sec (1.0f / SAMPLE_RATE)
 
 class CombinedLogger : public BinaryLogger {
+
    public:
     /**
      * @brief Constructs a CombinedLogger object.
@@ -109,10 +110,10 @@ class CombinedLogger : public BinaryLogger {
      */
     CombinedLogger(SdFs &sd);
 
-    BinaryLogger::APIResult startLogging(LogfileSlotID slot);
+    virtual BinaryLogger::APIResult startLogging(LogfileSlotID slot);
 
     // Stop logging and close the log file on the SD Card
-    void stopLogging();
+    virtual void stopLogging();
 
     /**
      * Control RED and GREEN status LEDs
@@ -125,10 +126,12 @@ class CombinedLogger : public BinaryLogger {
      */
     void setBlinkState(enum BlinkState newState);
 
+    MorseBlinker morseBlinker;
+
     MorseBlinker &getBlinker() { return morseBlinker; }
 
     // call this exactly once from the main Arduino application loop() function
-    void loop();
+    virtual void loop();
 
    protected:
     /**
@@ -143,7 +146,7 @@ class CombinedLogger : public BinaryLogger {
      *
      * @param sample array of raw XYZ magnetometer samples
      */
-    void handleMagSample(uint32_t sample[3]);
+    virtual void handleMagSample(uint32_t sample[3]);
 
     /**
      * @brief Receive Barometer sample, maintain pose state, and log data
@@ -157,12 +160,90 @@ class CombinedLogger : public BinaryLogger {
      *
      * @param pSentence pointer to buffer containing the next NMEA sentence
      */
-    void handleNMEASentence(const char *pSentence);
+    virtual void handleNMEASentence(uint32_t time_ms, const char *pSentence);
+
+    void logfilePrintSentence(FsFile &f, char *s) {
+        appendNMEAChecksum(s);
+        f.println(s);
+    }
+
+    /**
+     * Compute an append NMEA sentence checksum
+     * The input string can either end with '*', a newline, or just a NULL - all
+     * are valid.
+     */
+    void appendNMEAChecksum(char *pszSentence) {
+        int checksum = 0;
+        char *c;
+        c = ++pszSentence;
+        while (*c != '\0' && *c != '\n' && *c != '*') {
+            checksum ^= *c++;
+        }
+        sprintf(c, "*%02X", checksum);
+    }
+
+    char *dtostrf(double val, signed char width, unsigned char prec,
+                  char *sout) {
+        uint32_t iPart = (uint32_t)val;
+        uint32_t dPart = (uint32_t)((val - (double)iPart) * pow(10, prec));
+
+        sprintf(sout, "%d.%d", iPart, dPart);
+        return sout;
+    }
+
+    char *vec2str(char *dest, int size, float x, float y, float z) {
+        char a[16], b[16], c[16];
+        dtostrf(x, 4, 5, a);
+        dtostrf(y, 4, 5, b);
+        dtostrf(z, 4, 5, c);
+        sprintf(dest, "%s,%s,%s", a, b, c);
+        return dest;
+    }
+
+    void reportIMU(FsFile &f) {
+
+        if (f) {
+
+            char sentence[128];
+
+            char strGyro[32];
+            char strAcc[32];
+
+#define GYROtoDEG(x) ((x)) 
+#define ACCELtoMPS2(x) ((x) * 9.81 )
+
+            FusionVector accf = FusionAhrsGetLinearAcceleration(&ahrs);
+            FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
+
+            // gyro rates set to zero for now.
+            
+            sprintf(sentence, "$PIMU,%ld,%s,%s*",
+                    millis() - ulLogfileOriginMillis,
+                    vec2str(strAcc, sizeof(strAcc), ACCELtoMPS2(accf.axis.x),
+                            ACCELtoMPS2(accf.axis.y), ACCELtoMPS2(accf.axis.z)),
+                    vec2str(strGyro, sizeof(strGyro), GYROtoDEG(0.0f),
+                            GYROtoDEG(0.0f), GYROtoDEG(0.0f)));
+
+            logfilePrintSentence(f, sentence);
+
+            char qw[10];
+            char qx[10];
+            char qy[10];
+            char qz[10];
+
+            sprintf(sentence, "$PIM2,%ld,%s,%s,%s,%s*",
+                    millis() - ulLogfileOriginMillis, dtostrf(q.element.w, 4, 5, qw),
+                    dtostrf(q.element.x, 4, 5, qx), dtostrf(q.element.y, 4, 5, qy),
+                    dtostrf(q.element.z, 4, 5, qz));
+
+            logfilePrintSentence(f, sentence);
+        }
+    }
 
 /**
  * Fusion constants and globals
  */
-//#define CLOCKS_PER_SEC 1
+// #define CLOCKS_PER_SEC 1
 
     const FusionMatrix gyroscopeMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
                                                 0.0f, 0.0f, 0.0f, 1.0f};
@@ -233,7 +314,7 @@ class CombinedLogger : public BinaryLogger {
     bool bTimer3Active = false;
     int32_t timer3_ms = 0;
 
-#define TIMER4_INTERVAL_MS 10  // 100 Hz -- twice the IMU sample interval
+#define TIMER4_INTERVAL_MS 100  // 10 Hz    
 
     bool bTimer4Active = false;
     int32_t timer4_ms = 0;
@@ -243,8 +324,13 @@ class CombinedLogger : public BinaryLogger {
     bool bTimer5Active = false;
     int32_t timer5_ms = 0;
 
+#define TIMER6_INTERVAL_MS (1000 * 60 * 5)  // five minutes
+
+    bool bTimer6Active = false;
+    int32_t timer6_ms = 0;
+
     /*
-     * last Barometer sample
+     * most recent Barometer sample
      */
     double dStaticPressure_hPa;
     double dBaroTemp_degC;
@@ -273,12 +359,48 @@ class CombinedLogger : public BinaryLogger {
     uint32_t ulLastHSampleMillis;
     uint32_t ulLogfileOriginMillis;
 
-    MorseBlinker morseBlinker;
+    /*
+     * Queue of ground altitude samples; we save a series of samples
+     * so that when we detect a climbout starting, we can use one further back
+     * in time that the very last sample (which might be less accurate)
+     */
+#define NUM_H_GROUND_SAMPLES 4
+    int nHGroundSample[NUM_H_GROUND_SAMPLES];
+    int nNextHGroundSample = 0;
 
+    // TXT log file handle
     FsFile txtLogFile;
 
     // For debugging
     bool printNMEA = false;
+
+    /**
+     * @brief record estimated surface altitude (feet, MSL)
+     *
+     * @param nH_feet_msl
+     */
+    void recordGroundAltitude(int nH_feet_msl) {
+        nHGroundSample[nNextHGroundSample++] = nH_feet_msl;
+        if (nNextHGroundSample >= NUM_H_GROUND_SAMPLES) {
+            nNextHGroundSample = 0;
+        }
+    }
+
+    void recordInitialGroundAltitude(int nH_feet_msl) {
+        for (int i = 0; i < NUM_H_GROUND_SAMPLES; ++i) {
+            recordGroundAltitude(nH_feet_msl);
+        }
+    }
+
+    int getGroundAltitude() {
+        // look three samples back (sampled between 10 and 15 minutes ago)
+        int nSelectedSample = nNextHGroundSample - 3;
+
+        if (nSelectedSample < 0) {
+            nSelectedSample += NUM_H_GROUND_SAMPLES;
+        }
+        return nHGroundSample[nSelectedSample];
+    }
 
     /**
      * @brief Use pressure altitude samples to estimate rate of climb
