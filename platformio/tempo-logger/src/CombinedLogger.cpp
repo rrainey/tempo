@@ -375,6 +375,7 @@ void CombinedLogger::updateFlightStateMachine() {
         timer6_ms = 0;
 
         stopLogFileFlushing();
+        txtLogFile.truncate();
         txtLogFile.close();
       }
     }
@@ -638,6 +639,7 @@ void CombinedLogger::updateTestStateMachine() {
                     gnss.setNavigationFrequency(1);
 
                     stopLogFileFlushing();
+                    txtLogFile.truncate();
                     txtLogFile.close();
                 }
 
