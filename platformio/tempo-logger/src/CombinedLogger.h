@@ -408,9 +408,16 @@ class CombinedLogger : public BinaryLogger {
      */
     void updateHDot(float H_feet);
 
+    /// @brief Manage application state based on sensor inputs. This function
+    /// is called from the main loop() function. It defines the logic used for
+    /// the application state machine.
+    void updateFlightStateMachine();
+
+    /// @brief Manage application state based on sensor inputs.
     void updateTestStateMachine();
 
-    void updateFlightStateMachine();
+    /// @brief Application state support function: enters the IN_FLIGHT state
+    void enterInFlightState(bool &retFlag);
 
     void sampleAndLogAltitude();
 

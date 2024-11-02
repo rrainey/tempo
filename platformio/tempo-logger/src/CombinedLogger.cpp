@@ -310,41 +310,9 @@ void CombinedLogger::updateFlightStateMachine() {
 
   case WAIT:
     if (nHDot_fpm > OPS_HDOT_THRESHOLD_FPM) {
-
-      Serial.println("Switching to IN_FLIGHT");
-
-      /*
-       * Open both log files
-       */
-      LogfileSlotID slot;
-
-      if (logManager.findNextLogfileSlot(&slot) != LogfileManager::APIResult::Success) {
-        // TODO: add "morse code" error message
-        Serial.println("Could not find a log file slot");
-        return;
-      } 
-
-      // create and open the text log file
-      if (logManager.openLogfile(slot, "TXT", txtLogFile) != LogfileManager::APIResult::Success) {
-
-      }
-
-      txtLogFile.println( NMEA_APP_STRING );
-
-      // Activate altitude / battery sensor logging
-      bTimer4Active = true;
-      timer4_ms = TIMER4_INTERVAL_MS;
-
-      // Activate periodic log file flushing
-      startLogFileFlushing();
-
-      // Activate "in flight" LED blinking
-      setBlinkState ( BLINK_STATE_LOGGING );
-
-      // Set "time 0" for log file.
-      ulLogfileOriginMillis = millis();
-      
-      nAppState = JumpState::IN_FLIGHT;
+        bool retFlag;
+        enterInFlightState(retFlag);
+        if (retFlag) return;
     }
     break;
 
@@ -384,8 +352,8 @@ void CombinedLogger::updateFlightStateMachine() {
       }
       else if (labs(nHDot_fpm) >= OPS_HDOT_THRESHOLD_FPM) {
         Serial.println("Switching to IN_FLIGHT");
-        nAppState = JumpState::IN_FLIGHT;
         bTimer1Active = false;
+        nAppState = JumpState::IN_FLIGHT;
       }
       else if (bTimer1Active && timer1_ms <= 0) {
 
@@ -412,6 +380,68 @@ void CombinedLogger::updateFlightStateMachine() {
     }
     break;
   }
+}
+
+void CombinedLogger::enterInFlightState(bool& errorFlag) {
+    errorFlag = false;
+    Serial.println("Switching to IN_FLIGHT");
+
+    /*
+     * Open both log files
+     */
+    LogfileSlotID slot;
+
+    if (logManager.findNextLogfileSlot(&slot) !=
+        LogfileManager::APIResult::Success) {
+        setBlinkState(BlinkState::BLINK_STATE_SDCARD_FILE_ERROR);
+        Serial.println("Could not find an unused log file slot");
+        return;
+    }
+
+    // create and open the text log file
+    if (logManager.openLogfile(slot, "TXT", txtLogFile) !=
+        LogfileManager::APIResult::Success) {
+        setBlinkState(BlinkState::BLINK_STATE_SDCARD_FILE_ERROR);
+        Serial.println("Could not open TXT log file; cannot enter IN_FLIGHT mode");
+        return;
+    }
+
+    if (startLogging(slot) != BinaryLogger::APIResult::Success) {
+        setBlinkState(BlinkState::BLINK_STATE_SDCARD_FILE_ERROR);
+        Serial.println("Could not open TBS log file; cannot enter IN_FLIGHT mode");
+        return;
+    }
+
+    /*
+     * Both log files are now open. Write header lines to TXT log file:
+     *
+     * 1. Application version
+     * 2. Estimated surface height (ft, MSL)
+     */
+    char sentence[128];
+    strcpy(sentence, NMEA_APP_STRING);
+    logfilePrintSentence( txtLogFile, sentence );
+
+    // Log estimated surface altitude (standard day conditions)
+    
+    sprintf(sentence, "$PSFC,%d*", getGroundAltitude());
+    logfilePrintSentence( txtLogFile, sentence );
+
+    // Activate altitude / battery sensor logging
+    bTimer4Active = true;
+    timer4_ms = TIMER4_INTERVAL_MS;
+
+    // Activate periodic log file flushing
+    startLogFileFlushing();
+
+    // Activate "in flight" LED blinking
+    setBlinkState(BLINK_STATE_LOGGING);
+
+    // Set "time 0" for log file.
+    ulLogfileOriginMillis = millis();
+
+    nAppState = JumpState::IN_FLIGHT;
+    errorFlag = true;
 }
 
 void CombinedLogger::sampleAndLogAltitude() {
@@ -572,48 +602,9 @@ void CombinedLogger::updateTestStateMachine() {
         case JumpState::WAIT:
             if (nmea.isValid() &&
                 nmea.getSpeed() >= TEST_SPEED_THRESHOLD_KTS * 1000) {
-                Serial.println("Switching to STATE_IN_FLIGHT");
-
-                /*
-                 * Open both log files
-                 */
-                LogfileSlotID slot;
-
-                if (logManager.findNextLogfileSlot(&slot) !=
-                    LogfileManager::APIResult::Success) {
-                    // TODO: add "morse code" error message
-                    Serial.println("Could not find a log file slot");
-                    return;
-                }
-
-                // create and open the text log file
-                if (logManager.openLogfile(slot, "TXT", txtLogFile) !=
-                    LogfileManager::APIResult::Success) {
-                }
-
-                char sentence[128];
-                strcpy(sentence, NMEA_APP_STRING);
-                logfilePrintSentence(txtLogFile, sentence);
-
-                // Log estimated surface altitude (standard day conditions)
-
-                sprintf(sentence, "$PSFC,%d*", getGroundAltitude());
-                logfilePrintSentence(txtLogFile, sentence);
-
-                // Activate altitude / battery sensor logging
-                bTimer4Active = true;
-                timer4_ms = TIMER4_INTERVAL_MS;
-
-                // Activate periodic log file flushing
-                startLogFileFlushing();
-
-                // set nav update rate to 4Hz
-                gnss.setNavigationFrequency(4);
-
-                // Activate "in flight" LED blinking
-                setBlinkState(BLINK_STATE_LOGGING);
-
-                nAppState = JumpState::IN_FLIGHT;
+                bool retFlag;
+                enterInFlightState(retFlag);
+                if (retFlag) return;
             }
             break;
 
@@ -628,7 +619,7 @@ void CombinedLogger::updateTestStateMachine() {
             }
             break;
 
-            case JumpState::LANDED1: {
+        case JumpState::LANDED1: {
                 if (nmea.isValid() &&
                     nmea.getSpeed() >= TEST_SPEED_THRESHOLD_KTS * 1000) {
                     Serial.println("Switching to STATE_IN_FLIGHT");
@@ -652,30 +643,6 @@ void CombinedLogger::updateTestStateMachine() {
 
             } break;
 
-                /*
-                case JumpState::LANDED2:
-                  {
-
-                    if (nmea.isValid() && nmea.getSpeed() >=
-                TEST_SPEED_THRESHOLD_KTS*1000) { nAppState =
-                JumpState::IN_FLIGHT; bTimer1Active = false;
-                    }
-                    else if (bTimer1Active && timer1_ms <= 0) {
-                      //GPS.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);
-                      //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
-                      bTimer4Active = false;
-                      setBlinkState ( BLINK_STATE_OFF );
-                      nAppState = STATE_WAIT;
-                      Serial.println("Switching to STATE_WAIT");
-                      bTimer1Active = false;
-                      bTimer5Active = false;
-
-                      stopLogFileFlushing();
-                      logFile.close();
-                    }
-                  }
-                  break;
-                  */
         }
     }
 }
