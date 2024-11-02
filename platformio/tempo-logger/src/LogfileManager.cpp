@@ -21,6 +21,7 @@ unsigned long LOGFILE_PREALLOCATE = 2147483648;
 
 LogfileManager::LogfileManager(SdFs *pSd) {
     this->pSd = pSd;
+    nextIndex = 0;
 }
 
 LogfileManager::APIResult LogfileManager::findNextLogfileSlot(LogfileSlotID * pSlot) { 
@@ -28,36 +29,40 @@ LogfileManager::APIResult LogfileManager::findNextLogfileSlot(LogfileSlotID * pS
     pSd->chdir("\\");
 
 
-    if (!pSd->exists(LOGDIR_DCIM)) {
+    if (pSd->exists(LOGDIR_DCIM) == false) {
 
-        if (pSd->mkdir(LOGDIR_DCIM, true)) {
+        Serial.println("LOGDIR_DCIM does not exist");
+
+        if (pSd->mkdir(LOGDIR_DCIM, true) == false) {
+            return APIResult::CannotCreateDirectory;
         }
     }
 
     pSd->chdir(LOGDIR_DCIM);
 
-    if (!pSd->exists(LOGDIR_100TEMPO)) {
+    if (pSd->exists(LOGDIR_100TEMPO) == false) {
 
-        if (pSd->mkdir(LOGDIR_100TEMPO, true)) {
+        Serial.println("LOGDIR_100TEMP does not exist");
+
+        if (pSd->mkdir(LOGDIR_100TEMPO, true) == false) {
+            return APIResult::CannotCreateDirectory;
         }
     }
 
     pSd->chdir(LOGDIR_100TEMPO);
 
-    strcpy(dirname, "");
-
-    // both TBS and TXT filenames must be unused within that numeric slot.
+    // both TBS and TXT filenames must be unused within the candidate numeric slot.
 
     while(found) {
-        strcpy(path, dirname);
         sprintf (path, "LOG%05d.TBS", nextIndex);
-        found = !pSd->exists(path);
+        //Serial.println(path);
+        found = pSd->exists(path);
 
         if (!found) {
 
-            strcpy(path, dirname);
             sprintf (path, "LOG%05d.TXT", nextIndex);
-            found = !pSd->exists(path);
+            //Serial.println(path);
+            found = pSd->exists(path);
 
             if (found) {
                 nextIndex++;
@@ -68,6 +73,9 @@ LogfileManager::APIResult LogfileManager::findNextLogfileSlot(LogfileSlotID * pS
     pSd->chdir("\\");
 
     *pSlot = nextIndex++;
+
+    //Serial.print("Next slot: ");
+    //Serial.println(*pSlot);
 
     return APIResult::Success;
 }
@@ -81,6 +89,7 @@ LogfileManager::APIResult LogfileManager::openLogfile(LogfileSlotID slot, const 
     if (!pSd->exists(LOGDIR_DCIM)) {
 
         if (pSd->mkdir(LOGDIR_DCIM, true)) {
+            return APIResult::CannotCreateDirectory;
         }
     }
 
@@ -89,13 +98,14 @@ LogfileManager::APIResult LogfileManager::openLogfile(LogfileSlotID slot, const 
     if (!pSd->exists(LOGDIR_100TEMPO)) {
 
         if (pSd->mkdir(LOGDIR_100TEMPO, true)) {
+            return APIResult::CannotCreateDirectory;
         }
     }
 
     pSd->chdir(LOGDIR_100TEMPO);
     
     sprintf (path, "LOG%05d.%s", slot, pSuffix);
-    found = !pSd->exists(path);
+    found = pSd->exists(path);
 
     if (!found) {
         if (!file.open(path, O_RDWR | O_CREAT | O_TRUNC)) {
