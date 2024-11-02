@@ -26,7 +26,7 @@ LogfileManager::LogfileManager(SdFs *pSd) {
 
 LogfileManager::APIResult LogfileManager::findNextLogfileSlot(LogfileSlotID * pSlot) { 
     bool found = true;
-    pSd->chdir("\\");
+    pSd->chdir();
 
 
     if (pSd->exists(LOGDIR_DCIM) == false) {
@@ -70,7 +70,7 @@ LogfileManager::APIResult LogfileManager::findNextLogfileSlot(LogfileSlotID * pS
         }
     }
 
-    pSd->chdir("\\");
+    pSd->chdir();
 
     *pSlot = nextIndex++;
 
@@ -84,7 +84,7 @@ LogfileManager::APIResult LogfileManager::openLogfile(LogfileSlotID slot, const 
     APIResult result = APIResult::Success;
     bool found = true;
 
-    pSd->chdir("\\");
+    pSd->chdir();
 
     if (!pSd->exists(LOGDIR_DCIM)) {
 
@@ -124,7 +124,7 @@ LogfileManager::APIResult LogfileManager::openLogfile(LogfileSlotID slot, const 
         result = APIResult::FileExists;
     }
 
-    pSd->chdir("\\");
+    pSd->chdir();
     
     return result;
 }
