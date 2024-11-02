@@ -356,31 +356,34 @@ void CombinedLogger::updateFlightStateMachine() {
         nAppState = JumpState::IN_FLIGHT;
       }
       else if (bTimer1Active && timer1_ms <= 0) {
-
-        // Back to 0.5Hz update rate
-        gnss.setMeasurementRate(2000);
-        gnss.setNavigationRate(1);
-
-        gnss.enableNMEAMessage( UBX_NMEA_GSA, COM_PORT_I2C );
-        gnss.enableNMEAMessage (UBX_NMEA_GSV, COM_PORT_I2C );
-        
-        bTimer4Active = false;
-        Serial.println("Switching to STATE_WAIT");
-        setBlinkState ( BLINK_STATE_OFF );
-        nAppState = WAIT;
-        bTimer1Active = false;
-
-        // Activate surface altitude sampling (and immediately take a sample)
-        bTimer6Active = true;
-        timer6_ms = 0;
-
-        stopLogFileFlushing();
-        txtLogFile.truncate();
-        txtLogFile.close();
+          enterWaitState();
       }
     }
     break;
   }
+}
+
+void CombinedLogger::enterWaitState() {
+    // Back to 0.5Hz update rate
+    gnss.setMeasurementRate(2000);
+    gnss.setNavigationRate(1);
+
+    gnss.enableNMEAMessage(UBX_NMEA_GSA, COM_PORT_I2C);
+    gnss.enableNMEAMessage(UBX_NMEA_GSV, COM_PORT_I2C);
+
+    bTimer4Active = false;
+    Serial.println("Switching to STATE_WAIT");
+    setBlinkState(BLINK_STATE_OFF);
+    nAppState = WAIT;
+    bTimer1Active = false;
+
+    // Activate surface altitude sampling (and immediately take a sample)
+    bTimer6Active = true;
+    timer6_ms = 0;
+
+    stopLogFileFlushing();
+    txtLogFile.truncate();
+    txtLogFile.close();
 }
 
 void CombinedLogger::enterInFlightState(bool& errorFlag) {
@@ -392,16 +395,14 @@ void CombinedLogger::enterInFlightState(bool& errorFlag) {
      */
     LogfileSlotID slot;
 
-    if (logManager.findNextLogfileSlot(&slot) !=
-        LogfileManager::APIResult::Success) {
+    if (logManager.findNextLogfileSlot(&slot) != LogfileManager::APIResult::Success) {
         setBlinkState(BlinkState::BLINK_STATE_SDCARD_FILE_ERROR);
         Serial.println("Could not find an unused log file slot");
         return;
     }
 
     // create and open the text log file
-    if (logManager.openLogfile(slot, "TXT", txtLogFile) !=
-        LogfileManager::APIResult::Success) {
+    if (logManager.openLogfile(slot, "TXT", txtLogFile) != LogfileManager::APIResult::Success) {
         setBlinkState(BlinkState::BLINK_STATE_SDCARD_FILE_ERROR);
         Serial.println("Could not open TXT log file; cannot enter IN_FLIGHT mode");
         return;
@@ -529,9 +530,9 @@ void CombinedLogger::sampleAndLogAltitude() {
         updateHDot(dAlt_ft);
 
         /*
-         * Output a record
+         * Output a $PENV record (whuch includes a baro alititude estimate)
          */
-        if (nAppState != JumpState::WAIT) {
+        if (txtLogFile.isOpen()) {
 
             char s1[10], s2[10], s3[10];
             
@@ -542,7 +543,6 @@ void CombinedLogger::sampleAndLogAltitude() {
                 dtostrf(dAlt_ft,3,3,s2),
                 dtostrf(-1.0,2,2,s3));
             logfilePrintSentence( txtLogFile, sentence );
-    
 
         }
     }
@@ -627,20 +627,7 @@ void CombinedLogger::updateTestStateMachine() {
                     nAppState = JumpState::IN_FLIGHT;
                     bTimer1Active = false;
                 } else if (bTimer1Active && timer1_ms <= 0) {
-                    // GPS.sendCommand(PMTK_API_SET_FIX_CTL_1HZ);
-                    // GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
-                    bTimer4Active = false;
-                    Serial.println("Switching to STATE_WAIT");
-                    setBlinkState(BLINK_STATE_OFF);
-                    nAppState = JumpState::WAIT;
-                    bTimer1Active = false;
-
-                    // set nav update rate to 1Hz
-                    gnss.setNavigationFrequency(1);
-
-                    stopLogFileFlushing();
-                    txtLogFile.truncate();
-                    txtLogFile.close();
+                    enterWaitState();
                 }
 
             } break;

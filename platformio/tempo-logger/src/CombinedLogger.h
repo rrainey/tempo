@@ -413,6 +413,8 @@ class CombinedLogger : public BinaryLogger {
     /// the application state machine.
     void updateFlightStateMachine();
 
+    void enterWaitState();
+
     /// @brief Manage application state based on sensor inputs.
     void updateTestStateMachine();
 
