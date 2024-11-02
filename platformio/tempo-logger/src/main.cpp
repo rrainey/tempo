@@ -156,7 +156,6 @@ void printSdVolumeInfo() {
     }
 }
 
-
 uint32_t tStart_ms = 0;
 
 void setup() {
@@ -171,6 +170,16 @@ void setup() {
     // Press on if that doesn't happen within ten seconds.
     while ( !Serial && (millis() - tStart_ms) < 10000 ) {
         delay(100);
+    }
+
+    if (OPS_MODE == OPS_STATIC_TEST) {
+        Serial.println("Welcome. The device has booted in OPS_STATIC_TEST mode.");
+        Serial.println("");
+        Serial.println("This test will take about 20 minutes to complete. You will see");
+        Serial.println("state change messages for STATE_WAIT, STATE_IN_FLIGHT, and STATE_LANDED_1. ");
+        Serial.println("The test is complete when the device returns to STATE_WAIT.");
+        Serial.println("You may then inspect the information in the last log file generated.");
+        Serial.println("---");
     }
 
     tStart_ms = millis();
