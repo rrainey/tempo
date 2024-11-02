@@ -253,7 +253,7 @@ BinaryLogger::APIResult BinaryLogger::startLogging(LogfileSlotID slot) {
         return APIResult::CannotCreateLogfile;
     }
 
-    setOperatingState( OperatingState::Running );
+    setOperatingState( OperatingState::Logging );
 
     ulLogfileOriginMillis = millis();
 
@@ -262,7 +262,7 @@ BinaryLogger::APIResult BinaryLogger::startLogging(LogfileSlotID slot) {
 
 void BinaryLogger::stopLogging() {
 
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
 
         imu.reset();
         mmc.reset();
@@ -455,22 +455,23 @@ void BinaryLogger::processNMEAx(char incoming) {
     nmea.process(incoming);
 
     if (incoming == '\n') {
+
         *pNMEA = '\0';
 
-        if ( getOperatingState() == OperatingState::Running ) {
+        // Allow any derived class to process the NMEA sentence
+        handleNMEASentence( lastNMEATime_ms, incomingNMEA );
 
-            // Allow any derived class to process the NMEA sentence
-            handleNMEASentence( lastNMEATime_ms, incomingNMEA );
+        if ( getOperatingState() == OperatingState::Logging ) {
 
             writeNmeaSentence( incomingNMEA );
 
-            /*
-             * Received GPS date and time? Update logfile metadata
-             */
-            if (strncmp(incomingNMEA + 3, "RMC", 3) == 0) {
-                updateGPSDateTime(incomingNMEA);
-            }
+        }
 
+        /*
+         * Received GPS date and time? Update logfile metadata
+         */
+        if (strncmp(incomingNMEA + 3, "RMC", 3) == 0) {
+            updateGPSDateTime(incomingNMEA);
         }
 
         if (false) {
@@ -488,7 +489,7 @@ void BinaryLogger::setOperatingState(OperatingState newState) {
 }
 
 void BinaryLogger::writeVersionRecord(int version) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
         tempoRawLogRecord record;
         record.type = (int)TempoRawRecordType::Version;
         record.timestamp = (unsigned long long)timestamp.getLongMicros();
@@ -500,7 +501,7 @@ void BinaryLogger::writeVersionRecord(int version) {
 }
 
 void BinaryLogger::writeNmeaSentence(const char *pSentence) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
         // omit <CR><LF><NUL>
         size_t len = strlen(pSentence) - 2;
         if (len > 0) {
@@ -518,12 +519,12 @@ void BinaryLogger::writeImuRecord(unsigned long gyro[3], unsigned long acc[3],
                                   unsigned char header,
                                   unsigned short timestamp,
                                   unsigned char temp) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
     }
 }
 
 void BinaryLogger::writeMagRecord(unsigned long sample[3]) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
         tempoRawLogRecord record;
         record.type = (int)TempoRawRecordType::Magnetometer;
         record.timestamp = (unsigned long long)timestamp.getLongMicros();
@@ -537,7 +538,7 @@ void BinaryLogger::writeMagRecord(unsigned long sample[3]) {
 }
 
 void BinaryLogger::writeBaroRecord(double pressure_Pa, double temp_degC) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
         tempoRawLogRecord record;
         record.type = (int)TempoRawRecordType::Barometer;
         record.timestamp = (unsigned long long)timestamp.getLongMicros();
@@ -562,7 +563,7 @@ void BinaryLogger::updateGPSDateTime(char *pIncomingNMEA) {
         usGPSTime =
             FAT_TIME(nmea.getHour(), nmea.getMinute(), nmea.getSecond());
 
-        if (getOperatingState() == OperatingState::Running &&
+        if (getOperatingState() == OperatingState::Logging &&
             logfileDateSet == false) {
             tbsLogFile.timestamp(T_CREATE, nmea.getYear(), nmea.getMonth(),
                               nmea.getDay(), nmea.getHour(), nmea.getMinute(),
