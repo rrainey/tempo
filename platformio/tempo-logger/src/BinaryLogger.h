@@ -69,10 +69,13 @@ class BinaryLogger {
 
         void processBarometerInterrupts();
 
+        /// @brief process all buffered samples in IMU FIFO
         void processIMUInterrupts();
 
+        /// @brief poll and process a Magnetometer sample
         void pollMagnetometer();
 
+        /// @brief poll GNSS's NMEA data stream
         void pollGNSS();
 
         OperatingState getOperatingState() const {
