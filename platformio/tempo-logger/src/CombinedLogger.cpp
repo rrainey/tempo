@@ -43,6 +43,8 @@ CombinedLogger::CombinedLogger(SdFs& sd) : BinaryLogger(sd)
     morseBlinker.initialize(RED_LED, 250);
     
     mx = my = mz = 0.0f;
+
+    nAppState = WAIT;
 }
 
 BinaryLogger::APIResult CombinedLogger::startLogging(LogfileSlotID slot) { 
@@ -87,11 +89,13 @@ void CombinedLogger::loop() {
             timer5_ms -= deltaTime_ms;
         }
 
+        morseBlinker.loop();
+
+        // periodically flush the log file to SD card if active
+        flushLog();
+
         lastTime_ms = curTime_ms;
     }
-
-    // periodically flush the log file to SD card if active
-    flushLog();
 
     // Call the base class loop() function
     // Which will -- in turn -- invoke sample reporting for both this class and
@@ -117,7 +121,7 @@ void CombinedLogger::loop() {
     }
 
     /*
-     * Ground altitude estimation sample
+     * Ground altitude estimation
      */
     if (bTimer6Active && timer6_ms <= 0) {
         int nSampleIndex =
@@ -225,12 +229,12 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
 }
 
 void CombinedLogger::handleMagSample(uint32_t sample[3]) {
-    mx = (((int32_t)sample[0] - (int32_t)softIronOffset[0])) * softIronScale[0] *
-        100000.0f;
+    mx = (((int32_t)sample[0] - (int32_t)softIronOffset[0])) * 
+        softIronScale[0] * 100000.0f;
     my = (((int32_t)sample[1] - (int32_t)softIronOffset[1])) *
-         softIronScale[1] * 100000.0f;
+        softIronScale[1] * 100000.0f;
     mz = (((int32_t)sample[2] - (int32_t)softIronOffset[2])) *
-         softIronScale[2] * 100000.0f;
+        softIronScale[2] * 100000.0f;
 }
 
 void CombinedLogger::handleBaroSample(bmp3_data* pData) {
@@ -241,7 +245,7 @@ void CombinedLogger::handleBaroSample(bmp3_data* pData) {
 
 void CombinedLogger::handleNMEASentence(uint32_t time_ms, const char* pSentence) {
 
-    if (txtLogFile) {
+    if (txtLogFile.isOpen()) {
       
       txtLogFile.print( pSentence );
 
@@ -276,7 +280,7 @@ void CombinedLogger::stopLogFileFlushing() {
         bTimer5Active = false;
     }
 
-    if (txtLogFile) {
+    if (txtLogFile.isOpen()) {
         txtLogFile.flush();
     }
 }
@@ -287,7 +291,7 @@ void CombinedLogger::flushLog() {
 
         timer5_ms = TIMER5_INTERVAL_MS;
 
-        if (txtLogFile) {
+        if (txtLogFile.isOpen()) {
             txtLogFile.flush();
         }
     }

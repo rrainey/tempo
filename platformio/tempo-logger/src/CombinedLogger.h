@@ -18,8 +18,8 @@
  * The app may be build in any of three forms. OPS_FLIGHT is the normal mode of operation.
  * The other two build configurations are designed for testing/debugging purposes.
  */
-#define OPS_FLIGHT 0        // normal mode; altimeter used to detect motion
-#define OPS_STATIC_TEST 1   // for testing; time based simulation of vertical motion (preferred test
+#define OPS_FLIGHT       0  // normal mode; altimeter used to detect motion
+#define OPS_STATIC_TEST  1  // for testing; time based simulation of vertical motion (preferred test
                             // mode)
 #define OPS_GROUND_TEST  2  // for testing; uses GPS horizontal movement as an analogue to altitude
                             // changes
@@ -266,8 +266,7 @@ class CombinedLogger : public BinaryLogger {
     float gyroBias[3] = {0.0f, 0.0f, 0.0f};
 
     /*
-     * WARNING: These contants are specific for my test device
-     * They should be calibrated for each device
+     * WARNING: These calibration values are specific to my test device
      */
     uint32_t softIronOffset[3] = {139525, 132218, 133466};
     float softIronScale[3] = {0.00052652f, 0.00049533f, 0.00044927f};
@@ -355,7 +354,7 @@ class CombinedLogger : public BinaryLogger {
 #define NUM_H_SAMPLES 5
     int nHSample[NUM_H_SAMPLES];
     int nHDotSample[NUM_H_SAMPLES];
-    int nNextHSample;
+    int nNextHSample = 0;
     uint32_t ulLastHSampleMillis;
     uint32_t ulLogfileOriginMillis;
 
@@ -372,7 +371,7 @@ class CombinedLogger : public BinaryLogger {
     FsFile txtLogFile;
 
     // For debugging
-    bool printNMEA = false;
+    bool printNMEA = true;
 
     /**
      * @brief record estimated surface altitude (feet, MSL)
