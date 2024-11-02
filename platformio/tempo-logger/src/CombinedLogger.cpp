@@ -112,6 +112,8 @@ void CombinedLogger::loop() {
         updateFlightStateMachine();
     }
 
+    sampleAndLogAltitude();
+
     /*
      * Log IMU data
      */
