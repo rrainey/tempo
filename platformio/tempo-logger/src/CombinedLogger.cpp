@@ -536,25 +536,25 @@ void CombinedLogger::setBlinkState(enum BlinkState newState) {
             morseBlinker.setOutputCharacter('I');
             break;
 
-        // two blinks
+        // one dashes
         case BlinkState::BLINK_STATE_NO_SDCARD:
             digitalWrite(RED_LED, HIGH);
             morseBlinker.initialize(GREEN_LED, 250);
-            morseBlinker.setOutputCharacter('E');
+            morseBlinker.setOutputCharacter('T');
             break;
 
-        // three blinks
+        // two dashes
         case BlinkState::BLINK_STATE_BAD_FILESYSTEM:
             digitalWrite(RED_LED, HIGH);
             morseBlinker.initialize(GREEN_LED, 250);
-            morseBlinker.setOutputCharacter('O');
+            morseBlinker.setOutputCharacter('M');
             break;
 
-        // four blinks
+        // three dashes
         case BlinkState::BLINK_STATE_SDCARD_FILE_ERROR:
             digitalWrite(RED_LED, HIGH);
             morseBlinker.initialize(GREEN_LED, 250);
-            morseBlinker.setOutputCharacter('H');
+            morseBlinker.setOutputCharacter('O');
             break;
 
         case BlinkState::BLINK_STATE_INIT_FAILED:

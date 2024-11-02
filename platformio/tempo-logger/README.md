@@ -14,6 +14,19 @@ The application will stop logging after it detects that the jumper has landed. I
 
 It the program detects that it cannot keep up with logging the data to the SD card at any time, it will close the log file and stop.
 
+## Reading Status LEDs
+
+| LED 1 (GREEN, left)  | LED 2 (RED, middle) | LED 3 (GREEN, Right) | Description |
+|:------:|:-------------:|:-------------:|------------------|
+| OFF |  OFF | ON | Powered on |
+| OFF |  ON  | ON | Initializing |
+| OFF |  ON  | ON | Idle, waiting for a jump to begin |
+| ON |  ON  | ON | Jump mode, Logging active |
+| ON | blinking | ON | Battery low (not implemented on Temp V1 board)
+| blinking (one dash) | ON | ON | program stopped; No SD Card found
+| blinking (two dashes) | ON | ON | program stopped; SD Card not properly formatted (must beFAT32 or exFAT)
+| blinking (three dashes) | ON | ON | program stopped; SD Card File Error (check card)
+
 ## Dropkick log file format
 
 This log file is an extension of the NMEA 0183 GNSS log file format.  It is described in the Dropkick project.
