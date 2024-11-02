@@ -31,7 +31,7 @@ LogfileManager::APIResult LogfileManager::findNextLogfileSlot(LogfileSlotID * pS
 
     if (pSd->exists(LOGDIR_DCIM) == false) {
 
-        Serial.println("LOGDIR_DCIM does not exist");
+        Serial.println("DCIM folder does not exist; creating it");
 
         if (pSd->mkdir(LOGDIR_DCIM, true) == false) {
             return APIResult::CannotCreateDirectory;
@@ -42,7 +42,7 @@ LogfileManager::APIResult LogfileManager::findNextLogfileSlot(LogfileSlotID * pS
 
     if (pSd->exists(LOGDIR_100TEMPO) == false) {
 
-        Serial.println("LOGDIR_100TEMP does not exist");
+        Serial.println("100TEMPO folder does not exist; creating it");
 
         if (pSd->mkdir(LOGDIR_100TEMPO, true) == false) {
             return APIResult::CannotCreateDirectory;
