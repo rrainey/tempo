@@ -371,7 +371,7 @@ class CombinedLogger : public BinaryLogger {
     FsFile txtLogFile;
 
     // For debugging
-    bool printNMEA = true;
+    bool printNMEA = false;
 
     /**
      * @brief record estimated surface altitude (feet, MSL)
