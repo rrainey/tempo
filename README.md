@@ -1,11 +1,18 @@
 # Tempo
 
+## One Project, Two Boards
+
+Two boards are part of the Tempo project: Tempo and Peakick. Both explore modern sensor ICs for use in skydiving.  The Peakick board is more research oriented. Peakick is design as a daughter board for
+a experimentation with a range of microcontroller boards. It is most easily connected to SparkFun "Thing Plus" form factor boards, although it can be connected to almost any modern MCU/SOC board supporting 3.3V
+peripherals.
+
+Tempo is a purpose built single board logger derived from Peakick.  It adds a SAMD51 MCU onto a Peakick board.  This project includes PlatformIO-based firmware to drive this board as a stand-alone
+skidiving data logger.
+
 ### Experiments in audible feedback for skydivers.
 
-This project is designed to experiment with real-time audible feedback to a skydiver in freefall. The original Peakick design stacks a [SparkFun ESP32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) atop a custom GNSS/sensor combo board. The SparkFun board supports an audio connection to Bluetooth earbuds or headphones.
+This project was originally designed to experiment with real-time audible feedback at assist a skydiver in freefall. The original Peakick design stacks a [SparkFun ESP32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) atop a custom GNSS/sensor combo board. The SparkFun board supports an audio connection to Bluetooth earbuds or headphones.
 
-That design was subsequently replaced with a stand-alone "Tempo" board, which has the same
-sensors, but adds an integrated SAMD51 MCU.
 
 ### Sensors and Capabilites
 
@@ -13,7 +20,6 @@ sensors, but adds an integrated SAMD51 MCU.
 - 6-DOF Inertial measurement / gyro via ICM-42688-V
 - Barometric pressure / temperature via BPM390
 - 3-DOF Compass/Magnetic measurement via MMC5983
-- Bluetooth audio output (Peakick assembly only; to be added)
 
 I am just getting started with this project, so all I'm doing for now is velidating the sensor board designs and (soon) experimenting with basic BT audio capabilities.
 
@@ -29,6 +35,7 @@ I am just getting started with this project, so all I'm doing for now is velidat
 | enclosure    | 3D-printable enclosure (Fusion360 format)
 | firmware    | Arduino sketches       |
 | platformio  | Platformio test and operational projects for Tempo board |
+| platformio/tempo-logger  | Skydiving logger firmware for the Tempo board |
 
 ## Enclosure
 
