@@ -30,14 +30,15 @@ class MorseBlinker {
 
 public:
     MorseBlinker() {
-        unitTime = MORSE_DEFAULT_TIME_UNIT_MS;
+        unitTime_ms = MORSE_DEFAULT_TIME_UNIT_MS;
         reset();
+        ledPin = -1;
     }
 
-    // Initialize function to set the LED pin and basic time unit
+    // Initialization function to set the LED pin and basic time unit
     void initialize(int pin, unsigned long timeUnit = MORSE_DEFAULT_TIME_UNIT_MS) {
         ledPin = pin;
-        unitTime = timeUnit;
+        unitTime_ms = timeUnit;
         pinMode(ledPin, OUTPUT);
         reset();
     }
@@ -48,65 +49,89 @@ public:
         outputChar = character;
         // Retrieve the Morse code sequence based on character
         morseSequence = getMorseCode(character);
-        sequenceLength = morseSequence.length();
+        // include the trailing NULL character as part of the sequence we consider; see below
+        sequenceLength = strlen(morseSequence) + 1;
+
+        updateLEDState();
     }
 
     // Function to be called from Arduino loop
     void loop() {
-        unsigned long currentMillis = millis();
-        
-        // If we're between blinks, check if it's time to move to the next element
-        if (currentMillis - lastUpdate >= currentDelay) {
-            lastUpdate = currentMillis;
-            
-            // If we're at the end of the sequence, reset
-            if (currentIndex >= sequenceLength) {
-                reset();
-                return;
-            }
+        if (ledPin >= 0) {
+            unsigned long currentTime_ms = millis();
 
-            // Determine the delay based on Morse code character
-            char morseChar = morseSequence[currentIndex++];
-            if (morseChar == '.') {
-                digitalWrite(ledPin, HIGH);
-                currentDelay = unitTime;        // Morse DOT
-            } else if (morseChar == '-') {
-                digitalWrite(ledPin, HIGH);
-                currentDelay = 3 * unitTime;    // Dash
-            } else { // gap
-                digitalWrite(ledPin, LOW);
-                currentDelay = unitTime;        // inter-symbol gap
-            }
+            // If we're between blinks, check if it's time to move to the next
+            // element
+            if (currentTime_ms - lastUpdate_ms >= thisInterval_ms) {
 
-            // Turn off LED after dot or dash
-            if (currentIndex < sequenceLength) {
-                digitalWrite(ledPin, LOW);
-                lastUpdate += currentDelay;
-                currentDelay = unitTime;        // gap between dot/dash elements
+                lastUpdate_ms = currentTime_ms;
+
+                if (isOn) {
+                    isOn = false;
+                    digitalWrite(ledPin, LOW);
+                    thisInterval_ms = unitTime_ms;
+                } else {
+                    updateLEDState();
+                }
             }
         }
     }
 
 protected:
+    // Arduino pin # for output
     int ledPin;
-    unsigned long unitTime;
+    // indicates if we are at the beginning or end of a bit's output
+    bool isOn = false;
+    // lowest level time interval for the Morse Code output.
+    // A dot is one interval. A dash is three intervals.
+    unsigned long unitTime_ms;
+    // ASCII encoding of the output character
     char outputChar = ' ';
-    String morseSequence;
+    // encoded Morse code sequence for the output character
+    const char * morseSequence;
+    // number of dot/dash elements in the chracter's Morse code sequence
     int sequenceLength = 0;
+    // currently executing dot/dash bit in the sequence
     int currentIndex = 0;
-    unsigned long currentDelay = 0;
-    unsigned long lastUpdate = 0;
+    // target duration of the current on/off interval
+    unsigned long thisInterval_ms = 0;
+    // millis() time of last update
+    unsigned long lastUpdate_ms = 0;
 
     // Resets the state of the blinker
     void reset() {
         digitalWrite(ledPin, LOW);
+        isOn = false;
         currentIndex = 0;
-        currentDelay = unitTime * 3;  // inter-character gap
-        lastUpdate = millis();
+        thisInterval_ms = 0; 
+        lastUpdate_ms = millis();
+    }
+
+    void updateLEDState() {
+        if (currentIndex >= sequenceLength) {
+            reset();
+            morseSequence = getMorseCode(outputChar);
+            return;
+        }
+
+        // Determine the delay based on Morse code character
+        char morseChar = morseSequence[currentIndex++];
+        if (morseChar == '.') {
+            digitalWrite(ledPin, HIGH);
+            thisInterval_ms = unitTime_ms;  // Morse DOT
+            isOn = true;
+        } else if (morseChar == '-') {
+            digitalWrite(ledPin, HIGH);
+            thisInterval_ms = 3 * unitTime_ms;  // Dash
+            isOn = true;
+        } else {  // NULL - end of character
+            digitalWrite(ledPin, LOW);
+            thisInterval_ms = 7 * unitTime_ms;  // inter-character gap
+        }
     }
 
     // Returns the Morse code sequence for a given character
-    String getMorseCode(char character) {
+    const char * getMorseCode(char character) {
         switch (toupper(character)) {
             case 'A': return ".-";
             case 'B': return "-...";
