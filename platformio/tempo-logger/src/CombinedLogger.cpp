@@ -40,6 +40,8 @@ CombinedLogger::CombinedLogger(SdFs& sd) : BinaryLogger(sd)
     ulLastHSampleMillis = 0;
     ulLogfileOriginMillis = 0;
 
+    nNextHGroundSample = 0;
+
     morseBlinker.initialize(RED_LED, 250);
     
     mx = my = mz = 0.0f;
@@ -517,12 +519,12 @@ void CombinedLogger::setBlinkState(enum BlinkState newState) {
     switch (newState) {
         case BlinkState::BLINK_STATE_OFF:
             digitalWrite(RED_LED, LOW);
-            digitalWrite(GREEN_LED, LOW);
+            digitalWrite(GREEN_LED, HIGH);
             break;
 
         case BlinkState::BLINK_STATE_LOGGING:
             digitalWrite(GREEN_LED, HIGH);
-            digitalWrite(RED_LED, LOW);
+            digitalWrite(RED_LED, HIGH);
             break;
 
         // Unsupported on tempo V1 hardware
