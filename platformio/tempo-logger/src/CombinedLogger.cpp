@@ -112,14 +112,16 @@ void CombinedLogger::loop() {
         updateFlightStateMachine();
     }
 
-    sampleAndLogAltitude();
+    updateRateOfClimb();
 
     /*
-     * Log IMU data
+     * Log IMU and altitude data
      */
     if (bTimer4Active && timer4_ms <= 0) {
 
         reportIMU(txtLogFile);
+
+        logAltitude(dStaticPressure_hPa, dBaroAltitude_m * 3.28084);
 
         timer4_ms = TIMER4_INTERVAL_MS;
     }
@@ -310,9 +312,9 @@ void CombinedLogger::updateFlightStateMachine() {
 
   case WAIT:
     if (nHDot_fpm > OPS_HDOT_THRESHOLD_FPM) {
-        bool retFlag;
-        enterInFlightState(retFlag);
-        if (retFlag) return;
+        bool errorFlag;
+        enterInFlightState(errorFlag);
+        if (errorFlag) return;
     }
     break;
 
@@ -373,7 +375,7 @@ void CombinedLogger::enterWaitState() {
 
     bTimer4Active = false;
     Serial.println("Switching to STATE_WAIT");
-    setBlinkState(BLINK_STATE_OFF);
+    setBlinkState(BLINK_STATE_IDLE);
     nAppState = WAIT;
     bTimer1Active = false;
 
@@ -384,10 +386,12 @@ void CombinedLogger::enterWaitState() {
     stopLogFileFlushing();
     txtLogFile.truncate();
     txtLogFile.close();
+
+    BinaryLogger::stopLogging();
 }
 
 void CombinedLogger::enterInFlightState(bool& errorFlag) {
-    errorFlag = false;
+    errorFlag = true;
     Serial.println("Switching to IN_FLIGHT");
 
     /*
@@ -429,7 +433,7 @@ void CombinedLogger::enterInFlightState(bool& errorFlag) {
     sprintf(sentence, "$PSFC,%d*", getGroundAltitude());
     logfilePrintSentence( txtLogFile, sentence );
 
-    // Activate altitude / battery sensor logging
+    // Activate IMU / altitude / battery sensor logging (10Hz)
     bTimer4Active = true;
     timer4_ms = TIMER4_INTERVAL_MS;
 
@@ -443,121 +447,127 @@ void CombinedLogger::enterInFlightState(bool& errorFlag) {
     ulLogfileOriginMillis = millis();
 
     nAppState = JumpState::IN_FLIGHT;
-    errorFlag = true;
+    errorFlag = false;
 }
 
-void CombinedLogger::sampleAndLogAltitude() {
+void CombinedLogger::updateRateOfClimb() {
+
     double dAlt_ft;
-    float dPressure_hPa;
 
-    if (true) {
-        // barometer sampled elsewhere
-        // see CombinedLogger::handleBaroSample()
+    // barometer sampled elsewhere
+    // see CombinedLogger::handleBaroSample()
 
-        dPressure_hPa = dStaticPressure_hPa;
+    if (OPS_MODE != OPS_STATIC_TEST) {
+        dAlt_ft = dBaroAltitude_m * 3.28084;
 
-        if (OPS_MODE != OPS_STATIC_TEST) {
-            dAlt_ft = dBaroAltitude_m * 3.28084;
+    } else {
 
-        } else {
+        dAlt_ft = 600.0;
+        /*
+         * Simulate altitude based on this schedule:
+         *
+         * Time (min)     Alt(ft, MSL)
+         *     0             600
+         *     4             600
+         *     7            6500
+         *     8            6500
+         *     8.5          3500
+         *     10.5          600
+         *     13            600
+         *
+         *     Values clamped at finish to last value.
+         */
 
+        struct _vals {
+            float time_ms;
+            int alt_ft;
+        };
+
+        struct _vals *p, *prev;
+
+        /*
+            * time and altitude readings for a idealized hop-n-pop
+            */
+        static struct _vals table[7] = {
+            {MINtoMS(0), 600},     {MINtoMS(4), 600},       // two minutes at 600 ft - this gives the GPS a chance to lock
+            {MINtoMS(7), 6500},    {MINtoMS(8), 6500},
+            {MINtoMS(8.5), 3500},    {MINtoMS(10.5), 600},
+            {MINtoMS(13), 600}};
+
+        static int tableSize = sizeof(table) / sizeof(struct _vals);
+
+        int t = millis();
+
+        if (t >= table[tableSize - 1].time_ms || t <= table[0].time_ms) {
             dAlt_ft = 600.0;
-            /*
-             * Simulate interpolated altitude based on this schedule:
-             *
-             * Time (min)     Alt(ft)
-             *     0             600
-             *     2             600
-             *     12           6500
-             *     13           6500
-             *     14           3500
-             *     17            600
-             *     19            600
-             *
-             *     Values clamped at finish to last value.
-             */
+        } else {
+            int i;
+            p = &table[0];
+            for (i = 1; i < tableSize - 1; ++i) {
+                prev = p;
+                p = &table[i];
 
-            struct _vals {
-                float time_ms;
-                int alt_ft;
-            };
-
-            struct _vals *p, *prev;
-
-            /*
-             * time and altitude readings for a idealized hop-n-pop
-             */
-            static struct _vals table[7] = {
-                {MINtoMS(0), 600},     {MINtoMS(2), 600},       // two minutes at 600 ft - this gives the GPS a chance to lock
-                {MINtoMS(12), 6500},   {MINtoMS(13), 6500},
-                {MINtoMS(13.5), 3500}, {MINtoMS(16.5), 600},
-                {MINtoMS(19), 600}};
-
-            static int tableSize = sizeof(table) / sizeof(struct _vals);
-
-            int t = millis();
-
-            if (t >= table[tableSize - 1].time_ms || t <= table[0].time_ms) {
-                dAlt_ft = 600.0;
-            } else {
-                int i;
-                p = &table[0];
-                for (i = 1; i < tableSize - 1; ++i) {
-                    prev = p;
-                    p = &table[i];
-
-                    if (t < p->time_ms) {
-                        if (p->time_ms - prev->time_ms == 0) {
-                            Serial.println("divide by zero");
-                        }
-                        dAlt_ft =
-                            prev->alt_ft + (t - prev->time_ms) *
-                                               (p->alt_ft - prev->alt_ft) /
-                                               (p->time_ms - prev->time_ms);
-                        break;
+                if (t < p->time_ms) {
+                    if (p->time_ms - prev->time_ms == 0) {
+                        Serial.println("divide by zero");
                     }
+                    dAlt_ft =
+                        prev->alt_ft + (t - prev->time_ms) *
+                                            (p->alt_ft - prev->alt_ft) /
+                                            (p->time_ms - prev->time_ms);
+                    break;
                 }
             }
-
-            // g_atm.SetConditions( dAlt_ft, 0.0 );
-
-            dPressure_hPa = 1000.0;  // TODO hPA pressure
         }
 
-        /*
-         * Update based on estimated altitude
-         */
-        updateHDot(dAlt_ft);
+    }
 
-        /*
-         * Output a $PENV record (whuch includes a baro alititude estimate)
-         */
-        if (txtLogFile.isOpen()) {
+    /*
+        * Update based on estimated altitude
+        */
+    updateHDot(dAlt_ft);
 
-            char s1[10], s2[10], s3[10];
-            
-            char sentence[128];
-            sprintf(sentence, "$PENV,%ld,%s,%s,%s*", 
+}
+
+void CombinedLogger::logAltitude(float dPressure_hPa, double dAlt_ft) {
+    /*
+     * Output a $PENV record (which includes a baro alititude estimate)
+     */
+    if (txtLogFile.isOpen()) {
+        char s1[10], s2[10], s3[10];
+
+        char sentence[128];
+        sprintf(sentence, "$PENV,%ld,%s,%s,%s*",
                 millis() - ulLogfileOriginMillis,
-                dtostrf(dPressure_hPa,5,5,s1),
-                dtostrf(dAlt_ft,3,3,s2),
-                dtostrf(-1.0,2,2,s3));
-            logfilePrintSentence( txtLogFile, sentence );
-
-        }
+                dtostrf(dPressure_hPa, 5, 5, s1), dtostrf(dAlt_ft, 3, 3, s2),
+                dtostrf(-1.0, 2, 2, s3));
+        logfilePrintSentence(txtLogFile, sentence);
     }
 }
 
 void CombinedLogger::setBlinkState(enum BlinkState newState) {
+
     switch (newState) {
         case BlinkState::BLINK_STATE_OFF:
+            digitalWrite(GREEN_LED, LOW);
             digitalWrite(RED_LED, LOW);
-            digitalWrite(GREEN_LED, HIGH);
+            break;
+
+        case BlinkState::BLINK_STATE_INITIALIZING:
+            digitalWrite(GREEN_LED, LOW);
+            digitalWrite(RED_LED, HIGH);
+            break;
+
+        case BlinkState::BLINK_STATE_IDLE:
+            digitalWrite(RED_LED, LOW);
+            morseBlinker.initialize(GREEN_LED, 250);
+            morseBlinker.setOutputCharacter('T');
             break;
 
         case BlinkState::BLINK_STATE_LOGGING:
             digitalWrite(GREEN_LED, HIGH);
-            digitalWrite(RED_LED, HIGH);
+            morseBlinker.initialize(RED_LED, 250);
+            morseBlinker.setOutputCharacter('T');
             break;
 
         // Unsupported on tempo V1 hardware
@@ -567,7 +577,7 @@ void CombinedLogger::setBlinkState(enum BlinkState newState) {
             morseBlinker.setOutputCharacter('I');
             break;
 
-        // one dashes
+        // one dash
         case BlinkState::BLINK_STATE_NO_SDCARD:
             digitalWrite(RED_LED, HIGH);
             morseBlinker.initialize(GREEN_LED, 250);

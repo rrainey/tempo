@@ -36,6 +36,8 @@
  */
 enum BlinkState {
   BLINK_STATE_OFF = 0,
+  BLINK_STATE_INITIALIZING,
+  BLINK_STATE_IDLE,
   BLINK_STATE_BATTERY,  // unused on Tempo V1 hardware
   BLINK_STATE_LOGGING,
   BLINK_STATE_NO_SDCARD,
@@ -308,7 +310,7 @@ class CombinedLogger : public BinaryLogger {
 #define TIMER3_ON_INTERVAL_MS 750
 #define TIMER3_OFF_INTERVAL_1_MS 750  // off interval when signaling battery low
 #define TIMER3_OFF_INTERVAL_2_MS \
-    (3000 - TIMER3_ON_INTERVAL_MS)  // off interval for flight mode
+    (3000 - TIMER3_ON_INTERVAL_MS)    // off interval for flight mode
 
     bool bTimer3Active = false;
     int32_t timer3_ms = 0;
@@ -413,15 +415,22 @@ class CombinedLogger : public BinaryLogger {
     /// the application state machine.
     void updateFlightStateMachine();
 
-    void enterWaitState();
-
     /// @brief Manage application state based on sensor inputs.
     void updateTestStateMachine();
 
     /// @brief Application state support function: enters the IN_FLIGHT state
+    /// when the start of a Jump is detected
     void enterInFlightState(bool &retFlag);
 
-    void sampleAndLogAltitude();
+    /// @brief Application state support function: enters the WAIT state
+    /// when the end of a Jump is detected
+    void enterWaitState();
+
+    /// @brief Maintain rate of climb state based on changes in altitude
+    void updateRateOfClimb();
+
+    /// @brief Log altitude and static pressure record to TXT log file
+    void logAltitude(float dPressure_hPa, double dAlt_ft);
 
     void startLogFileFlushing();
 

@@ -273,7 +273,7 @@ void setup() {
         }
     }
 
-    logger.setBlinkState(BlinkState::BLINK_STATE_OFF);
+    logger.setBlinkState(BlinkState::BLINK_STATE_IDLE);
 }
 
 void loop() {
