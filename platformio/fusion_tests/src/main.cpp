@@ -755,6 +755,8 @@ void setup() {
 
 FusionVector magnetometerZeroes = {0, 0, 0};
 
+unsigned long lastReportTime_ms = -1;
+
 void loop() {
 
     ++loopCount;
@@ -1047,7 +1049,10 @@ void loop() {
         Serial.println(pbuf);
 #else
         char pbuf[128];
-        char xp[16], yp[16], zp[16];
+        char csbuf[8];
+        char wp[16],xp[16], yp[16], zp[16];
+
+        /*
         // Euler angles in degrees
         sprintf(
             pbuf,
@@ -1059,6 +1064,22 @@ void loop() {
             "MA,%s,%s,%s",  
             dtostrf(mx,8,2,xp), dtostrf(my,8,2,yp), dtostrf(-mz,8,2,zp));
         Serial.println(pbuf);
+        */
+
+        FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
+
+        sprintf(pbuf, 
+            "Q,%s,%s,%s,%s",  
+            dtostrf(q.array[0],8,4,wp), dtostrf(q.array[1],8,4,xp), dtostrf(q.array[2],8,4,yp), dtostrf(q.array[3],8,4,zp));
+
+        unsigned char cs = 0;
+        for (size_t i = 0; i < strlen(pbuf); i++) {
+            cs ^= pbuf[i];
+        }
+        sprintf(csbuf, "*%02X\n", cs);
+        strcat(pbuf, csbuf);
+        Serial.println(pbuf);
+
 #endif
 
 #else
