@@ -241,7 +241,7 @@ BinaryLogger::APIResult BinaryLogger::startLogging() {
             return APIResult::SensorFault;
         }
 
-        setOperatingState( OperatingState::Running );
+        setOperatingState( OperatingState::Logging );
 
     }
     else {
@@ -253,7 +253,7 @@ BinaryLogger::APIResult BinaryLogger::startLogging() {
 
 void BinaryLogger::stopLogging() {
 
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
 
         imu.reset();
         mmc.reset();
@@ -262,7 +262,7 @@ void BinaryLogger::stopLogging() {
         logfile.truncate();
         logfile.sync();
         logfile.close();
-        setOperatingState( OperatingState::Stopped );
+        setOperatingState( OperatingState::Idle );
         
     }
 }
@@ -441,7 +441,7 @@ void BinaryLogger::processNMEAx(char incoming) {
     if (incoming == '\n') {
         *pNMEA = '\0';
 
-        if ( getOperatingState() == OperatingState::Running ) {
+        if ( getOperatingState() == OperatingState::Logging ) {
 
             writeNmeaSentence( incomingNMEA );
 
@@ -469,7 +469,7 @@ void BinaryLogger::setOperatingState(OperatingState newState) {
 }
 
 void BinaryLogger::writeVersionRecord(int version) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
         tempoRawLogRecord record;
         record.type = (int)TempoRawRecordType::Version;
         record.timestamp = (unsigned long long)timestamp.getLongMicros();
@@ -481,7 +481,7 @@ void BinaryLogger::writeVersionRecord(int version) {
 }
 
 void BinaryLogger::writeNmeaSentence(const char *pSentence) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
         // omit <CR><LF><NUL>
         size_t len = strlen(pSentence) - 2;
         if (len > 0) {
@@ -500,7 +500,7 @@ void BinaryLogger::writeImuRecord(unsigned long gyro[3],
                                   unsigned char header,
                                   unsigned short timestamp,
                                   unsigned char temp) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
 
         tempoRawLogRecord record;
         record.type = (int)TempoRawRecordType::IMU;
@@ -520,7 +520,7 @@ void BinaryLogger::writeImuRecord(unsigned long gyro[3],
 }
 
 void BinaryLogger::writeMagRecord(unsigned long sample[3]) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
         tempoRawLogRecord record;
         record.type = (int)TempoRawRecordType::Magnetometer;
         record.timestamp = (unsigned long long)timestamp.getLongMicros();
@@ -534,7 +534,7 @@ void BinaryLogger::writeMagRecord(unsigned long sample[3]) {
 }
 
 void BinaryLogger::writeBaroRecord(double pressure_Pa, double temp_degC) {
-    if (getOperatingState() == OperatingState::Running) {
+    if (getOperatingState() == OperatingState::Logging) {
         tempoRawLogRecord record;
         record.type = (int)TempoRawRecordType::Barometer;
         record.timestamp = (unsigned long long)timestamp.getLongMicros();
@@ -559,7 +559,7 @@ void BinaryLogger::updateGPSDateTime(char *pIncomingNMEA) {
         usGPSTime =
             FAT_TIME(nmea.getHour(), nmea.getMinute(), nmea.getSecond());
 
-        if (getOperatingState() == OperatingState::Running &&
+        if (getOperatingState() == OperatingState::Logging &&
             logfileDateSet == false) {
             logfile.timestamp(T_CREATE, nmea.getYear(), nmea.getMonth(),
                               nmea.getDay(), nmea.getHour(), nmea.getMinute(),

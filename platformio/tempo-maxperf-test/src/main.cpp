@@ -252,7 +252,7 @@ void setup() {
 void loop() {
     logger.loop();
 
-    if (logger.getOperatingState() == BinaryLogger::OperatingState::Running) {
+    if (logger.getOperatingState() == BinaryLogger::OperatingState::Logging) {
         if (Serial.available()) {
             logger.stopLogging();
             digitalWrite(GREEN_LED, HIGH);

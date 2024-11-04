@@ -27,7 +27,7 @@
 
 class BinaryLogger {
     public:
-        enum class OperatingState { Initialized, Running, Stopped };
+        enum class OperatingState { Initialized, Logging, Idle };
 
         enum class APIResult {
             Success = 0,
