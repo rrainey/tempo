@@ -495,11 +495,27 @@ void BinaryLogger::writeNmeaSentence(const char *pSentence) {
     }
 }
 
-void BinaryLogger::writeImuRecord(unsigned long gyro[3], unsigned long acc[3],
+void BinaryLogger::writeImuRecord(unsigned long gyro[3], 
+                                  unsigned long acc[3],
                                   unsigned char header,
                                   unsigned short timestamp,
                                   unsigned char temp) {
     if (getOperatingState() == OperatingState::Running) {
+
+        tempoRawLogRecord record;
+        record.type = (int)TempoRawRecordType::IMU;
+        record.variablePartLength = sizeof(record.variablePart.imuSample);
+        record.variablePart.imuSample.gyro[0] = gyro[0];
+        record.variablePart.imuSample.gyro[1] = gyro[1];
+        record.variablePart.imuSample.gyro[2] = gyro[2];
+        record.variablePart.imuSample.acc[0] = acc[0];
+        record.variablePart.imuSample.acc[1] = acc[1];
+        record.variablePart.imuSample.acc[2] = acc[2];
+        record.variablePart.imuSample.temp = temp;
+        record.variablePart.imuSample.header = header;
+        record.variablePart.imuSample.timestamp = timestamp;
+
+        logfile.write((uint8_t *)&record, record.variablePartLength + TEMPO_RAW_FILE_HEADER_SIZE);
     }
 }
 
