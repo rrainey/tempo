@@ -1,7 +1,7 @@
 # Visualizer
 
 This Python application runs on the desktop and is designed to pair up with the "fustion_tests" Arduino application allowing you to 
-visualize the current computer orientation of the Tempo device. 
+visualize the current calculated orientation of the Tempo device. 
 
 This application demonstrates an important capability of the Tempo device: Tempo uses the on-board Inertial Measurement chip to compute
 the skydiver's orientation in real time. This computed orientation is part of what's
@@ -31,8 +31,8 @@ interpreted and rendered by the running visualizer app.
 
 The Set-ExecutionPolicy change was required on my Windows machine in order to
 allow Python's venv scripts to run properly.  If you are concerned about
-how venv operates on your machine, you may safely switch to some other
-Python environment manager, such as conda, although the specific steps required will be different.
+the security implications of running this command,, you may safely switch to some other
+Python environment manager, such as conda, although the specific steps required will be different than what's shown here.
 
 5. Install the requisite Python packaages
 
