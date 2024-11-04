@@ -20,8 +20,11 @@ This Python application runs on the desktop and is designed to pair up with the 
 
 ```
 > cd desktop\visualizer
-> pip install PyOpenGL PyOpenGL_accelerate PyQt5 pyserial
+> pip install -r requirements.txt
+> pip install PyOpenGL PyOpenGL_accelerate PyQt5 pyserial vedo pywavefront
 ```
+
+Note that the "requirement.txt file must be used to ensure the correct version of pyglet is installed to sypport PyWavefront.
 
 5. Open a second VS Code Window. From that, open the "fusion_tests" PlatformIO project folder.
 

@@ -7,6 +7,10 @@ from OpenGL.GLU import *
 from PyQt5.QtCore import Qt
 from PyQt5 import QtCore
 import re
+import pywavefront
+from pywavefront import visualization
+
+obj = pywavefront.Wavefront("objects/tempo-cover-off.obj")
 
 # Quaternion to matrix conversion function
 def quaternion_to_matrix(w, x, y, z):
@@ -33,8 +37,10 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
     def __init__(self, parent=None):
         super(OpenGLWidget, self).__init__(parent)
         self.orientation = np.identity(4)
-        self.viewpoint = (10, 0, 0)
+        self.viewpoint = (20, 0, 0)
         self.up = (0, 0, -1)
+
+        #mesh.texture("objects/tempo-cover-off.mtl", scale=0.1)
 
     def initializeGL(self):
         glEnable(GL_DEPTH_TEST)
@@ -51,6 +57,9 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
         glPushMatrix()
         glMultMatrixf(self.orientation)
         self.draw_axes()
+
+        visualization.draw(obj)
+
         glPopMatrix()
 
     def resizeGL(self, w, h):
@@ -124,9 +133,9 @@ class Window(QtWidgets.QMainWindow):
         if key == 'Q':
             self.close()
         elif key == 'F':
-            self.opengl_widget.set_viewpoint((10, 0, 0), (0, 0, -1))
+            self.opengl_widget.set_viewpoint((20, 0, 0), (0, 0, -1))
         elif key == 'R':
-            self.opengl_widget.set_viewpoint((0, 10, 0), (0, 0, -1))
+            self.opengl_widget.set_viewpoint((0, 20, 0), (0, 0, -1))
         event.accept()
 
 if __name__ == "__main__":
