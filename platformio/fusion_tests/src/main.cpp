@@ -880,6 +880,9 @@ void loop() {
                             magnetometerZeroes, softIronMatrix, hardIronOffset);
                     }
 
+                    // Update gyroscope offset correction algorithm
+                    gyroscope = FusionOffsetUpdate(&offset, gyroscope);
+
                     // Calculate delta time (in seconds) to account for
                     // gyroscope sample clock error
                     // static clock_t previousTimestamp_sec;
@@ -892,9 +895,6 @@ void loop() {
                     FusionVector gyroscopeBodyFrame = FusionAxesSwap(gyroscope, FusionAxesAlignmentPZNYPX);
                     FusionVector accelerometerBodyFrame = FusionAxesSwap(accelerometer, FusionAxesAlignmentPZNYPX);
 
-                     // Update gyroscope offset correction algorithm
-                    gyroscope = FusionOffsetUpdate(&offset, gyroscopeBodyFrame);
-
                     // FusionAxesAlignmentNZNYPX is not defined as it isn't a proper right-hand-rule set of axes.
                     // Still it's what the MMC5983 magnetometer gives us, so we must convert it manually here.
                     //FusionVector magnetometerBodyFrame = FusionAxesSwap(magnetometer, FusionAxesAlignmentNZNYPX);
@@ -904,8 +904,9 @@ void loop() {
                     magnetometerBodyFrame.axis.z = magnetometer.axis.x;
 
                     // Update gyroscope AHRS algorithm
-                    FusionAhrsUpdate(&ahrs, gyroscopeBodyFrame, accelerometerBodyFrame,
-                                     magnetometerBodyFrame, fSampleInterval_sec);
+                    FusionAhrsUpdate(
+                        &ahrs, gyroscopeBodyFrame, accelerometerBodyFrame,
+                        magnetometerBodyFrame, fSampleInterval_sec);
 
                 } else {
                     imuInvalidSamples++;
