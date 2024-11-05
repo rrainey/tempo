@@ -4,26 +4,49 @@ import numpy as np
 from PyQt5 import QtWidgets, QtOpenGL
 from OpenGL.GL import *
 from OpenGL.GLU import *
+from OpenGL.GLUT import glutBitmapCharacter, GLUT_BITMAP_HELVETICA_18, glutInit
 from PyQt5.QtCore import Qt
 from PyQt5 import QtCore
 import re
 import pywavefront
 from pywavefront import visualization
 
+import numpy as np
+import quaternion
+
 obj = pywavefront.Wavefront("objects/tempo-cover-off.obj")
+
+glutInit(sys.argv)
 
 # Quaternion to matrix conversion function
 def quaternion_to_matrix(w, x, y, z):
-    # Normalize quaternion
-    norm = np.sqrt(w**2 + x**2 + y**2 + z**2)
-    w, x, y, z = w / norm, x / norm, y / norm, z / norm
-    
-    matrix = [
-        [1 - 2*y*y - 2*z*z, 2*x*y - 2*z*w, 2*x*z + 2*y*w, 0],
-        [2*x*y + 2*z*w, 1 - 2*x*x - 2*z*z, 2*y*z - 2*x*w, 0],
-        [2*x*z - 2*y*w, 2*y*z + 2*x*w, 1 - 2*x*x - 2*y*y, 0],
-        [0, 0, 0, 1]
-    ]
+
+    # Extract the values from Q
+    q0 = w
+    q1 = x
+    q2 = y
+    q3 = z
+     
+    # First row of the rotation matrix
+    r00 = 2 * (q0 * q0 + q1 * q1) - 1
+    r01 = 2 * (q1 * q2 - q0 * q3)
+    r02 = 2 * (q1 * q3 + q0 * q2)
+     
+    # Second row of the rotation matrix
+    r10 = 2 * (q1 * q2 + q0 * q3)
+    r11 = 2 * (q0 * q0 + q2 * q2) - 1
+    r12 = 2 * (q2 * q3 - q0 * q1)
+     
+    # Third row of the rotation matrix
+    r20 = 2 * (q1 * q3 - q0 * q2)
+    r21 = 2 * (q2 * q3 + q0 * q1)
+    r22 = 2 * (q0 * q0 + q3 * q3) - 1
+     
+    # 4x4 rotation matrix
+    matrix = [[r00, r10, r20, 0],
+              [r01, r11, r21, 0],
+              [r02, r12, r22, 0],
+              [0,0,0,1]]
     return matrix
 
 # NMEA 0183 checksum calculation
@@ -40,6 +63,10 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
         self.viewpoint = (20, 0, 0)
         self.up = (0, 0, -1)
 
+        #self.centralWidget = QtWidgets.QLabel("F - Front View\nR - Right View\nQ - Quit")
+        #self.centralWidget.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
+        #self.setCentralWidget(self.centralWidget)
+
         #mesh.texture("objects/tempo-cover-off.mtl", scale=0.1)
 
     def initializeGL(self):
@@ -55,9 +82,10 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
 
         # Apply the object's orientation
         glPushMatrix()
+        
         glMultMatrixf(self.orientation)
+        
         self.draw_axes()
-
         visualization.draw(obj)
 
         glPopMatrix()
@@ -71,12 +99,12 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
 
     def draw_axes(self):
         axes = [
-            ((1, 0, 0), 'X', (1, 0, 0)),
-            ((0, 1, 0), 'Y', (0, 1, 0)),
-            ((0, 0, 1), 'Z', (0, 0, 1)),
+            ((4, 0, 0), 'X', (1, 0, 0)),
+            ((0, 4, 0), 'Y', (0, 1, 0)),
+            ((0, 0, 4), 'Z', (0, 0, 1)),
         ]
         
-        glLineWidth(2.0)
+        glLineWidth(4.0)
         for (dir_vec, label, color) in axes:
             glColor3f(*color)
             glBegin(GL_LINES)
@@ -85,11 +113,11 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
             glEnd()
             
             glRasterPos3f(*(np.array(dir_vec) * 1.1))
-            #for char in label:
-                #glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+            for char in label:
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
 
     def update_orientation(self, w, x, y, z):
-        self.orientation = quaternion_to_matrix(w, x, y, z)
+        self.orientation = quaternion_to_matrix(w, x, y, z) 
         self.update()
 
     def set_viewpoint(self, point, up):
@@ -102,7 +130,7 @@ class Window(QtWidgets.QMainWindow):
         super(Window, self).__init__()
         self.opengl_widget = OpenGLWidget(self)
         self.setCentralWidget(self.opengl_widget)
-        self.setWindowTitle("3D Quaternion Viewer")
+        self.setWindowTitle("Tempo Visualizer")
         self.serial_port = serial.Serial('COM8', 115200, timeout=30)  
         self.read_data()
 
