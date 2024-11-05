@@ -853,12 +853,14 @@ void loop() {
                     imuTemp_C = ((float)pBuf->temp / 2.07f) + 25.0f;
 
                     // const clock_t timestamp_sec = clock();
-                    //  deg/sec
+
+                    //  deg/sec, IMU sensor frame
                     FusionVector gyroscope = {gx, gy, gz};
-                    // g's
+                    // g's, IMU sensor frame
                     FusionVector accelerometer = {ax, ay, az};
                     // TODO: we use Gauss here, but might need to switch to uT
-                    FusionVector magnetometer = {mx, my, -mz};
+                    // magnetometer sensor frame
+                    FusionVector magnetometer = {mx, my, mz};
 
                     // Apply calibration
                     gyroscope = FusionCalibrationInertial(
@@ -878,9 +880,6 @@ void loop() {
                             magnetometerZeroes, softIronMatrix, hardIronOffset);
                     }
 
-                    // Update gyroscope offset correction algorithm
-                    gyroscope = FusionOffsetUpdate(&offset, gyroscope);
-
                     // Calculate delta time (in seconds) to account for
                     // gyroscope sample clock error
                     // static clock_t previousTimestamp_sec;
@@ -889,9 +888,24 @@ void loop() {
                     //    (float)CLOCKS_PER_SEC;
                     // previousTimestamp_sec = timestamp_sec;
 
+                    // Refer to the diagram images/tempo-v1-fames.png for sensor/body axes definitions
+                    FusionVector gyroscopeBodyFrame = FusionAxesSwap(gyroscope, FusionAxesAlignmentPZNYPX);
+                    FusionVector accelerometerBodyFrame = FusionAxesSwap(accelerometer, FusionAxesAlignmentPZNYPX);
+
+                     // Update gyroscope offset correction algorithm
+                    gyroscope = FusionOffsetUpdate(&offset, gyroscopeBodyFrame);
+
+                    // FusionAxesAlignmentNZNYPX is not defined as it isn't a proper right-hand-rule set of axes.
+                    // Still it's what the MMC5983 magnetometer gives us, so we must convert it manually here.
+                    //FusionVector magnetometerBodyFrame = FusionAxesSwap(magnetometer, FusionAxesAlignmentNZNYPX);
+                    FusionVector magnetometerBodyFrame;
+                    magnetometerBodyFrame.axis.x = - magnetometer.axis.z;
+                    magnetometerBodyFrame.axis.y = - magnetometer.axis.y;
+                    magnetometerBodyFrame.axis.z = magnetometer.axis.x;
+
                     // Update gyroscope AHRS algorithm
-                    FusionAhrsUpdate(&ahrs, gyroscope, accelerometer,
-                                     magnetometer, fSampleInterval_sec);
+                    FusionAhrsUpdate(&ahrs, gyroscopeBodyFrame, accelerometerBodyFrame,
+                                     magnetometerBodyFrame, fSampleInterval_sec);
 
                 } else {
                     imuInvalidSamples++;
@@ -1066,6 +1080,8 @@ void loop() {
         Serial.println(pbuf);
         */
 
+        // This will be a Quaternion specifying the current body orientation of 
+        // the device in the North-East-Down world frame
         FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
 
         sprintf(pbuf, 
