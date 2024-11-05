@@ -67,6 +67,12 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
         #self.centralWidget.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
         #self.setCentralWidget(self.centralWidget)
 
+        self.help_label = QtWidgets.QLabel(self)
+        self.help_label.setText("Press F for forward\n      R for Right\n      Q to quit")
+        self.help_label.setStyleSheet("font-family: Courier; font-Weight: bold; background-color: rgba(20, 20, 20, 150); color: white; font-size: 16px; padding: 35px;")
+        self.help_label.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
+        self.help_label.setFixedWidth(300)
+
         #mesh.texture("objects/tempo-cover-off.mtl", scale=0.1)
 
     def initializeGL(self):
@@ -169,6 +175,6 @@ class Window(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     window = Window()
-    window.resize(1500, 1500)
+    window.resize(1200, 1200)
     window.show()
     sys.exit(app.exec_())
