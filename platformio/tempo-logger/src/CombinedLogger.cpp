@@ -194,11 +194,12 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
 
     (void)imuTemp_C;
 
-    //  deg/sec
+    //  deg/sec, IMU sensor frame
     FusionVector gyroscope = {gx, gy, gz};
-    // g's
+    // g's, IMU sensor frame
     FusionVector accelerometer = {ax, ay, az};
     // TODO: we use Gauss here, but might need to switch to uT
+    // magnetometer sensor frame
     FusionVector magnetometer = {mx, my, -mz};
 
     // Apply calibration
@@ -221,6 +222,21 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
     // Update gyroscope offset correction algorithm
     gyroscope = FusionOffsetUpdate(&offset, gyroscope);
 
+    // We'll execute the Fusion AHRS algorithm in the body frame.
+    // Transform sensor frames into body frame before passing to AHRS.
+    // Refer to the diagram "images/tempo-v1-fames.png" for sensor/body axes definitions
+    FusionVector gyroscopeBodyFrame = FusionAxesSwap(gyroscope, FusionAxesAlignmentPZNYPX);
+    FusionVector accelerometerBodyFrame = FusionAxesSwap(accelerometer, FusionAxesAlignmentPZNYPX);
+
+    // FusionAxesAlignmentNZNYPX is not defined as it isn't a proper right-hand-rule set of axes.
+    // Still it's what the MMC5983 magnetometer gives us, so we must convert it manually here.
+    //FusionVector magnetometerBodyFrame = FusionAxesSwap(magnetometer, FusionAxesAlignmentNZNYPX);
+    FusionVector magnetometerBodyFrame;
+    magnetometerBodyFrame.axis.x = - magnetometer.axis.z;
+    magnetometerBodyFrame.axis.y = - magnetometer.axis.y;
+    magnetometerBodyFrame.axis.z = magnetometer.axis.x;
+
+
     // Calculate delta time (in seconds) to account for
     // gyroscope sample clock error
     // static clock_t previousTimestamp_sec;
@@ -230,8 +246,8 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
     // previousTimestamp_sec = timestamp_sec;
 
     // Update gyroscope AHRS algorithm
-    FusionAhrsUpdate(&ahrs, gyroscope, accelerometer, magnetometer,
-                     fSampleInterval_sec);
+    FusionAhrsUpdate(&ahrs, gyroscopeBodyFrame, accelerometerBodyFrame,
+                     magnetometerBodyFrame, fSampleInterval_sec);
 }
 
 void CombinedLogger::handleMagSample(uint32_t sample[3]) {

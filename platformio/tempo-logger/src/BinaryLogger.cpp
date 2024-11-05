@@ -535,7 +535,7 @@ void BinaryLogger::writeImuRecord(unsigned long gyro[3],
         record.variablePart.imuSample.header = header;
         record.variablePart.imuSample.timestamp = timestamp;
 
-        logfile.write((uint8_t *)&record, record.variablePartLength + TEMPO_RAW_FILE_HEADER_SIZE);
+        tbsLogFile.write((uint8_t *)&record, record.variablePartLength + TEMPO_RAW_FILE_HEADER_SIZE);
     }
 }
 
