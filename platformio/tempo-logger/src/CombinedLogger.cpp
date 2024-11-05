@@ -200,7 +200,7 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
     FusionVector accelerometer = {ax, ay, az};
     // TODO: we use Gauss here, but might need to switch to uT
     // magnetometer sensor frame
-    FusionVector magnetometer = {mx, my, -mz};
+    FusionVector magnetometer = {mx, my, mz};
 
     // Apply calibration
     gyroscope =
