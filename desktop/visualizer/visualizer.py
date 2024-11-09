@@ -62,6 +62,7 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
         self.orientation = np.identity(4)
         self.viewpoint = (20, 0, 0)
         self.up = (0, 0, -1)
+        self.mag_uT = (0,0,0)
 
         #self.centralWidget = QtWidgets.QLabel("F - Front View\nR - Right View\nQ - Quit")
         #self.centralWidget.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
@@ -122,8 +123,18 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
             for char in label:
                 glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
 
+        glColor3f(1,1,0)
+        glBegin(GL_LINES)
+        glVertex3f(0, 0, 0)
+        glVertex3f(self.mag_uT[0]/20000.0, self.mag_uT[1]/20000.0, self.mag_uT[2]/20000.0)
+        glEnd()
+
     def update_orientation(self, w, x, y, z):
         self.orientation = quaternion_to_matrix(w, x, y, z) 
+        self.update()
+
+    def update_mag(self, x, y, z):
+        self.mag_uT = (x, y, z)
         self.update()
 
     def set_viewpoint(self, point, up):
@@ -143,7 +154,7 @@ class Window(QtWidgets.QMainWindow):
     def read_data(self):
         while self.serial_port.in_waiting:
             line = self.serial_port.readline().decode('ascii', errors='ignore').strip()
-            if line.startswith("Q,"):
+            if line.startswith("Q,") | line.startswith("MA,"):
                 self.process_line(line)
         self.update()
         QtCore.QTimer.singleShot(10, self.read_data)
@@ -161,6 +172,22 @@ class Window(QtWidgets.QMainWindow):
                 #print(checksum)
             else:
                 print( "Invalid checksum")
+
+        else:
+            match1 = re.match(r"MA,\s*([\d\.\-]+),\s*([\d\.\-]+),\s*([\d\.\-]+)\*([0-9A-Fa-f]{2})", line)
+            if match1:
+                x, y, z = map(float, match1.groups()[:3])
+                checksum = match1.groups()[3]
+                #print(x,y,z)
+                # Validate checksum
+                data = line.split('*')[0]
+                if int(checksum, 16) == calculate_checksum(data):
+                    self.opengl_widget.update_mag(x, y, z)
+                    #print(checksum)
+                else:
+                    print( "Invalid checksum")
+            else:
+                print("Invalid line: ", line)
 
     def keyPressEvent(self, event):
         key = event.text().upper()
