@@ -153,8 +153,8 @@ void rtc_SecondsCB(void *data)
 #define MMC5983MA_intPin digitalPinToInterrupt(9)
 #if defined(TEMPO_V1)
 #define BMP390_intPin    digitalPinToInterrupt(11)  // 11 for tempo, 10 for Peakick
-#define ICM42688_intPin2 digitalPinToInterrupt(10)   // INT2/CLKIN as an interrupt line
-#define CLKOUT            10         // as a SAMD51 output line
+#define ICM42688_intPin2 digitalPinToInterrupt(10)  // INT2/CLKIN as an interrupt line
+#define CLKOUT            10                        // as a SAMD51 output line
 
 ICM42688 imu(SPI, 5);
 
@@ -261,8 +261,8 @@ volatile uint16_t imuUnservicedISRCount = 0;
  * measurement, etc.
  */
 mmc5983ma_modr_t MODR = MODR_100Hz;
-mmc5983ma_bandwidth_t MBW = MBW_100Hz;
-mmc5983ma_sr_Interval_t MSET = MSET_2000;
+mmc5983ma_bandwidth_t MBW = MBW_200Hz;
+mmc5983ma_sr_Interval_t MSET = MSET_DISABLED;
 
 float mRes = 1.0f / 16384.0f;  // mag sensitivity if using 18 bit data
 float magBias[3] = {0, 0, 0}, magScale[3] = {1, 1, 1},
@@ -625,6 +625,7 @@ void setup() {
         mmc.reset();
 
         mmc.performSetOperation();
+        //mmc.performResetOperation();
         attachInterrupt(MMC5983MA_intPin, myinthandler2, RISING);
 
         mmc.setSoftIronCalibration(softIronOffset, softIronScale);
@@ -780,6 +781,7 @@ void loop() {
                 mx = (((int32_t) sample[0] - (int32_t) softIronOffset[0])) * softIronScale[0] * 100000.0f;
                 my = (((int32_t) sample[1] - (int32_t) softIronOffset[1])) * softIronScale[1] * 100000.0f;
                 mz = (((int32_t) sample[2] - (int32_t) softIronOffset[2])) * softIronScale[2] * 100000.0f;
+
             }
             mmc.clearInterrupt();
 
@@ -1051,8 +1053,8 @@ void loop() {
 #endif
 
         // Print algorithm outputs
-        const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
-        const FusionVector earth = FusionAhrsGetEarthAcceleration(&ahrs);
+        //const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+        //const FusionVector earth = FusionAhrsGetEarthAcceleration(&ahrs);
 
 #if true
 
@@ -1064,8 +1066,9 @@ void loop() {
         Serial.println(pbuf);
 #else
         char pbuf[128];
-        char csbuf[8];
+        char csbuf[16];
         char wp[16],xp[16], yp[16], zp[16];
+        unsigned char cs = 0;
 
         /*
         // Euler angles in degrees
@@ -1074,12 +1077,23 @@ void loop() {
             "EA,%s,%s,%s,N",
             dtostrf(euler.angle.yaw,7,3,xp), dtostrf(euler.angle.pitch,7,3,yp), dtostrf(euler.angle.roll,7,3,zp));
         Serial.println(pbuf);
-        // nT units
+
+        */
+
+        // Raw magnetometer sensor data
+        // Body frame, nT units (Earths magnetic field can be up to 65000nT)
         sprintf(pbuf, 
             "MA,%s,%s,%s",  
-            dtostrf(mx,8,2,xp), dtostrf(my,8,2,yp), dtostrf(-mz,8,2,zp));
+            dtostrf(-mz,9,1,xp), dtostrf(-my,9,1,yp), dtostrf(mx,9,1,zp));
+
+        cs = 0;
+        for (size_t i = 0; i < strlen(pbuf); i++) {
+            cs ^= pbuf[i];
+        }
+        sprintf(csbuf, "*%02X", cs);
+        strcat(pbuf, csbuf);
+
         Serial.println(pbuf);
-        */
 
         // This will be a Quaternion specifying the current body orientation of 
         // the device in the North-East-Down world frame
@@ -1089,11 +1103,11 @@ void loop() {
             "Q,%s,%s,%s,%s",  
             dtostrf(q.array[0],8,4,wp), dtostrf(q.array[1],8,4,xp), dtostrf(q.array[2],8,4,yp), dtostrf(q.array[3],8,4,zp));
 
-        unsigned char cs = 0;
+        cs = 0;
         for (size_t i = 0; i < strlen(pbuf); i++) {
             cs ^= pbuf[i];
         }
-        sprintf(csbuf, "*%02X\n", cs);
+        sprintf(csbuf, "*%02X", cs);
         strcat(pbuf, csbuf);
         Serial.println(pbuf);
 
@@ -1118,13 +1132,10 @@ void loop() {
 #endif
 #endif
 
-#ifdef notdef
         sprintf(pbuf,
-                "loopCount  IntCount ISROverflow  AvgFIFO  invalidFIFO\n %8d   %7d    %8d  %7d   %6d\n---",
-                loopCount, imuIntCount, imuISROverflow, fifoTotal/imuIntCount, imuInvalidSamples);
+                "loopCount  IntCount ISROverflow  invalidFIFO\n %8ld   %7ld    %8ld    %6ld\n---",
+                loopCount, imuIntCount, imuISROverflow, imuInvalidSamples);
         Serial.println(pbuf);
-#endif
-
 
         imuIntCount = 0;
         loopCount = 0;
