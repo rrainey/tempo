@@ -458,10 +458,6 @@ void setup() {
     {
         Serial.println(F("Warning: GNSS setDynamicModel() failed"));
     }
-    else
-    {
-        Serial.println(F("GNSS Dynamic Platform Model set to AIRBORNE2g"));
-    }
 
     //This will pipe all NMEA sentences to the serial port so we can see them
     //myGNSS.setNMEAOutputPort(Serial);
@@ -482,7 +478,7 @@ void setup() {
         (ICM42688ID == 0x47 || ICM42688ID == 0xDB) && MMC5983ID == 0x30 && BMP390ID == 0x60;
 
     if (allSensorsAcknowledged) {
-        Serial.println("All peripherals are operating");
+        Serial.println("All sensor ICs are connecting");
         Serial.println(" ");
 
         digitalWrite(RED_LED, LOW);
@@ -600,6 +596,9 @@ void setup() {
         mmc.reset();
 
         mmc.performSetOperation();
+
+        mmc.performResetOperation();
+        
         attachInterrupt(MMC5983MA_intPin, myinthandler2, RISING);
 
         mmc.startSampleCollection(MODR, MBW, MSET);
@@ -623,8 +622,13 @@ void setup() {
         while (true) ;
 
     } else {
-        if (ICM42688ID != 0x47 && ICM42688ID != 0xDB) Serial.println(" ICM42688 not functioning!");
         if (MMC5983ID != 0x30) Serial.println(" MMC5983MA not functioning!");
+        
+        if (ICM42688ID != 0x47 && ICM42688ID != 0xDB) {
+                Serial.print(" ICM42688 ID not correct (wanting 0x47 or 0xDB); got: ");
+                Serial.println(ICM42688ID, 16);
+        }
+        
         if (BMP390ID != 0x60) Serial.println(" BMP390 not functioning!");
     }
 
