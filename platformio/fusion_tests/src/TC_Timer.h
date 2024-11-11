@@ -5,7 +5,16 @@
 #define TIMER_PRESCALER_DIV 1024
 
 static inline void TC3_wait_for_sync() {
-  while (TC3->COUNT16.SYNCBUSY.reg != 0) {}
+#ifdef _SAMD51_
+    while (TC3->COUNT16.SYNCBUSY.reg != 0) {
+    }
+#else
+#ifdef _SAMD21_
+    while (TC3->COUNT16.STATUS.reg & TC_STATUS_SYNCBUSY);
+#else
+#error("Unknown chip")
+#endif
+#endif
 }
 
 class TC_Timer {
@@ -16,7 +25,7 @@ class TC_Timer {
     void startTimer(unsigned long period, void (*f)());
     void stopTimer();
     void restartTimer(unsigned long period);
-    void setPeriod(unsigned long period);
+    int setPeriod(unsigned long period);
 
 public:
     void (*callback)();

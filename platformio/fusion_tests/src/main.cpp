@@ -28,23 +28,26 @@
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 
 #include <ICM42688.h>
-#include <MMC5983MA.h>
 #include "bmp3.h"
 #include <Fusion.h>
 #include "TC_Timer.h"
+
+/**
+ * Will we use the magnetic sensor in the AHRS calculations?
+ */
+#define USE_MAGNETIC_SAMPLING false
 
 /**
  * Configure compilation for the hardware runtime environment
  * 
  * One of four possibilities (Again, only the first configuration has been tested recently)
  * 
- * 1) tempo board (#define TEMPO_V1)
+ * 1) tempo board (#define TEMPO_V1) (handled automatically by PlatformIO Build Environment)
  * 2) peakick board along with SAMD51 Thing Plus C board (#define SAMD51_THING_PLUS)
  * 3) peakick board along with ESP32 Thing Plus board (set Arduino board to ESP32 Dev)
  * 4) peakick board along with STM32 Thing Plus board (set Arduino board to STM32 Thing Plus)
+ * 5) dropkick board (#define DROPKICK_V4) (handled automatically by PlatformIO Build Environment)
  */
-
-#define USE_MAGNETIC_SAMPLING false
 
 #if defined(__SAMD51J20A__)
 
@@ -52,6 +55,19 @@
 #define TEMPO_V1
 // define when using the SAM51 Thing Plus with a Peakick sensor board
 //#define SAMD51_THING_PLUS
+
+#define MMC5983MA_INSTALLED
+
+#include <MMC5983MA.h>
+
+#endif
+
+#if defined(_SAMD21_)
+
+// compiling for Dropkick V4 board is assumed here
+#define DROPKICK_V4
+
+#undef MMC5983MA_INSTALLED
 
 #endif
 
@@ -124,7 +140,7 @@ void rtc_SecondsCB(void *data)
 #if defined(SAMD51_THING_PLUS) || defined(TEMPO_V1)
 
 /**
- * Sparkfun Thing Plus SAMD51 
+ * Sparkfun Thing Plus SAMD51 Arduino pin assignments
  * 
  * see Sparkfun SAMD51 Thing Plus Hookup Guide
  * 
@@ -136,7 +152,7 @@ void rtc_SecondsCB(void *data)
  */
 
 /**
- * tempo board connections
+ * tempo board Arduino pin assignments
  * 
  * BMP390    INT       D11
  * MMC5983MA INT       D9  
@@ -171,6 +187,39 @@ ICM42688 imu(Wire);
 /*
  * end of Arduino SAMD51 Timer module
  */
+
+void samdTimerInterrupt() {
+    alarmFlag = true;
+}
+
+#endif
+
+#if defined(DROPKICK_V4)
+/**
+ * Dropkick board Arduino pin assignments
+ * 
+ * BMP390    INT       D6
+ * MMC5983MA           not present
+ * ICM42688  INT/INT1  D11
+ * ICM42688  INT2      D12 
+ * 
+ */
+#define RED_LED           13
+#define GREEN_LED         8
+
+#define CPU_SUPPLIES_IMU_CLKIN  false
+
+#undef MMC5983MA_INSTALLED
+
+#define ICM42688_intPin1 digitalPinToInterrupt(11)   // INT/INT1
+#define MMC5983MA_intPin -1
+#define BMP390_intPin    digitalPinToInterrupt(6) 
+#define ICM42688_intPin2 digitalPinToInterrupt(12)  // INT2/CLKIN as an interrupt line
+#define CLKOUT           12                     
+
+ICM42688 imu(&Wire);
+
+#define IRAM_ATTR
 
 void samdTimerInterrupt() {
     alarmFlag = true;
@@ -260,6 +309,9 @@ volatile uint16_t imuUnservicedISRCount = 0;
  * MSET_500, MSET_1000, MSET_2000, so MSET_100 set/reset occurs every 100th
  * measurement, etc.
  */
+
+#if defined(MMC5983MA_INSTALLED)
+
 mmc5983ma_modr_t MODR = MODR_100Hz;
 mmc5983ma_bandwidth_t MBW = MBW_200Hz;
 mmc5983ma_sr_Interval_t MSET = MSET_DISABLED;
@@ -278,6 +330,8 @@ float MMC5983MA_offset = 131072.0f;
 volatile bool newMMC5983MAData = false;
 
 MMC5983MA mmc(MMC5983MA_ADDRESS, &Wire); 
+
+#endif
 
 #define SEALEVELPRESSURE_HPA (1013.25)
 
@@ -405,12 +459,16 @@ void IRAM_ATTR myinthandler1() {
     ++imuUnservicedISRCount; 
 }
 
+#if defined(MMC5983MA_INSTALLED)
+
 volatile uint32_t mmcIntCount = 0;
 
 void IRAM_ATTR myinthandler2() { 
     newMMC5983MAData = true; 
     ++ mmcIntCount;
 }
+
+#endif
 
 void IRAM_ATTR alarmMatch() { alarmFlag = true; }
 
@@ -456,20 +514,25 @@ FusionAhrs ahrs;
 
 void setup() {
 
-    delay(2000);
-
-    Serial.begin(115200);
-    while (!Serial) {
-    }
-
     // Configure led
     pinMode(RED_LED, OUTPUT);
     pinMode(GREEN_LED, OUTPUT);
 
+    Serial.begin(115200);
+
+    digitalWrite(GREEN_LED, HIGH);
+
+    while (!Serial) {
+    }
+
+    digitalWrite(GREEN_LED, LOW);
+
 #if !defined(ESP32)
     pinMode(ICM42688_intPin1, INPUT);
     pinMode(ICM42688_intPin2, INPUT);
+#if defined(MMC5983MA_INSTALLED)
     pinMode(MMC5983MA_intPin, INPUT);
+#endif
     pinMode(BMP390_intPin, INPUT);
 #endif
 
@@ -482,36 +545,31 @@ void setup() {
     imu.begin();
 
     myGNSS.begin();
-
     myGNSS.setUART1Output(0);
     myGNSS.setUART2Output(0);
-
     myGNSS.setI2COutput(COM_TYPE_NMEA);
-    myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); //Save (only) the communications port settings to flash and BBR
-
+    // Save (only) the communications port settings to flash and BBR
+    myGNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); 
     // Idle reporting will be at 0.5 Hz
     myGNSS.setMeasurementRate(2000);
     myGNSS.setNavigationRate(1);
-
     if (myGNSS.setDynamicModel(DYN_MODEL_AIRBORNE2g) == false) 
     {
         Serial.println(F("Warning: GNSS setDynamicModel() failed"));
     }
-    else
-    {
-        Serial.println(F("GNSS Dynamic Platform Model set to AIRBORNE2g"));
-    }
-
     //This will pipe all NMEA sentences to the serial port so we can see them
     //myGNSS.setNMEAOutputPort(Serial);
-
     myGNSS.setNavigationFrequency(1);
 
     Serial.println("ICM42688 ");
     byte ICM42688ID = imu.getChipID(); 
 
+#if defined(MMC5983MA_INSTALLED)
     Serial.println("MMC5983MA");
     byte MMC5983ID = mmc.getChipID();  // Read CHIP_ID register for MMC5983MA
+#else
+    byte MMC5983ID = 0x30;
+#endif
 
     Serial.println("BMP390");
     bmp3_begin(&dev, 0x76, &Wire);
@@ -521,7 +579,7 @@ void setup() {
         (ICM42688ID == 0x47 || ICM42688ID == 0xDB) && MMC5983ID == 0x30 && BMP390ID == 0x60;
 
     if (allSensorsAcknowledged) {
-        Serial.println("All peripherals are operating");
+        Serial.println("All sensors are connected");
         Serial.println(" ");
 
         digitalWrite(RED_LED, LOW);
@@ -622,6 +680,7 @@ void setup() {
         Serial.println(magOffset[2]);
 #endif
 
+#if defined(MMC5983MA_INSTALLED)    
         mmc.reset();
 
         mmc.performSetOperation();
@@ -629,6 +688,7 @@ void setup() {
         attachInterrupt(MMC5983MA_intPin, myinthandler2, RISING);
 
         mmc.setSoftIronCalibration(softIronOffset, softIronScale);
+#endif
 
 
 #if 0
@@ -749,7 +809,11 @@ void setup() {
     };
     FusionAhrsSetSettings(&ahrs, &settings);
 
+#if defined(MMC5983MA_INSTALLED)
+
     mmc.startSampleCollection(MODR, MBW, MSET);
+
+#endif
 
     digitalWrite(GREEN_LED, LOW);
 }
@@ -762,6 +826,8 @@ void loop() {
 
     ++loopCount;
     ++loopTotal;
+
+#if defined(MMC5983MA_INSTALLED)
 
     // MMC5983MA magnetometer has has sample available?
 
@@ -790,6 +856,7 @@ void loop() {
         //    Serial.println("assertion: mag measurement not ready");
         //}
     //}
+#endif
 
     // IMU Sample available?
 
@@ -862,16 +929,12 @@ void loop() {
                     FusionVector accelerometer = {ax, ay, az};
                     // TODO: we use Gauss here, but might need to switch to uT
                     // magnetometer sensor frame
+
+#if defined(MMC5983MA_INSTALLED)
                     FusionVector magnetometer = {mx, my, mz};
-
-                    // Apply calibration
-                    gyroscope = FusionCalibrationInertial(
-                        gyroscope, gyroscopeMisalignment, gyroscopeSensitivity,
-                        gyroscopeOffset);
-
-                    accelerometer = FusionCalibrationInertial(
-                        accelerometer, accelerometerMisalignment,
-                        accelerometerSensitivity, accelerometerOffset);
+#else
+                    FusionVector magnetometer = {0, 0, 0};
+#endif
 
                     if ( USE_MAGNETIC_SAMPLING ) {
                         magnetometer = FusionCalibrationMagnetic(
@@ -881,6 +944,15 @@ void loop() {
                         magnetometer = FusionCalibrationMagnetic(
                             magnetometerZeroes, softIronMatrix, hardIronOffset);
                     }
+
+                    // Apply calibration
+                    gyroscope = FusionCalibrationInertial(
+                        gyroscope, gyroscopeMisalignment, gyroscopeSensitivity,
+                        gyroscopeOffset);
+
+                    accelerometer = FusionCalibrationInertial(
+                        accelerometer, accelerometerMisalignment,
+                        accelerometerSensitivity, accelerometerOffset);
 
                     // Update gyroscope offset correction algorithm
                     gyroscope = FusionOffsetUpdate(&offset, gyroscope);
@@ -1005,9 +1077,11 @@ void loop() {
             sprintf(buf, "g = {%5.1f, %5.1f, %5.1f} deg/s", gx, gy, gz);
             Serial.println(buf);
 
+#if defined(MMC5983MA_INSTALLED)
             sprintf(buf, "M = {%5.1f, %5.1f, %5.1f} nT",  mx,
                     my, mz);
             Serial.println(buf);
+#endif
         }
 
         if (SerialDebug) {
@@ -1082,6 +1156,7 @@ void loop() {
 
         // Raw magnetometer sensor data
         // Body frame, nT units (Earths magnetic field can be up to 65000nT)
+#if defined(MMC5983MA_INSTALLED)
         sprintf(pbuf, 
             "MA,%s,%s,%s",  
             dtostrf(-mz,9,1,xp), dtostrf(-my,9,1,yp), dtostrf(mx,9,1,zp));
@@ -1094,6 +1169,7 @@ void loop() {
         strcat(pbuf, csbuf);
 
         Serial.println(pbuf);
+#endif
 
         // This will be a Quaternion specifying the current body orientation of 
         // the device in the North-East-Down world frame
@@ -1132,10 +1208,12 @@ void loop() {
 #endif
 #endif
 
+#ifdef notdef
         sprintf(pbuf,
                 "loopCount  IntCount ISROverflow  invalidFIFO\n %8ld   %7ld    %8ld    %6ld\n---",
                 loopCount, imuIntCount, imuISROverflow, imuInvalidSamples);
         Serial.println(pbuf);
+#endif
 
         imuIntCount = 0;
         loopCount = 0;
