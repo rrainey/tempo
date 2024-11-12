@@ -22,12 +22,18 @@
 #define OPS_STATIC_TEST  1  // for testing; time based simulation of vertical motion (preferred test
                             // mode)
 #define OPS_GROUND_TEST  2  // for testing; uses GPS horizontal movement as an analogue to altitude
-                            // changes
+                            // changes (think "drive around in a car" testing)
 
 /*
  * Select operating mode for this build of the firmware here
+ *
+ * I intend to integrate this into two distinct platformio.ini envs in the future
+ * to separate a "flight" build from a "static test" build without requiring 
+ * a manual edit here.
  */
-#define OPS_MODE OPS_STATIC_TEST
+#ifndef OPS_MODE
+#define OPS_MODE OPS_FLIGHT
+#endif
 
 /*
  * The V1 Tempo board includes a red and green LED that together provide status information.
