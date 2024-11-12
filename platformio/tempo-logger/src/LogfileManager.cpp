@@ -55,12 +55,16 @@ LogfileManager::APIResult LogfileManager::findNextLogfileSlot(LogfileSlotID * pS
 
     while(found) {
         sprintf (path, "LOG%05d.TBS", nextIndex);
+        //Serial.print("Candidate slot:");
         //Serial.println(path);
         found = pSd->exists(path);
 
-        if (!found) {
-
+        if (found) {
+            nextIndex++;
+        }
+        else {
             sprintf (path, "LOG%05d.TXT", nextIndex);
+            //Serial.print("Candidate slot:");
             //Serial.println(path);
             found = pSd->exists(path);
 
