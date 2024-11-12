@@ -235,8 +235,8 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
     // We'll execute the Fusion AHRS algorithm in the body frame.
     // Transform sensor frames into body frame before passing to AHRS.
     // Refer to the diagram "images/tempo-v1-fames.png" for sensor/body axes definitions
-    FusionVector gyroscopeBodyFrame = FusionAxesSwap(gyroscope, FusionAxesAlignmentPZNYPX);
-    FusionVector accelerometerBodyFrame = FusionAxesSwap(accelerometer, FusionAxesAlignmentPZNYPX);
+    gyroscopeBodyFrame = FusionAxesSwap(gyroscope, FusionAxesAlignmentPZNYPX);
+    accelerometerBodyFrame = FusionAxesSwap(accelerometer, FusionAxesAlignmentPZNYPX);
 
     // FusionAxesAlignmentNZNYPX is not defined as it isn't a proper right-hand-rule set of axes.
     // Still it's what the MMC5983 magnetometer gives us, so we must convert it manually here.

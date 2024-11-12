@@ -219,19 +219,19 @@ class CombinedLogger : public BinaryLogger {
             char strAcc[32];
 
 #define GYROtoDEG(x) ((x)) 
-#define ACCELtoMPS2(x) ((x) * 9.81 )
+#define ACCELtoMPS2(x) ((x) * 9.806f )
 
-            FusionVector accf = FusionAhrsGetLinearAcceleration(&ahrs);
             FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
+            uint32_t timestamp = millis() - ulLogfileOriginMillis;
 
-            // gyro rates set to zero for now.
+            // $PIMU logs the very last sample received: no filtering 
             
             sprintf(sentence, "$PIMU,%ld,%s,%s*",
-                    millis() - ulLogfileOriginMillis,
-                    vec2str(strAcc, sizeof(strAcc), ACCELtoMPS2(accf.axis.x),
-                            ACCELtoMPS2(accf.axis.y), ACCELtoMPS2(accf.axis.z)),
-                    vec2str(strGyro, sizeof(strGyro), GYROtoDEG(0.0f),
-                            GYROtoDEG(0.0f), GYROtoDEG(0.0f)));
+                    timestamp,
+                    vec2str(strAcc, sizeof(strAcc), ACCELtoMPS2(accelerometerBodyFrame.axis.x),
+                            ACCELtoMPS2(accelerometerBodyFrame.axis.y), ACCELtoMPS2(accelerometerBodyFrame.axis.z)),
+                    vec2str(strGyro, sizeof(strGyro), GYROtoDEG(gyroscopeBodyFrame.axis.x),
+                            GYROtoDEG(gyroscopeBodyFrame.axis.y), GYROtoDEG(gyroscopeBodyFrame.axis.z)));
 
             logfilePrintSentence(f, sentence);
 
@@ -241,7 +241,7 @@ class CombinedLogger : public BinaryLogger {
             char qz[10];
 
             sprintf(sentence, "$PIM2,%ld,%s,%s,%s,%s*",
-                    millis() - ulLogfileOriginMillis, dtostrf(q.element.w, 4, 5, qw),
+                    timestamp, dtostrf(q.element.w, 4, 5, qw),
                     dtostrf(q.element.x, 4, 5, qx), dtostrf(q.element.y, 4, 5, qy),
                     dtostrf(q.element.z, 4, 5, qz));
 
@@ -267,6 +267,10 @@ class CombinedLogger : public BinaryLogger {
     const FusionVector hardIronOffset = {0.0f, 0.0f, 0.0f};
 
     const FusionVector magnetometerZeroes = {0, 0, 0};
+
+    // Last Reported Samples
+    FusionVector gyroscopeBodyFrame = {0,0,0};
+    FusionVector accelerometerBodyFrame = {0,0,0};
     
     // magnetometer reading (units TBD)
     float mx, my, mz;
