@@ -49,16 +49,26 @@ CombinedLogger::CombinedLogger(SdFs& sd) : BinaryLogger(sd)
     nAppState = WAIT;
 }
 
-BinaryLogger::APIResult CombinedLogger::startLogging(LogfileSlotID slot) { 
-    BinaryLogger::APIResult result = BinaryLogger::startLogging(slot);
-    if (result == BinaryLogger::APIResult::Success) {
-        
+BinaryLogger::APIResult CombinedLogger::startLogging(LogfileSlotID slot, LoggingConfiguration config) { 
+
+    BinaryLogger::APIResult result = BinaryLogger::APIResult::Success;
+
+    currentLoggingConfiguration = config;
+
+    if (config == LOG_TXT_AND_TBS) {
+        BinaryLogger::APIResult result = BinaryLogger::startLogging(slot);
+        if (result == BinaryLogger::APIResult::Success) {
+            
+        }
     }
     return result;
 }
 
 void CombinedLogger::stopLogging() {
-    BinaryLogger::stopLogging();
+    if (currentLoggingConfiguration == LOG_TXT_AND_TBS) {
+        BinaryLogger::stopLogging();
+    }
+    currentLoggingConfiguration = LOG_NONE;
 }
 
 void CombinedLogger::loop() {
@@ -337,6 +347,10 @@ void CombinedLogger::updateFlightStateMachine() {
   case JumpState::IN_FLIGHT:
     {
       if (nHDot_fpm <= OPS_HDOT_JUMPING_FPM) {
+        char sentence[128];
+        sprintf(sentence, "$PST,%lu,JUMP*", millis());
+        logfilePrintSentence( txtLogFile, sentence );
+
         Serial.println("Switching to JUMPING");
         nAppState = JUMPING;
 
@@ -353,6 +367,10 @@ void CombinedLogger::updateFlightStateMachine() {
   case JumpState::JUMPING:
     {
       if (labs(nHDot_fpm) <= OPS_HDOT_LAND_THRESHOLD_FPM) {
+        char sentence[128];
+        sprintf(sentence, "$PST,%lu,LAND*", getLogfileTime());
+        logfilePrintSentence( txtLogFile, sentence );
+
         Serial.println("Switching to LANDED_1");
         nAppState = JumpState::LANDED1;
         timer1_ms = TIMER1_INTERVAL_MS;
@@ -364,11 +382,19 @@ void CombinedLogger::updateFlightStateMachine() {
   case JumpState::LANDED1:
     {
       if (nHDot_fpm <= OPS_HDOT_JUMPING_FPM) {
+        char sentence[128];
+        sprintf(sentence, "$PST,%lu,JUMP*", getLogfileTime());
+        logfilePrintSentence( txtLogFile, sentence );
+
         Serial.println("Switching to JUMPING");
         nAppState = JUMPING;
         bTimer1Active = false;
       }
       else if (labs(nHDot_fpm) >= OPS_HDOT_THRESHOLD_FPM) {
+        char sentence[128];
+        sprintf(sentence, "$PST,%lu,FLIGHT*", getLogfileTime());
+        logfilePrintSentence( txtLogFile, sentence );
+
         Serial.println("Switching to IN_FLIGHT");
         bTimer1Active = false;
         nAppState = JumpState::IN_FLIGHT;
@@ -390,6 +416,11 @@ void CombinedLogger::enterWaitState() {
     gnss.enableNMEAMessage(UBX_NMEA_GSV, COM_PORT_I2C);
 
     bTimer4Active = false;
+
+    char sentence[128];
+    sprintf(sentence, "$PST,%lu,WAIT*", getLogfileTime() );
+    logfilePrintSentence( txtLogFile, sentence );
+
     Serial.println("Switching to STATE_WAIT");
     setBlinkState(BLINK_STATE_IDLE);
     nAppState = WAIT;
@@ -408,6 +439,7 @@ void CombinedLogger::enterWaitState() {
 
 void CombinedLogger::enterInFlightState(bool& errorFlag) {
     errorFlag = true;
+
     Serial.println("Switching to IN_FLIGHT");
 
     /*
@@ -428,7 +460,7 @@ void CombinedLogger::enterInFlightState(bool& errorFlag) {
         return;
     }
 
-    if (startLogging(slot) != BinaryLogger::APIResult::Success) {
+    if (startLogging(slot, LOG_TXT_ONLY) != BinaryLogger::APIResult::Success) {
         setBlinkState(BlinkState::BLINK_STATE_SDCARD_FILE_ERROR);
         Serial.println("Could not open TBS log file; cannot enter IN_FLIGHT mode");
         return;
@@ -447,6 +479,9 @@ void CombinedLogger::enterInFlightState(bool& errorFlag) {
     // Log estimated surface altitude (standard day conditions)
     
     sprintf(sentence, "$PSFC,%d*", getGroundAltitude());
+    logfilePrintSentence( txtLogFile, sentence );
+
+    sprintf(sentence, "$PST,%lu,FLIGHT*", getLogfileTime() );
     logfilePrintSentence( txtLogFile, sentence );
 
     // Activate IMU / altitude / battery sensor logging (10Hz)
@@ -554,7 +589,7 @@ void CombinedLogger::logAltitude(float dPressure_hPa, double dAlt_ft) {
 
         char sentence[128];
         sprintf(sentence, "$PENV,%ld,%s,%s,%s*",
-                millis() - ulLogfileOriginMillis,
+                getLogfileTime(),
                 dtostrf(dPressure_hPa, 5, 5, s1), dtostrf(dAlt_ft, 3, 3, s2),
                 dtostrf(-1.0, 2, 2, s3));
         logfilePrintSentence(txtLogFile, sentence);

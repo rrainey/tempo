@@ -50,9 +50,9 @@ enum BlinkState {
  * The version numbers referenced here are a continuation of the versioning scheme originally
  * used in Dropkick log files. These version numbers appear at the start of each TXT log file.
  */
-#define APP_STRING "Tempo, version 0.155"
-#define LOG_VERSION 2
-#define NMEA_APP_STRING "$PVER,\"Tempo, version 0.155\",155"
+#define APP_STRING "Tempo, version 0.156"
+#define LOG_VERSION 3
+#define NMEA_APP_STRING "$PVER,\"Tempo, version 0.156\",156"
 
 #define TEST_SPEED_THRESHOLD_KTS 6.0
 #define OPS_HDOT_THRESHOLD_FPM 300
@@ -101,6 +101,13 @@ typedef enum { WAIT, IN_FLIGHT, JUMPING, LANDED1 } JumpState;
 class CombinedLogger : public BinaryLogger {
 
    public:
+
+    typedef enum  {
+        LOG_TXT_AND_TBS = 0,
+        LOG_TXT_ONLY,
+        LOG_NONE            // only used inside the implementation to designate that logging isn't active
+    } LoggingConfiguration;
+
     /**
      * @brief Constructs a CombinedLogger object.
      *
@@ -112,7 +119,7 @@ class CombinedLogger : public BinaryLogger {
      */
     CombinedLogger(SdFs &sd);
 
-    virtual BinaryLogger::APIResult startLogging(LogfileSlotID slot);
+    virtual BinaryLogger::APIResult startLogging(LogfileSlotID slot, LoggingConfiguration config);
 
     // Stop logging and close the log file on the SD Card
     virtual void stopLogging();
@@ -189,7 +196,7 @@ class CombinedLogger : public BinaryLogger {
         uint32_t iPart = (uint32_t)val;
         uint32_t dPart = (uint32_t)((val - (double)iPart) * pow(10, prec));
 
-        sprintf(sout, "%d.%d", iPart, dPart);
+        sprintf(sout, "%lu.%lu", iPart, dPart);
         return sout;
     }
 
@@ -375,6 +382,9 @@ class CombinedLogger : public BinaryLogger {
     // For debugging
     bool printNMEA = false;
 
+    // maintain logging state whenever logging is started
+    LoggingConfiguration currentLoggingConfiguration = LOG_NONE;
+
     /**
      * @brief record estimated surface altitude (feet, MSL)
      *
@@ -401,6 +411,13 @@ class CombinedLogger : public BinaryLogger {
             nSelectedSample += NUM_H_GROUND_SAMPLES;
         }
         return nHGroundSample[nSelectedSample];
+    }
+
+    /// @brief Compute number of milliseconds since the opening of the log file.
+    ///        This is used to timestamp each record in the log file.
+    /// @return time (milliseconds) since the log file was opened
+    uint32_t getLogfileTime() { 
+        return millis() - ulLogfileOriginMillis; 
     }
 
     /**
