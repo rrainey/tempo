@@ -2,8 +2,10 @@
 
 ## One Project, Two Boards
 
-Two boards are part of the Tempo project: Tempo and Peakick. Both explore modern sensor ICs for use in skydiving.  The Peakick board is more research oriented. Peakick is design as a daughter board for
-a experimentation with a range of microcontroller boards. It is most easily connected to SparkFun "Thing Plus" form factor boards, although it can be connected to almost any modern MCU/SOC board supporting 3.3V
+Two boards are part of the Tempo project: Tempo and Peakick. Both explore modern sensor ICs for use in skydiving.  The Peakick board is more research oriented. 
+Peakick is design as a daughter board for
+a experimentation with a range of microcontroller boards. It is most easily connected to SparkFun "Thing Plus" form factor boards, although 
+it can be connected to almost any modern MCU/SOC board supporting 3.3V
 peripherals.
 
 Tempo is a purpose built single board logger derived from Peakick.  It adds a SAMD51 MCU onto a Peakick board.  This project includes PlatformIO-based firmware to drive this board as a stand-alone
@@ -16,10 +18,10 @@ This project was originally designed to experiment with real-time audible feedba
 
 ### Sensors and Capabilites
 
-- GPS/GNSS via u-blox SAM-M10Q
-- 6-DOF Inertial measurement / gyro via ICM-42688-V
-- Barometric pressure / temperature via BPM390
-- 3-DOF Compass/Magnetic measurement via MMC5983
+- GPS/GNSS using a u-blox SAM-M10Q
+- 6-DOF Inertial measurement / gyro using a ICM-42688-V
+- Barometric pressure / temperature using a BPM390
+- 3-DOF Compass/Magnetic measurement using a MMC5983MA
 
 I am just getting started with this project, so all I'm doing for now is velidating the sensor board designs and (soon) experimenting with basic BT audio capabilities.
 
@@ -39,13 +41,13 @@ I am just getting started with this project, so all I'm doing for now is velidat
 
 ## Enclosure
 
-The enclosure is designed to be SLA printable. I print using a MakerBot Replicator 2 with Cura 5.3.1 as the slicer. Print resolution set to 0.15mm.
+The enclosures are designed to be SLA printable. I print using a MakerBot Replicator 2 with Cura 5.3.1 as the slicer. Print resolution set to 0.15mm.
 
 The PCBs are secured to the enclosure using M2.5 brass inserts and screws. The inserts are heat-inserted into the bottom shell using a soldering iron after printing.
 
 ### PCB Notes
 
-This board was created using KiCad 7.0.  In order to get the header alignment between the two board as acccurate as possible, I imported the [SparkFun STM32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) GitHub project to use its PCB layout. 
+Both boards were created using KiCad 7.0.  In peakick, in order to get the header alignment with the parent board as acccurate as possible, I imported the [SparkFun STM32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) GitHub project to use its PCB layout. 
 
 I prefer 1 oz. Copper with ENIG finish. I ordered the V1 PCB from OSHPark and stencils from OSH as well.
 
