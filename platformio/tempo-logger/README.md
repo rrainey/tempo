@@ -16,13 +16,13 @@ It the program detects that it cannot keep up with logging the data to the SD ca
 
 ## Reading Status LEDs
 
-| LED 1 (GREEN, left)  | LED 2 (RED, middle) | LED 3 (GREEN, Right) | Description |
+| LED 1 (GREEN, left)  | LED 2 (RED, middle) | LED 3 (POWER) (GREEN, Right) | Description |
 |:------:|:-------------:|:-------------:|------------------|
 | OFF |  OFF | ON | Powered on |
 | OFF |  ON  | ON | Initializing |
-| OFF |  ON  | ON | Idle, waiting for a jump to begin |
-| ON |  ON  | ON | Jump mode, Logging active |
-| ON | blinking | ON | Battery low (not implemented on Temp V1 board)
+| BLINKING | OFF  | ON| Idle, waiting for a jump to begin |
+| ON |  BLINKING  | ON | Jump mode, Logging active |
+| OFF | BLINKING (two dashes) | ON | Battery low (not implemented on Temp V1 board)
 | blinking (one dash) | ON | ON | program stopped; No SD Card found
 | blinking (two dashes) | ON | ON | program stopped; SD Card not properly formatted (must beFAT32 or exFAT)
 | blinking (three dashes) | ON | ON | program stopped; SD Card File Error (check card)

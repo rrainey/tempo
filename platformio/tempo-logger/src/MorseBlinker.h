@@ -89,7 +89,7 @@ protected:
     char outputChar = ' ';
     // encoded Morse code sequence for the output character
     const char * morseSequence;
-    // number of dot/dash elements in the chracter's Morse code sequence
+    // number of dot/dash elements in the character's Morse code sequence
     int sequenceLength = 0;
     // currently executing dot/dash bit in the sequence
     int currentIndex = 0;

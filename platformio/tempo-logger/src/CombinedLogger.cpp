@@ -582,7 +582,7 @@ void CombinedLogger::updateRateOfClimb() {
 
 void CombinedLogger::logAltitude(float dPressure_hPa, double dAlt_ft) {
     /*
-     * Output a $PENV record (which includes a baro alititude estimate)
+     * Output a $PENV record (which includes a baro altitude estimate)
      */
     if (txtLogFile.isOpen()) {
         char s1[10], s2[10], s3[10];

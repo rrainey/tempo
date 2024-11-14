@@ -93,7 +93,7 @@ enum BlinkState {
  * logging if not already)
  *
  *
- * State 3: LANDED1  like state 2 - if any conditions are vioated, return to
+ * State 3: LANDED1  like state 2 - if any conditions are violated, return to
  * state 2(JUMPING), go to state 0 when timer 1 reaches 60 seconds, set GNSS
  * update rate set to 1Hz, close logfile
  */
@@ -136,7 +136,7 @@ class CombinedLogger : public BinaryLogger {
      * These LEDs are used to indicate both the general operating status and specific states.
      * An unblinking GREEN means the device is operational. When GREEN is illuminated, the RED LED
      * blinks a status code.
-     * An unblinking RED means a fatal error was encounterd. When GREEN is illuminated, the GREEN LED
+     * An unblinking RED means a fatal error was encountered. When GREEN is illuminated, the GREEN LED
      * blinks a status code.
      */
     void setBlinkState(enum BlinkState newState);
@@ -379,7 +379,7 @@ class CombinedLogger : public BinaryLogger {
 
     /*
      * Queue of ground altitude samples; we save a series of samples
-     * so that when we detect a climbout starting, we can use one further back
+     * so that when we detect a climb out starting, we can use one further back
      * in time that the very last sample (which might be less accurate)
      */
 #define NUM_H_GROUND_SAMPLES 4
