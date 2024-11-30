@@ -287,7 +287,7 @@ void CombinedLogger::handleNMEASentence(uint32_t time_ms, const char* pSentence)
        */
       if (strncmp( pSentence+3, "GGA", 3) == 0 || strncmp( pSentence+3, "GLL", 3) == 0) {
         char sentence[128];
-        sprintf(sentence, "$PTH,%ld*", time_ms);
+        sprintf(sentence, "$PTH,%ld*", time_ms - ulLogfileOriginMillis);
         logfilePrintSentence( txtLogFile, sentence );
       }
       
