@@ -14,7 +14,7 @@ extern MicroNMEA nmea;
 extern SFE_UBLOX_GNSS gnss;
 
 /**
- * Extend the BinareyLogger to log dropkick-style jump data in a separate log file.
+ * Extend the BinaryLogger to log dropkick-style jump data in a separate log file.
  */
 CombinedLogger::CombinedLogger(SdFs& sd) : BinaryLogger(sd)
 {
@@ -26,12 +26,16 @@ CombinedLogger::CombinedLogger(SdFs& sd) : BinaryLogger(sd)
     const FusionAhrsSettings settings = {
             .convention = FusionConventionNed,
             .gain = 0.5f,
-            .gyroscopeRange = 250.0f, /* replace this with actual gyroscope range in degrees/s */
+            .gyroscopeRange = 250.0f, 
             .accelerationRejection = 4.0f, // We're operating on a 4g sampling scale, so this should likely be lower that full scale value
-            .magneticRejection = 10.0f,     // Gauss units
+            .magneticRejection = 10.0f,    // Gauss units
             .recoveryTriggerPeriod = 5 * SAMPLE_RATE, /* 5 seconds */
     };
     FusionAhrsSetSettings(&ahrs, &settings);
+
+    lastComputedOrientation = FUSION_IDENTITY_QUATERNION;
+    gyroscopeBodyFrame = FUSION_VECTOR_ZERO;
+    accelerometerBodyFrame = FUSION_VECTOR_ZERO;
 
     bFirstPressureSample = true;
 
@@ -133,6 +137,9 @@ void CombinedLogger::loop() {
 
         logAltitude(dStaticPressure_hPa, dBaroAltitude_m * 3.28084);
 
+        // When in a test mode, send orientation data to the serial port
+        sendVisualizerOrientationMessage();
+
         timer4_ms = TIMER4_INTERVAL_MS;
     }
 
@@ -146,6 +153,34 @@ void CombinedLogger::loop() {
         recordGroundAltitude(nHSample[nSampleIndex]);
 
         timer6_ms = TIMER6_INTERVAL_MS;
+    }
+}
+
+void CombinedLogger::sendVisualizerOrientationMessage() {
+    /**
+     * While in OPS_STATIC_TEST, we will output orientation quaternion
+     * state to the serial port to allow the data to be connected to the
+     * visualizer desktop app
+     */
+    if (OPS_MODE == OPS_STATIC_TEST) {
+        char wp[16], xp[16], yp[16], zp[16];
+        char pbuf[128];
+        char csbuf[8];
+        int cs;
+
+        FusionQuaternion q = lastComputedOrientation;
+
+        sprintf(pbuf, "Q,%s,%s,%s,%s", dtostrf(q.array[0], 8, 4, wp),
+                dtostrf(q.array[1], 8, 4, xp), dtostrf(q.array[2], 8, 4, yp),
+                dtostrf(q.array[3], 8, 4, zp));
+
+        cs = 0;
+        for (size_t i = 0; i < strlen(pbuf); i++) {
+            cs ^= pbuf[i];
+        }
+        sprintf(csbuf, "*%02X", cs);
+        strcat(pbuf, csbuf);
+        Serial.println(pbuf);
     }
 }
 
@@ -205,13 +240,17 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
     (void)imuTemp_C;
 
     //  deg/sec, IMU sensor frame
-    FusionVector gyroscope = {gx, gy, gz};
+    FusionVector gyroscope = { gx, gy, gz };
     // g's, IMU sensor frame
-    FusionVector accelerometer = {ax, ay, az};
+    FusionVector accelerometer = { ax, ay, az };
     // TODO: we use Gauss here, but might need to switch to uT
     // magnetometer sensor frame
     FusionVector magnetometer = {mx, my, mz};
 
+    // Ignore Magnetometer for now ...
+    magnetometer = {0, 0, 0};
+
+#ifdef NOT_IMPLEMENTED_YET
     // Apply calibration
     gyroscope =
         FusionCalibrationInertial(gyroscope, gyroscopeMisalignment,
@@ -228,7 +267,7 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
         magnetometer = FusionCalibrationMagnetic(
             magnetometerZeroes, softIronMatrix, hardIronOffset);
     }
-
+#endif
     // Update gyroscope offset correction algorithm
     gyroscope = FusionOffsetUpdate(&offset, gyroscope);
 
@@ -258,6 +297,8 @@ void CombinedLogger::handleIMUSample(longTime_t itime_us, icm42688::fifo_packet3
     // Update gyroscope AHRS algorithm
     FusionAhrsUpdate(&ahrs, gyroscopeBodyFrame, accelerometerBodyFrame,
                      magnetometerBodyFrame, fSampleInterval_sec);
+    
+    lastComputedOrientation = FusionAhrsGetQuaternion(&ahrs);
 }
 
 void CombinedLogger::handleMagSample(uint32_t sample[3]) {

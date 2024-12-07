@@ -29,6 +29,7 @@
 #include <SdFat.h>
 #include <bmp3.h>
 #include <sdios.h>
+#include <avr/dtostrf.h>
 
 #include "tempo-arduino-pins.h"
 #include "MorseBlinker.h"

@@ -9,6 +9,7 @@
 
 #include "BinaryLogger.h"
 #include "MorseBlinker.h"
+#include <avr/dtostrf.h>
 
 #define USE_MAGNETIC_SAMPLING false
 
@@ -148,6 +149,8 @@ class CombinedLogger : public BinaryLogger {
     // call this exactly once from the main Arduino application loop() function
     virtual void loop();
 
+    void sendVisualizerOrientationMessage();
+
    protected:
     /**
      * @brief Receive IMU sample, maintain pose state, and log data
@@ -196,7 +199,7 @@ class CombinedLogger : public BinaryLogger {
         }
         sprintf(c, "*%02X", checksum);
     }
-
+/*
     char *dtostrf(double val, signed char width, unsigned char prec,
                   char *sout) {
         uint32_t iPart = (uint32_t)val;
@@ -205,6 +208,7 @@ class CombinedLogger : public BinaryLogger {
         sprintf(sout, "%lu.%lu", iPart, dPart);
         return sout;
     }
+*/
 
     char *vec2str(char *dest, int size, float x, float y, float z) {
         char a[16], b[16], c[16];
@@ -227,7 +231,7 @@ class CombinedLogger : public BinaryLogger {
 #define GYROtoDEG(x) ((x)) 
 #define ACCELtoMPS2(x) ((x) * 9.806f )
 
-            FusionQuaternion q = FusionAhrsGetQuaternion(&ahrs);
+            FusionQuaternion q = lastComputedOrientation;
             uint32_t timestamp = millis() - ulLogfileOriginMillis;
 
             // $PIMU logs the very last sample received: no filtering 
@@ -241,15 +245,17 @@ class CombinedLogger : public BinaryLogger {
 
             logfilePrintSentence(f, sentence);
 
-            char qw[10];
-            char qx[10];
-            char qy[10];
-            char qz[10];
+            char qw[16];
+            char qx[16];
+            char qy[16];
+            char qz[16];
 
             sprintf(sentence, "$PIM2,%ld,%s,%s,%s,%s*",
-                    timestamp, dtostrf(q.element.w, 4, 5, qw),
-                    dtostrf(q.element.x, 4, 5, qx), dtostrf(q.element.y, 4, 5, qy),
-                    dtostrf(q.element.z, 4, 5, qz));
+                    timestamp, 
+                    dtostrf(q.array[0], 7, 4, qw),
+                    dtostrf(q.array[1], 7, 4, qx), 
+                    dtostrf(q.array[2], 7, 4, qy),
+                    dtostrf(q.array[3], 7, 4, qz));
 
             logfilePrintSentence(f, sentence);
         }
@@ -260,23 +266,20 @@ class CombinedLogger : public BinaryLogger {
  */
 // #define CLOCKS_PER_SEC 1
 
-    const FusionMatrix gyroscopeMisalignment = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-                                                0.0f, 0.0f, 0.0f, 1.0f};
-    const FusionVector gyroscopeSensitivity = {1.0f, 1.0f, 1.0f};
-    const FusionVector gyroscopeOffset = {0.0f, 0.0f, 0.0f};
-    const FusionMatrix accelerometerMisalignment = {
-        1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
-    const FusionVector accelerometerSensitivity = {1.0f, 1.0f, 1.0f};
-    const FusionVector accelerometerOffset = {0.0f, 0.0f, 0.0f};
-    const FusionMatrix softIronMatrix = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
-                                         0.0f, 0.0f, 0.0f, 1.0f};
-    const FusionVector hardIronOffset = {0.0f, 0.0f, 0.0f};
+    const FusionMatrix gyroscopeMisalignment = FUSION_IDENTITY_MATRIX;
+    const FusionVector gyroscopeSensitivity = FUSION_VECTOR_ONES;
+    const FusionVector gyroscopeOffset = FUSION_VECTOR_ZERO;
+    const FusionMatrix accelerometerMisalignment = FUSION_IDENTITY_MATRIX;
+    const FusionVector accelerometerSensitivity = FUSION_VECTOR_ONES;
+    const FusionVector accelerometerOffset = FUSION_VECTOR_ZERO;
+    const FusionMatrix softIronMatrix = FUSION_IDENTITY_MATRIX;
+    const FusionVector hardIronOffset = FUSION_VECTOR_ZERO;
 
-    const FusionVector magnetometerZeroes = {0, 0, 0};
+    const FusionVector magnetometerZeroes = FUSION_VECTOR_ZERO;
 
     // Last Reported Samples
-    FusionVector gyroscopeBodyFrame = {0,0,0};
-    FusionVector accelerometerBodyFrame = {0,0,0};
+    FusionVector gyroscopeBodyFrame = FUSION_VECTOR_ZERO;
+    FusionVector accelerometerBodyFrame = FUSION_VECTOR_ZERO;
     
     // magnetometer reading (units TBD)
     float mx, my, mz;
@@ -285,14 +288,18 @@ class CombinedLogger : public BinaryLogger {
     float gyroBias[3] = {0.0f, 0.0f, 0.0f};
 
     /*
-     * WARNING: These calibration values are specific to my test device
+     * WARNING: These calibration values are specific to my test device.
+     *          Use the "calibration" sketch to determine the best values for your device
      */
     uint32_t softIronOffset[3] = {139525, 132218, 133466};
     float softIronScale[3] = {0.00052652f, 0.00049533f, 0.00044927f};
 
-    // Initialise algorithms
+    // Offset state
     FusionOffset offset;
+    // AHRS state
     FusionAhrs ahrs;
+
+    FusionQuaternion lastComputedOrientation;
 
     boolean bFirstPressureSample;
 
