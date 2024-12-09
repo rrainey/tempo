@@ -1,0 +1,1 @@
+The articulated 3D Human model used to represent a skydiver in this application was derived from [this GrabCAD model](https://grabcad.com/library/human-body-model-joints-for-fusion360-1).
