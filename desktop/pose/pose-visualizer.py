@@ -1,9 +1,8 @@
-from PyQt5 import QtWidgets, QtOpenGL
+from PyQt5 import QtWidgets, QtOpenGL, QtCore
+from PyQt5.QtCore import Qt
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import glutBitmapCharacter, GLUT_BITMAP_HELVETICA_18, glutBitmapString
-from PyQt5.QtCore import Qt
-from PyQt5 import QtCore
 from pyrr import Quaternion, matrix44
 import time
 import logging
@@ -11,19 +10,28 @@ import sys
 import numpy as np
 import pywavefront
 from pywavefront import visualization
+import functools
 
+# Early log files had an issue with the PTH timestamp offset which required manual correction.
+# Current log files will not have this issue.
+correction = 0
 
-correction = 249277
+# We'll pre-scan the log file and note the timestamps of events that correspond to exit, deployment, and landing.
+# Markers are placed on the timeline slider to indicate these events.
+
+gevents = []
 
 parsed_data = None
 
 # Configuration
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 600
+WINDOW_WIDTH = 1000
+WINDOW_HEIGHT = 1000
 MODEL_PATH = "freefall.obj"
 VIEWER_POSITION = [-20, 0, 0]
 LIGHT_DISTANCE = 20
 AXIS_LINE_LENGTH = 4
+max_time_sec = 0.0
+
 
 def METERStoFEET(meters):
     return meters * 3.28084
@@ -31,6 +39,7 @@ def METERStoFEET(meters):
 def KNOTStoMPH(knots):
     return knots * 1.15078
 
+# return millis() timestamp of the record
 def get_timestamp(record):
     if (record[0] == "PIMU" or record[0] == "PIM2" or record[0] == "PENV"):
         return int(record[1])
@@ -67,6 +76,8 @@ def parse_nmea_log(file_path):
     rejected_count = 0
     last_gpgga = None
     last_gpgll = None
+    event = False
+    max_time_sec = 0.0
 
     with open(file_path, "r") as file:
         for line in file:
@@ -97,9 +108,56 @@ def parse_nmea_log(file_path):
                     parsed_sentences.append(last_gpgll)
                     last_gpgll = None
             else:
+
                 parsed_sentences.append(fields)
 
-    return parsed_sentences, rejected_count
+                # Monitor acceleration for exit, deployment, and landing events.
+                # These will be marked on the timeline slider
+
+                if fields[0] == "PIMU":
+                    max_time_sec = int(fields[1]) / 1000
+                    norm_g = np.linalg.norm([float(fields[2]), float(fields[3]), float(fields[4])]) / 9.18
+                    if norm_g > 1.8 or norm_g < 0.65:
+                        if event == False:
+                            event = True
+                            start_time_ms = int(fields[1])
+                    elif event == True:
+                        end_time_ms = int(fields[1])
+                        event = False
+                        gevents.append((start_time_ms, end_time_ms))
+
+
+
+    return parsed_sentences, rejected_count, gevents, max_time_sec
+
+def euler_to_matrix(yaw_deg, pitch_deg, roll_deg):
+    """Converts Euler angles to a rotation matrix """
+    yaw = np.radians(yaw_deg)
+    pitch = np.radians(pitch_deg)
+    roll = np.radians(roll_deg)
+
+    # Rotation matrix for yaw
+    Rz = np.array([
+        [np.cos(yaw), -np.sin(yaw), 0],
+        [np.sin(yaw), np.cos(yaw), 0],
+        [0, 0, 1]
+    ])
+
+    # Rotation matrix for pitch
+    Ry = np.array([
+        [np.cos(pitch), 0, np.sin(pitch)],
+        [0, 1, 0],
+        [-np.sin(pitch), 0, np.cos(pitch)]
+    ])
+
+    # Rotation matrix for roll
+    Rx = np.array([
+        [1, 0, 0],
+        [0, np.cos(roll), -np.sin(roll)],
+        [0, np.sin(roll), np.cos(roll)]
+    ])
+
+    return Rz @ Ry @ Rx
 
 # Quaternion to matrix conversion function
 def quaternion_to_matrix(w, x, y, z):
@@ -188,7 +246,6 @@ def look_at(eye, center, up):
     result[3][2] = np.dot(f, eye)
     return result
 
-
 class OpenGLWidget(QtOpenGL.QGLWidget):
     def __init__(self, parent=None):
         super(OpenGLWidget, self).__init__(parent)
@@ -214,6 +271,14 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
         self.net_acceleration = 0
 
         self.model = pywavefront.Wavefront(MODEL_PATH,strict=False)
+
+    def mouseMoveEventX(self, event):
+        if event.buttons() & QtCore.Qt.MidButton:
+            if self.is_dragging:
+                self.opengl_widget.set_viewpoint((event.x(), event.y(), 0), (0, 0, -1))
+            else:
+                self.is_dragging = True
+            print(event.globalPos().x(), event.globalPos().y())
 
     def set_data(self, data):
         self.data = data
@@ -274,7 +339,7 @@ class OpenGLWidget(QtOpenGL.QGLWidget):
         visualization.draw(self.model)
 
         glPopMatrix()
-
+        
     def resizeGL(self, w, h):
         glViewport(0, 0, w, h)
         glMatrixMode(GL_PROJECTION)
@@ -354,13 +419,25 @@ class Window(QtWidgets.QMainWindow):
     def __init__(self):
         super(Window, self).__init__()
         self.opengl_widget = OpenGLWidget(self)
+
         self.setCentralWidget(self.opengl_widget)
         self.setWindowTitle("Tempo Log Visualizer")
-        parsed_data, err = parse_nmea_log(sys.argv[1])
+        self.setMouseTracking(True)
+        parsed_data, err, gevents, m = parse_nmea_log(sys.argv[1])
+        self.timeline = TickOverride(self, maximum=int(m+0.5))
+        self.timeline.setGeometry(20, WINDOW_HEIGHT-60, WINDOW_WIDTH-40, 40)
+        self.timeline.valueChanged.connect(self.timeline_change)
+        lastValue_sec = 0
+        for i in gevents:
+            value=int(i[0] / 1000)
+            if value != lastValue_sec:
+                self.timeline.addTick(value=value)
+                print(f"Adding tick at {value} sec")
+                lastValue_sec = value
         count = len(parsed_data)
-        print(f"Loaded {count} records from {sys.argv[1]}")
+        print(f"Loaded {count} records from {sys.argv[1]}; log file spans {m} seconds")
         self.current_index = 0
-        self.start_time = None
+        self.start_time_sec = None
         self.is_paused = False
         self.playback_speed = 1.0
         self.pause_time = 0
@@ -371,7 +448,13 @@ class Window(QtWidgets.QMainWindow):
         self.lastGroundTrack_degT = None
         self.lastGroundSpeed_mph = None
         self.lastTimestamp_ms = 0
-        self.read_data()
+        self.is_dragging = False
+        self.update_animation_frame()
+
+    def timeline_change(self):
+        self.scrub_timeline(self.timeline.value() * 1000.0)
+        self.is_paused = False
+        self.update()
 
     def keyPressEvent(self, event):
         key = event.text().upper()
@@ -386,13 +469,13 @@ class Window(QtWidgets.QMainWindow):
         event.accept()
 
     # Advance the playback to the current visual frame using the system's clock time to
-    # help maintain a "real time" playback speed.
-    def advance(self):
-        if self.start_time is None:
-            self.start_time = time.time()
+    # maintain a "real time" playback speed.
+    def advance_timeline(self):
+        if self.start_time_sec is None:
+            self.start_time_sec = time.time()
 
         if not self.is_paused:
-            current_time = (time.time() - self.start_time) * 1000 * self.playback_speed + self.pause_time
+            current_time = (time.time() - self.start_time_sec) * 1000 * self.playback_speed + self.pause_time
             while self.current_index < len(self.data):
                 record = self.data[self.current_index]
                 timestamp = get_timestamp(record)
@@ -435,8 +518,33 @@ class Window(QtWidgets.QMainWindow):
 
                 self.current_index += 1
 
-    def read_data(self):
-        self.advance()
+    # Shift the timeline to a specified new log time, expressed in milliseconds
+    def scrub_timeline(self, time_ms):
+
+        # if the desired time is prior to the current time, reset the index
+        # otherwise, we can continue from the current index and thus save some effort
+        if self.lastTimestamp_ms != None:
+            if time_ms < self.lastTimestamp_ms:
+                self.current_index = 0
+        else:
+            self.current_index = 0
+
+        while self.current_index < len(self.data):
+            record = self.data[self.current_index]
+            timestamp = get_timestamp(record)
+            if timestamp == -1:
+                self.current_index += 1
+                continue
+
+            if timestamp > time_ms:
+                break
+
+            self.current_index += 1
+
+        self.start_time_sec = time.time() - time_ms / 1000
+
+    def update_animation_frame(self):
+        self.advance_timeline()
         ts_sec = self.lastTimestamp_ms / 1000
         baroAlt_ft = self.lastBaroAlt_ft
         if baroAlt_ft is None:
@@ -457,9 +565,68 @@ class Window(QtWidgets.QMainWindow):
         self.opengl_widget.set_text(a + b + c)
         self.opengl_widget.update_ground_track(self.lastGroundTrack_degT)
         self.update()
-        QtCore.QTimer.singleShot(12, self.read_data)
+        QtCore.QTimer.singleShot(16, self.update_animation_frame)
 
+class TickOverride(QtWidgets.QSlider):
+    def __init__(self, *args, **kwargs):
+        super().__init__(QtCore.Qt.Horizontal, *args, **kwargs)
+        self.ticks = set()
+        self.setTickPosition(self.TicksAbove)
 
+    def addTick(self, value=None):
+        if isinstance(value, bool) or value is None:
+            value = self.value()
+        if not value in self.ticks and self.minimum() <= value <= self.maximum():
+            self.ticks.add(value)
+            self.update()
+
+    def removeTick(self, value=None):
+        if isinstance(value, bool) or value is None:
+            value = self.value()
+        if value in self.ticks:
+            self.ticks.discard(value)
+            self.update()
+
+    def paintEvent(self, event):
+        qp = QtWidgets.QStylePainter(self)
+        opt = QtWidgets.QStyleOptionSlider()
+        style = self.style()
+        self.initStyleOption(opt)
+
+        # draw the groove only
+        opt.subControls = style.SC_SliderGroove
+        qp.drawComplexControl(style.CC_Slider, opt)
+
+        sliderMin = self.minimum()
+        sliderMax = self.maximum()
+        sliderLength = style.pixelMetric(style.PM_SliderLength, opt, self)
+        span = style.pixelMetric(style.PM_SliderSpaceAvailable, opt, self)
+
+        # if the tick option is set and ticks actually exist, draw them
+        if self.ticks and self.tickPosition():
+            qp.save()
+            qp.translate(opt.rect.x() + sliderLength / 2, 0)
+            grooveRect = style.subControlRect(
+                style.CC_Slider, opt, style.SC_SliderGroove)
+            grooveTop = grooveRect.top() - 1
+            grooveBottom = grooveRect.bottom() + 1
+            ticks = self.tickPosition()
+            bottom = self.height()
+            for value in sorted(self.ticks):
+                x = style.sliderPositionFromValue(
+                    sliderMin, sliderMax, value, span)
+                if ticks & self.TicksAbove:
+                    qp.drawLine(x, 0, x, grooveTop)
+                if ticks & self.TicksBelow:
+                    qp.drawLine(x, grooveBottom, x, bottom)
+            qp.restore()
+
+        opt.subControls = style.SC_SliderHandle
+        opt.activeSubControls = style.SC_SliderHandle
+        if self.isSliderDown():
+            opt.state |= style.State_Sunken
+        qp.drawComplexControl(style.CC_Slider, opt)
+        qp.end()
 
 if __name__ == "__main__":
 
@@ -471,6 +638,6 @@ if __name__ == "__main__":
 
     app = QtWidgets.QApplication(sys.argv)
     window = Window()
-    window.resize(1000, 1000)
+    window.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
     window.show()
     sys.exit(app.exec_())
