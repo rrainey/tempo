@@ -159,7 +159,7 @@ void CombinedLogger::loop() {
 void CombinedLogger::sendVisualizerOrientationMessage() {
     /**
      * While in OPS_STATIC_TEST, we will output orientation quaternion
-     * state to the serial port to allow the data to be connected to the
+     * state messages to the USB serial port to allow the data to be displayed in the
      * visualizer desktop app
      */
     if (OPS_MODE == OPS_STATIC_TEST) {
@@ -181,6 +181,7 @@ void CombinedLogger::sendVisualizerOrientationMessage() {
         sprintf(csbuf, "*%02X", cs);
         strcat(pbuf, csbuf);
         Serial.println(pbuf);
+        
     }
 }
 
