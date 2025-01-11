@@ -5,3 +5,9 @@ gerber.zip
 ArduinoOutput
 .venv
 .pio
+
+*/site-packages
+*/site-packages/*
+desktop/pose/pose/*
+
+*.log
