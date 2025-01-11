@@ -148,7 +148,7 @@ class Window(QtWidgets.QMainWindow):
         self.opengl_widget = OpenGLWidget(self)
         self.setCentralWidget(self.opengl_widget)
         self.setWindowTitle("Tempo Visualizer")
-        self.serial_port = serial.Serial('COM8', 115200, timeout=30)  
+        self.serial_port = serial.Serial('COM19', 115200, timeout=30)  
         self.read_data()
 
     def read_data(self):

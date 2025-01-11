@@ -1,6 +1,6 @@
 # Visualizer
 
-This Python application runs on the desktop and is designed to pair up with the "fustion_tests" Arduino application allowing you to 
+This Python application runs on the desktop and is designed to pair up with the "fusion_tests" Arduino application allowing you to 
 visualize the current calculated orientation of the Tempo device. 
 
 This application demonstrates an important capability of the Tempo device: Tempo uses the on-board Inertial Measurement chip to compute
