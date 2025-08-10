@@ -5,7 +5,7 @@
 	(uuid "cdc525df-a63c-4afd-bbd4-740e6c81f0a5")
 	(paper "A2")
 	(title_block
-		(date "2025-02-02")
+		(date "2025-02-25")
 	)
 	(lib_symbols
 		(symbol "20021221:20021221-00010C4LF"
@@ -8858,283 +8858,6 @@
 						)
 					)
 					(number "9"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
-		(symbol "nora-altium-import:root_0_SW_TACT_SPST-NO_4Pin"
-			(pin_names
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "TACTILE SWITCH SPST SINGLE SMD"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_fp_filters" "*SW_TACT_SMT_6mm*"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "root_0_SW_TACT_SPST-NO_4Pin_1_0"
-				(polyline
-					(pts
-						(xy 2.54 7.62) (xy 0 7.62)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 2.54 2.54) (xy 0 2.54)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 5.08 6.858) (xy 5.08 7.62)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 5.08 6.477)
-					(radius 0.381)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 5.08 6.096) (xy 6.35 4.064)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 5.08 3.683)
-					(radius 0.381)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 5.08 2.54) (xy 5.08 3.302)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 7.62 7.62) (xy 2.54 7.62)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 7.62 2.54) (xy 2.54 2.54)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(rectangle
-					(start 10.16 10.16)
-					(end 0 0)
-					(stroke
-						(width 0.0254)
-						(type solid)
-						(color 128 0 0 1)
-					)
-					(fill
-						(type background)
-					)
-				)
-				(polyline
-					(pts
-						(xy 10.16 7.62) (xy 7.62 7.62)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 10.16 2.54) (xy 7.62 2.54)
-					)
-					(stroke
-						(width 0)
-						(type solid)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(pin passive line
-					(at -2.54 7.62 0)
-					(length 2.54)
-					(name "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -2.54 2.54 0)
-					(length 2.54)
-					(name "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 12.7 7.62 180)
-					(length 2.54)
-					(name "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 12.7 2.54 180)
-					(length 2.54)
-					(name "4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "4"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -51938,6 +51661,428 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "peakick:PTS850"
+			(pin_names
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "SW3"
+				(at 0 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+				)
+			)
+			(property "Value" "PTS850"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "Footprint" "peakick:PTS850-with-bosses"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "TACTILE SWITCH SPST SINGLE SMD"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "PART NUMBER" "UBXH19-0000035"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "ALTIUM_VALUE" "PTS645SM43SMTR92LFS"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "MIN OPERATING TEMP" "-40°C"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "MAX OPERATING TEMP" "85°C"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "PART TYPE" "Switch"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "EDITOR" "enric.suchanek"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "RELEASED BY" "charlotte.biber"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "RELEASE DATA" "2021-08-24T16:41:59"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "UBX WIKI" "https://wiki.u-blox.com/bin/view/Operations/PartDetails?index=32051"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "ENV" "ROHS"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "PERMITTED USE" "Internal Use"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "PERFERRED" "PREF"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "REFDES" "S"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "MANUFACTURER" "C&K"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "MFG P/N STATUS" "Active"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "MFG P/N SPLIT" "100"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "MFG P/N RELEASED" "No"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "MFG P/N DATASHEET" "https://wiki.u-blox.com/bin/view/Generic/Docs/DocumentSummary?index=32053"
+				(at -3.048 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+					(hide yes)
+				)
+			)
+			(property "MPN" "PTS850VM18PSMTR LFS"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "*SW_TACT_SMT_6mm*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "PTS850_0_1"
+				(polyline
+					(pts
+						(xy 0 7.62) (xy 2.54 7.62) (xy 2.54 2.54) (xy 0 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(rectangle
+					(start 1.27 8.89)
+					(end 10.16 1.27)
+					(stroke
+						(width 0)
+						(type default)
+						(color 0 0 0 1)
+					)
+					(fill
+						(type background)
+					)
+				)
+				(polyline
+					(pts
+						(xy 3.81 5.08) (xy 2.54 5.08)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 8.89 5.08) (xy 7.3815 5.0799)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 10.16 7.62) (xy 8.89 7.62) (xy 8.89 2.54) (xy 10.16 2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "PTS850_1_0"
+				(circle
+					(center 4.1608 5.0526)
+					(radius 0.381)
+					(stroke
+						(width 0)
+						(type solid)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 4.5418 5.0526) (xy 6.5738 6.3226)
+					)
+					(stroke
+						(width 0)
+						(type solid)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 6.9548 5.0526)
+					(radius 0.381)
+					(stroke
+						(width 0)
+						(type solid)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(pin passive line
+					(at -2.54 7.62 0)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -2.54 2.54 0)
+					(length 2.54)
+					(name "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 12.7 7.62 180)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 12.7 2.54 180)
+					(length 2.54)
+					(name "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "peakick:STAND-OFFTIGHT"
 			(exclude_from_sim no)
 			(in_bom yes)
@@ -53053,6 +53198,12 @@
 		(uuid "04873f22-7712-4b5b-b50d-bfb5415c8197")
 	)
 	(junction
+		(at 259.08 322.58)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "054ee79a-0f3c-48e9-ad80-4f89a182ba6e")
+	)
+	(junction
 		(at 17.78 121.92)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -53125,12 +53276,6 @@
 		(uuid "3e365243-d6f2-48a0-867a-423cb3a4e450")
 	)
 	(junction
-		(at 233.68 312.42)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "43262f88-ce1e-44de-bfac-8dc56c07d855")
-	)
-	(junction
 		(at 275.59 39.37)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -53149,6 +53294,12 @@
 		(uuid "59a9b5f5-73f5-4661-a741-27537279d0a2")
 	)
 	(junction
+		(at 238.76 317.5)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "5bd6a0d2-4d86-46ae-9bfb-52e92f33dda4")
+	)
+	(junction
 		(at 273.05 58.42)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -53159,6 +53310,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "6ab9559b-5f00-48ca-9a51-7859603cdf73")
+	)
+	(junction
+		(at 238.76 312.42)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "6d48c2be-f56b-4a49-bc47-5c746aad4822")
 	)
 	(junction
 		(at 405.13 46.99)
@@ -53221,22 +53378,10 @@
 		(uuid "a2c7b74e-fd2e-45c9-a900-660ac4f92bb7")
 	)
 	(junction
-		(at 240.03 356.87)
+		(at 240.03 344.17)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "b48ec00d-88e5-4ddf-ad59-0c6f2cc29354")
-	)
-	(junction
-		(at 234.95 344.17)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "b90f66e1-97b0-4d2e-93cd-f0fe35275341")
-	)
-	(junction
-		(at 238.76 325.12)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "bd0effa0-fe85-463c-b895-918ba33c73a6")
+		(uuid "ba653c4b-5587-45d4-83cf-49b9a0d704f2")
 	)
 	(junction
 		(at 209.55 121.92)
@@ -53263,6 +53408,12 @@
 		(uuid "d5b035c6-5ef0-4250-bb97-ed2df1702bab")
 	)
 	(junction
+		(at 240.03 349.25)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "d6375ce8-ee81-40d0-bcee-a1eaede8adbe")
+	)
+	(junction
 		(at 77.47 31.75)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -53279,6 +53430,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "da2ff46a-e6b8-40c2-8c26-7c5ef1519ef1")
+	)
+	(junction
+		(at 260.35 354.33)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "de7469b4-19f2-4ce0-b2cb-400c2dea6ca3")
 	)
 	(junction
 		(at 355.6 327.66)
@@ -53310,6 +53467,12 @@
 		(color 0 0 0 0)
 		(uuid "f6fd8783-11a0-4687-8beb-4786893c56a6")
 	)
+	(junction
+		(at 260.35 355.6)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "fe3a52fb-a6c2-4060-a2d3-1b8ee1c7cd4c")
+	)
 	(no_connect
 		(at 33.02 46.99)
 		(uuid "085aa044-3be8-49fc-bdc6-853e017ba374")
@@ -53321,10 +53484,6 @@
 	(no_connect
 		(at 389.89 227.33)
 		(uuid "0cee4682-eee6-45fe-bf71-09ad4341dcaf")
-	)
-	(no_connect
-		(at 256.54 317.5)
-		(uuid "0da25f34-9107-4104-8dab-5741eda581c6")
 	)
 	(no_connect
 		(at 464.82 163.83)
@@ -53427,10 +53586,6 @@
 		(uuid "cae40386-789e-48eb-a15c-c1d4413f841b")
 	)
 	(no_connect
-		(at 257.81 349.25)
-		(uuid "cb113028-6d96-4f86-9a2a-d6d73b6afe47")
-	)
-	(no_connect
 		(at 242.57 194.31)
 		(uuid "d506ffdf-0c9a-47ec-94e3-11b9faa18379")
 	)
@@ -53496,16 +53651,6 @@
 	)
 	(wire
 		(pts
-			(xy 240.03 354.33) (xy 242.57 354.33)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "01532af8-97fd-4bbb-afb8-f70d53007ea6")
-	)
-	(wire
-		(pts
 			(xy 231.14 252.73) (xy 231.14 255.27)
 		)
 		(stroke
@@ -53556,7 +53701,7 @@
 	)
 	(wire
 		(pts
-			(xy 219.71 344.17) (xy 234.95 344.17)
+			(xy 219.71 344.17) (xy 240.03 344.17)
 		)
 		(stroke
 			(width 0)
@@ -53583,6 +53728,16 @@
 			(type default)
 		)
 		(uuid "068ec816-61b6-4c9d-b831-007e93c60dc2")
+	)
+	(wire
+		(pts
+			(xy 259.08 322.58) (xy 267.97 322.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "06933c4c-47cf-4e06-93cb-fd00fbed33d5")
 	)
 	(wire
 		(pts
@@ -53623,6 +53778,16 @@
 			(type default)
 		)
 		(uuid "074ac3ad-9b5c-47f1-b8b5-bfc751e36afb")
+	)
+	(wire
+		(pts
+			(xy 240.03 354.33) (xy 242.57 354.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "07b278e1-315f-4b17-80cd-a4a395d646f1")
 	)
 	(wire
 		(pts
@@ -54036,16 +54201,6 @@
 	)
 	(wire
 		(pts
-			(xy 233.68 325.12) (xy 238.76 325.12)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "21bfcdbb-e313-4bb5-8e38-5a6fa08d2be8")
-	)
-	(wire
-		(pts
 			(xy 492.76 129.54) (xy 492.76 133.35)
 		)
 		(stroke
@@ -54053,6 +54208,16 @@
 			(type default)
 		)
 		(uuid "222d01f9-a069-4af3-b123-42873fe75af9")
+	)
+	(wire
+		(pts
+			(xy 269.24 354.33) (xy 269.24 355.6)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "23731444-42fb-4aa9-836f-50d3aecab410")
 	)
 	(wire
 		(pts
@@ -54113,6 +54278,16 @@
 			(type solid)
 		)
 		(uuid "28beb96a-c1d4-42d7-84d5-de3b3525a140")
+	)
+	(wire
+		(pts
+			(xy 259.08 317.5) (xy 259.08 322.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2974fce7-fc6f-429c-bb49-c66cb6069f45")
 	)
 	(wire
 		(pts
@@ -54316,7 +54491,7 @@
 	)
 	(wire
 		(pts
-			(xy 215.9 312.42) (xy 233.68 312.42)
+			(xy 215.9 312.42) (xy 238.76 312.42)
 		)
 		(stroke
 			(width 0)
@@ -54453,16 +54628,6 @@
 			(type solid)
 		)
 		(uuid "3c9ebf6f-00a2-45d4-8957-db0becb17db4")
-	)
-	(wire
-		(pts
-			(xy 233.68 312.42) (xy 238.76 312.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "3d682341-b50c-4611-bffc-64bb249c3ca5")
 	)
 	(wire
 		(pts
@@ -54676,6 +54841,16 @@
 	)
 	(wire
 		(pts
+			(xy 238.76 322.58) (xy 241.3 322.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "55ca151c-472a-4a0e-92ac-027126a82b8e")
+	)
+	(wire
+		(pts
 			(xy 148.59 246.38) (xy 137.16 246.38)
 		)
 		(stroke
@@ -54706,7 +54881,7 @@
 	)
 	(wire
 		(pts
-			(xy 260.35 354.33) (xy 260.35 356.87)
+			(xy 260.35 354.33) (xy 260.35 355.6)
 		)
 		(stroke
 			(width 0)
@@ -54723,16 +54898,6 @@
 			(type default)
 		)
 		(uuid "591b0dbb-e6dc-4bf2-b459-8691baf76e7d")
-	)
-	(wire
-		(pts
-			(xy 238.76 325.12) (xy 238.76 322.58)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "5934e92a-fa33-44c3-be8a-3923a3d8902b")
 	)
 	(wire
 		(pts
@@ -54756,6 +54921,16 @@
 	)
 	(wire
 		(pts
+			(xy 269.24 355.6) (xy 260.35 355.6)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5b64dc4b-532a-430d-9de6-5cc9a8293048")
+	)
+	(wire
+		(pts
 			(xy 176.53 330.2) (xy 176.53 335.28)
 		)
 		(stroke
@@ -54773,6 +54948,16 @@
 			(type default)
 		)
 		(uuid "5bda2481-418f-470c-b4da-149c1637ed75")
+	)
+	(wire
+		(pts
+			(xy 260.35 355.6) (xy 260.35 356.87)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5bfc1413-aeb8-4691-bfa3-ff04bef62ca2")
 	)
 	(wire
 		(pts
@@ -54853,16 +55038,6 @@
 			(type default)
 		)
 		(uuid "61ecfc8f-09a4-40d6-9a3d-e35dabf52d20")
-	)
-	(wire
-		(pts
-			(xy 234.95 344.17) (xy 240.03 344.17)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "62255d8f-b1cd-45e4-85ff-f7fcbb9d2ee5")
 	)
 	(wire
 		(pts
@@ -55006,6 +55181,16 @@
 	)
 	(wire
 		(pts
+			(xy 240.03 349.25) (xy 240.03 354.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "722d6d3f-dc93-48d4-9773-6058fe3bd124")
+	)
+	(wire
+		(pts
 			(xy 491.49 36.83) (xy 481.33 36.83)
 		)
 		(stroke
@@ -55033,6 +55218,16 @@
 			(type default)
 		)
 		(uuid "7324f152-a97c-427c-9249-b9d8e52316d0")
+	)
+	(wire
+		(pts
+			(xy 260.35 354.33) (xy 260.35 349.25)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "74b7a3a5-b701-48d0-98b3-23655a1792db")
 	)
 	(wire
 		(pts
@@ -55143,6 +55338,16 @@
 			(type default)
 		)
 		(uuid "7ce135ca-a838-4047-abda-b7c92af286f7")
+	)
+	(wire
+		(pts
+			(xy 240.03 344.17) (xy 269.24 344.17)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7deef52a-bc04-4b04-a742-9361442248a7")
 	)
 	(wire
 		(pts
@@ -55373,6 +55578,16 @@
 			(type default)
 		)
 		(uuid "8cd1e387-6647-4430-868d-4b1fcba5c637")
+	)
+	(wire
+		(pts
+			(xy 267.97 312.42) (xy 238.76 312.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8d336f5a-9163-489d-9798-82ac3862ad66")
 	)
 	(wire
 		(pts
@@ -55686,16 +55901,6 @@
 	)
 	(wire
 		(pts
-			(xy 233.68 314.96) (xy 233.68 312.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "a699bcf8-6cfb-41ac-9e7b-ba3e48ac7b44")
-	)
-	(wire
-		(pts
 			(xy 176.53 307.34) (xy 176.53 309.88)
 		)
 		(stroke
@@ -55886,16 +56091,6 @@
 	)
 	(wire
 		(pts
-			(xy 238.76 322.58) (xy 241.3 322.58)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "b8be052c-0843-4745-8181-ccec454b6ca3")
-	)
-	(wire
-		(pts
 			(xy 355.6 176.53) (xy 407.67 176.53)
 		)
 		(stroke
@@ -55983,6 +56178,16 @@
 			(type default)
 		)
 		(uuid "c3a30a3b-db87-48e7-972f-233b3c661694")
+	)
+	(wire
+		(pts
+			(xy 238.76 317.5) (xy 238.76 322.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c3b675e0-e847-4aba-a782-50cda77dea89")
 	)
 	(wire
 		(pts
@@ -56306,6 +56511,16 @@
 	)
 	(wire
 		(pts
+			(xy 260.35 349.25) (xy 257.81 349.25)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d81d3af8-cca3-46a8-b64f-e3746e151fa7")
+	)
+	(wire
+		(pts
 			(xy 264.16 24.13) (xy 279.4 24.13)
 		)
 		(stroke
@@ -56566,6 +56781,16 @@
 	)
 	(wire
 		(pts
+			(xy 256.54 317.5) (xy 259.08 317.5)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f0d78363-e0b6-430b-965c-50074491987c")
+	)
+	(wire
+		(pts
 			(xy 242.57 204.47) (xy 234.95 204.47)
 		)
 		(stroke
@@ -56583,16 +56808,6 @@
 			(type default)
 		)
 		(uuid "f2dac0cf-d6a5-4dd7-92f7-54636871375a")
-	)
-	(wire
-		(pts
-			(xy 234.95 344.17) (xy 234.95 346.71)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f30159b0-6563-495a-b070-c45d04a6dd81")
 	)
 	(wire
 		(pts
@@ -56736,16 +56951,6 @@
 	)
 	(wire
 		(pts
-			(xy 234.95 356.87) (xy 240.03 356.87)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "fcdd533e-b978-4a69-8018-5f26d5071294")
-	)
-	(wire
-		(pts
 			(xy 388.62 189.23) (xy 407.67 189.23)
 		)
 		(stroke
@@ -56793,16 +56998,6 @@
 			(type default)
 		)
 		(uuid "fed682da-0cc5-4b25-a980-cc7fce506ad1")
-	)
-	(wire
-		(pts
-			(xy 240.03 356.87) (xy 240.03 354.33)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "feee13b0-5a48-4e09-86ad-a04b6d346fcb")
 	)
 	(wire
 		(pts
@@ -57950,7 +58145,7 @@
 	)
 	(symbol
 		(lib_id "nora-altium-import:root_0_Diode_TVS")
-		(at 234.95 351.79 0)
+		(at 269.24 349.25 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -57958,7 +58153,7 @@
 		(dnp no)
 		(uuid "006c5467-874c-461e-8375-f955c17dc24d")
 		(property "Reference" "D2"
-			(at 237.236 353.06 0)
+			(at 271.526 350.52 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -57967,7 +58162,7 @@
 			)
 		)
 		(property "Value" "${PART NUMBER}${DNP}"
-			(at 233.68 355.6 0)
+			(at 267.97 353.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -57977,7 +58172,7 @@
 			)
 		)
 		(property "Footprint" "Diode_SMD:D_SOD-923"
-			(at 234.95 351.79 0)
+			(at 269.24 349.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -57986,7 +58181,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 234.95 351.79 0)
+			(at 269.24 349.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -57995,7 +58190,7 @@
 			)
 		)
 		(property "Description" "ESD PROTECTION DIODE ULTRA LOW LEAKAGE SOD923 ON SEMI 3V3"
-			(at 234.95 351.79 0)
+			(at 269.24 349.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58004,7 +58199,7 @@
 			)
 		)
 		(property "PART NUMBER" "UBXH07-0000034"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58014,7 +58209,7 @@
 			)
 		)
 		(property "ALTIUM_VALUE" "3V3"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58024,7 +58219,7 @@
 			)
 		)
 		(property "PART TYPE" "Diode"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58034,7 +58229,7 @@
 			)
 		)
 		(property "EDITOR" "pierpaolo.arban"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58044,7 +58239,7 @@
 			)
 		)
 		(property "RELEASED BY" "dario.antonaz"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58054,7 +58249,7 @@
 			)
 		)
 		(property "RELEASE DATA" "2015-04-23T14:51:11"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58064,7 +58259,7 @@
 			)
 		)
 		(property "UBX WIKI" "https://wiki.u-blox.com/bin/view/Operations/PartDetails?index=22447"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58074,7 +58269,7 @@
 			)
 		)
 		(property "ENV" "ROHS"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58084,7 +58279,7 @@
 			)
 		)
 		(property "PERMITTED USE" "Support Products"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58094,7 +58289,7 @@
 			)
 		)
 		(property "PERFERRED" "PREF"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58104,7 +58299,7 @@
 			)
 		)
 		(property "REFDES" "D"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58114,7 +58309,7 @@
 			)
 		)
 		(property "MANUFACTURER" "ON Semiconductor"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58124,7 +58319,7 @@
 			)
 		)
 		(property "MFG P/N STATUS" "Active"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58134,7 +58329,7 @@
 			)
 		)
 		(property "MFG P/N SPLIT" "100"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58144,7 +58339,7 @@
 			)
 		)
 		(property "MFG P/N RELEASED" "Yes"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58154,7 +58349,7 @@
 			)
 		)
 		(property "MFG P/N DATASHEET" "https://wiki.u-blox.com/bin/view/Generic/Docs/DocumentSummary?index=22449"
-			(at 232.664 346.202 0)
+			(at 266.954 343.662 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -58164,7 +58359,7 @@
 			)
 		)
 		(property "MPN" "ESD9R3.3ST5G"
-			(at 234.95 351.79 0)
+			(at 278.384 347.218 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -62662,7 +62857,7 @@
 		)
 	)
 	(symbol
-		(lib_id "nora-altium-import:root_0_SW_TACT_SPST-NO_4Pin")
+		(lib_id "peakick:PTS850")
 		(at 243.84 325.12 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -62698,7 +62893,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.ckswitches.com/media/3012/pts850.pdf"
 			(at 243.84 325.12 0)
 			(effects
 				(font
@@ -62902,6 +63097,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -64318,69 +64514,6 @@
 			(project "tempo"
 				(path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
 					(reference "U8")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "nora-altium-import:GND_POWER_GROUND")
-		(at 238.76 325.12 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "5fc821bf-2094-46b3-b4dd-cd27ff576367")
-		(property "Reference" "#PWR07"
-			(at 238.76 325.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "GND"
-			(at 238.76 331.47 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Footprint" ""
-			(at 238.76 325.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 238.76 325.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 238.76 325.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin ""
-			(uuid "39618a1d-1549-4af6-90bc-9b6e91a5cd7c")
-		)
-		(instances
-			(project "tempo"
-				(path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
-					(reference "#PWR07")
 					(unit 1)
 				)
 			)
@@ -67427,7 +67560,7 @@
 	)
 	(symbol
 		(lib_id "nora-altium-import:root_0_Diode_TVS")
-		(at 233.68 320.04 0)
+		(at 267.97 317.5 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -67435,7 +67568,7 @@
 		(dnp no)
 		(uuid "aaf5c2ec-24bd-4a9c-b6b2-39ae20eaa1f9")
 		(property "Reference" "D1"
-			(at 235.966 321.31 0)
+			(at 270.256 318.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67444,7 +67577,7 @@
 			)
 		)
 		(property "Value" "${PART NUMBER}${DNP}"
-			(at 232.41 323.85 0)
+			(at 266.7 321.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67454,7 +67587,7 @@
 			)
 		)
 		(property "Footprint" "Diode_SMD:D_SOD-923"
-			(at 233.68 320.04 0)
+			(at 267.97 317.5 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67463,7 +67596,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 233.68 320.04 0)
+			(at 267.97 317.5 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67472,7 +67605,7 @@
 			)
 		)
 		(property "Description" "ESD PROTECTION DIODE ULTRA LOW LEAKAGE SOD923 ON SEMI 3V3"
-			(at 233.68 320.04 0)
+			(at 267.97 317.5 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67481,7 +67614,7 @@
 			)
 		)
 		(property "PART NUMBER" "UBXH07-0000034"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67491,7 +67624,7 @@
 			)
 		)
 		(property "ALTIUM_VALUE" "3V3"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67501,7 +67634,7 @@
 			)
 		)
 		(property "PART TYPE" "Diode"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67511,7 +67644,7 @@
 			)
 		)
 		(property "EDITOR" "pierpaolo.arban"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67521,7 +67654,7 @@
 			)
 		)
 		(property "RELEASED BY" "dario.antonaz"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67531,7 +67664,7 @@
 			)
 		)
 		(property "RELEASE DATA" "2015-04-23T14:51:11"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67541,7 +67674,7 @@
 			)
 		)
 		(property "UBX WIKI" "https://wiki.u-blox.com/bin/view/Operations/PartDetails?index=22447"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67551,7 +67684,7 @@
 			)
 		)
 		(property "ENV" "ROHS"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67561,7 +67694,7 @@
 			)
 		)
 		(property "PERMITTED USE" "Support Products"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67571,7 +67704,7 @@
 			)
 		)
 		(property "PERFERRED" "PREF"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67581,7 +67714,7 @@
 			)
 		)
 		(property "REFDES" "D"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67591,7 +67724,7 @@
 			)
 		)
 		(property "MANUFACTURER" "ON Semiconductor"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67601,7 +67734,7 @@
 			)
 		)
 		(property "MFG P/N STATUS" "Active"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67611,7 +67744,7 @@
 			)
 		)
 		(property "MFG P/N SPLIT" "100"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67621,7 +67754,7 @@
 			)
 		)
 		(property "MFG P/N RELEASED" "Yes"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67631,7 +67764,7 @@
 			)
 		)
 		(property "MFG P/N DATASHEET" "https://wiki.u-blox.com/bin/view/Generic/Docs/DocumentSummary?index=22449"
-			(at 231.394 314.452 0)
+			(at 265.684 311.912 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -67641,7 +67774,7 @@
 			)
 		)
 		(property "MPN" "ESD9R3.3ST5G"
-			(at 233.68 320.04 0)
+			(at 277.622 314.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -69614,7 +69747,7 @@
 		)
 	)
 	(symbol
-		(lib_id "nora-altium-import:root_0_SW_TACT_SPST-NO_4Pin")
+		(lib_id "peakick:PTS850")
 		(at 245.11 356.87 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -69650,7 +69783,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.ckswitches.com/media/3012/pts850.pdf"
 			(at 245.11 356.87 0)
 			(effects
 				(font
@@ -69854,6 +69987,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "2"
@@ -70739,69 +70873,6 @@
 			(project "tempo"
 				(path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
 					(reference "U6")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "nora-altium-import:GND_POWER_GROUND")
-		(at 240.03 356.87 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "ea7b913f-ec95-4481-9c16-71c38c5a9b3a")
-		(property "Reference" "#PWR08"
-			(at 240.03 356.87 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "GND"
-			(at 240.03 363.22 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Footprint" ""
-			(at 240.03 356.87 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 240.03 356.87 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 240.03 356.87 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin ""
-			(uuid "24eaa862-f692-4279-8da5-19f4699d152b")
-		)
-		(instances
-			(project "tempo"
-				(path "/cdc525df-a63c-4afd-bbd4-740e6c81f0a5"
-					(reference "#PWR08")
 					(unit 1)
 				)
 			)
