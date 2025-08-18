@@ -16,6 +16,7 @@
 #include "app/events.h"
 #include "config/settings.h"
 #include "services/timebase.h"
+#include "services/gnss.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -28,6 +29,12 @@ static void test_event_handler(const app_event_t *event, void *user_data)
 
 /* Test event subscriber */
 static event_subscriber_t test_subscriber;
+
+/* Test NMEA callback */
+static void test_nmea_callback(const char *sentence, size_t len)
+{
+    LOG_INF("NMEA received (%d bytes): %s", len, sentence);
+}
 
 static int smoke_test_file_write(void)
 {
@@ -209,10 +216,22 @@ int main(void)
         LOG_ERR("Smoke test failed: %d", ret);
     }
     
+    /* Initialize GNSS */
+    LOG_INF("About to init GNSS...");
+    ret = gnss_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize GNSS: %d", ret);
+    } else {
+        /* Register test callback */
+        gnss_register_nmea_callback(test_nmea_callback);
+        LOG_INF("GNSS initialized, waiting for NMEA data...");
+    }
+    
     /* Log periodic heartbeat */
+    int counter = 0;
     while (1) {
         k_sleep(K_SECONDS(5));
-        LOG_DBG("Heartbeat - system running");
+        LOG_DBG("Heartbeat - system running (%d)", counter++);
     }
     
     return 0;

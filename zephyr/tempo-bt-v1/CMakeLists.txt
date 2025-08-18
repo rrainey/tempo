@@ -12,6 +12,7 @@ target_sources(app PRIVATE
     src/events.c
     src/config/settings.c
     src/services/timebase.c
+    src/services/gnss_m10q.c
 )
 
 target_include_directories(app PRIVATE include)

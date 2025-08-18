@@ -1,4 +1,13 @@
-/*
+/* UART for GNSS - Using UART1 instead */
+&uart1 {
+    status = "okay";
+    current-speed = <38400>;  /* SAM-M10Q default baud rate */
+    pinctrl-0 = <&uart1_default>;
+    pinctrl-1 = <&uart1_sleep>;
+    pinctrl-names = "default", "sleep";
+};
+
+/*/*
  * Copyright (c) 2024 Tempo-BT
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -67,5 +76,40 @@
 /* I2C for Barometer and Magnetometer - Task 20 */
 /* &i2c0 { }; */
 
-/* UART for GNSS - Task 13 */
-/* &uart2 { }; */
+/* UART for GNSS - Using UART1 */
+/* UART0 is typically used for console, so we'll use UART1 */
+&uart1 {
+    status = "okay";
+    current-speed = <9600>;  /* SAM-M10Q default baud rate */
+    pinctrl-0 = <&uart1_default>;
+    pinctrl-1 = <&uart1_sleep>;
+    pinctrl-names = "default", "sleep";
+    /* No hw-flow-control property = flow control disabled */
+};
+
+/* UART1 pin configuration - TX/RX only, RTS/CTS explicitly disconnected */
+&pinctrl {
+    uart1_default: uart1_default {
+        group1 {
+            psels = <NRF_PSEL(UART_TX, 0, 25)>,   /* P0.25 (VCOM1_TX) -> GNSS RX */
+                    <NRF_PSEL(UART_RX, 0, 26)>;   /* P0.26 (VCOM1_RX) <- GNSS TX */
+        };
+        group2 {
+            psels = <NRF_PSEL(UART_RTS, 0, 0xFFFFFFFF)>,  /* Disconnected */
+                    <NRF_PSEL(UART_CTS, 0, 0xFFFFFFFF)>;  /* Disconnected */
+        };
+    };
+
+    uart1_sleep: uart1_sleep {
+        group1 {
+            psels = <NRF_PSEL(UART_TX, 0, 25)>,
+                    <NRF_PSEL(UART_RX, 0, 26)>;
+            low-power-enable;
+        };
+        group2 {
+            psels = <NRF_PSEL(UART_RTS, 0, 0xFFFFFFFF)>,
+                    <NRF_PSEL(UART_CTS, 0, 0xFFFFFFFF)>;
+            low-power-enable;
+        };
+    };
+};
