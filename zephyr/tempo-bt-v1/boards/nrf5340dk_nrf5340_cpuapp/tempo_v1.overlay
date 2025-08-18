@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2024 Tempo-BT
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Tempo-BT V1 Board Overlay
+ */
+
+/ {
+    aliases {
+        spi-flash0 = &mx25r64;
+    };
+
+    chosen {
+        /* Zephyr console on UART0 (default) */
+        zephyr,console = &uart0;
+        zephyr,shell-uart = &uart0;
+    };
+};
+
+/* QSPI NOR Flash - MX25R6435F (64 Mbit) */
+&qspi {
+    status = "okay";
+    
+    mx25r64: mx25r6435f@0 {
+        compatible = "nordic,qspi-nor";
+        reg = <0>;
+        
+        /* MX25R6435F supports up to 80MHz in SDR mode */
+        sck-frequency = <8000000>; /* Start conservative at 8MHz */
+        
+        /* JEDEC ID for MX25R6435F */
+        jedec-id = [c2 28 17];
+        
+        /* 64 Mbit = 8 MByte */
+        size = <67108864>;
+        
+        /* Memory organization */
+        has-dpd;
+        t-enter-dpd = <10000>;
+        t-exit-dpd = <35000>;
+        
+        /* Quad mode configuration */
+        quad-enable-requirements = "S1B6";
+        
+        /* Read modes supported */
+        readoc = "read4io";
+        writeoc = "pp4io";
+        
+        partitions {
+            compatible = "fixed-partitions";
+            #address-cells = <1>;
+            #size-cells = <1>;
+            
+            lfs_storage: partition@0 {
+                label = "lfs_storage";
+                reg = <0x00000000 0x00800000>;  /* 8MB */
+            };
+        };
+    };
+};
+
+/* Placeholder sections for peripherals to be added in later tasks */
+
+/* SPI4 for IMU - Task 16 */
+/* &spi4 { }; */
+
+/* I2C for Barometer and Magnetometer - Task 20 */
+/* &i2c0 { }; */
+
+/* UART for GNSS - Task 13 */
+/* &uart2 { }; */

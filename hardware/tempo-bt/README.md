@@ -32,6 +32,15 @@ flowchart LR
 
 ---
 
+## User Outputs / Inputs
+
+| Signal | B106 connection | Description |
+|--------|----------------|--------------|
+| LED1   | `P1.06`          | |
+| LED2   | `P0.12`          | |
+| BTN1   | `P0.23`          | Pushbutton 1 (with hardware debounce) |
+| BTN2   | `P0.24`          | Pushbutton 2 (with hardware debounce) |
+
 ## Connectivity tables (by peripheral)
 
 ### 1) External QSPI NOR flash — **MX25R6435F (64 Mbit)**

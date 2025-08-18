@@ -53546,10 +53546,6 @@
 		(uuid "671e382d-cfbc-4640-9cd8-63840193e6c9")
 	)
 	(no_connect
-		(at 389.89 222.25)
-		(uuid "7f3514ca-ef20-4cf5-8ea2-fbfec9cf46d6")
-	)
-	(no_connect
 		(at 463.55 171.45)
 		(uuid "84e09509-84d2-4d97-bf3e-e7f44a065086")
 	)
@@ -53564,10 +53560,6 @@
 	(no_connect
 		(at 407.67 156.21)
 		(uuid "af135a45-174c-4c8f-b16b-9da32abab71b")
-	)
-	(no_connect
-		(at 73.66 41.91)
-		(uuid "bdddce6c-da03-4b9d-9e6d-70552ba4f6ef")
 	)
 	(no_connect
 		(at 219.71 137.16)
@@ -53606,8 +53598,8 @@
 		(uuid "dda94006-848b-4c49-adf5-0182dbd6e7de")
 	)
 	(no_connect
-		(at 389.89 219.71)
-		(uuid "df49d7f9-7de0-4528-9cc5-ade1db83526c")
+		(at 389.89 222.25)
+		(uuid "de26b624-bced-4e29-828a-1d7af6b888b9")
 	)
 	(no_connect
 		(at 148.59 248.92)
@@ -53828,16 +53820,6 @@
 			(type solid)
 		)
 		(uuid "08e3319e-5ee2-4630-b64f-6d4a7cb52fbd")
-	)
-	(wire
-		(pts
-			(xy 389.89 219.71) (xy 407.67 219.71)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "09d21142-dbe7-4ab1-b319-7240cff4267b")
 	)
 	(wire
 		(pts
@@ -54438,16 +54420,6 @@
 			(type default)
 		)
 		(uuid "30ee915a-bc7e-4d5f-b3a2-24dabb049857")
-	)
-	(wire
-		(pts
-			(xy 389.89 222.25) (xy 407.67 222.25)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "30faff8f-ce4a-4567-af82-9fc71b4655cf")
 	)
 	(wire
 		(pts
@@ -55361,6 +55333,16 @@
 	)
 	(wire
 		(pts
+			(xy 389.89 222.25) (xy 407.67 222.25)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7e8be63c-5748-47c7-90df-dcbed251aa91")
+	)
+	(wire
+		(pts
 			(xy 137.16 251.46) (xy 137.16 255.27)
 		)
 		(stroke
@@ -55748,6 +55730,16 @@
 			(type default)
 		)
 		(uuid "99a3197a-7c50-4583-bca8-fb71f917cc13")
+	)
+	(wire
+		(pts
+			(xy 389.89 219.71) (xy 407.67 219.71)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9a136ed9-bd86-4e1c-ae1c-55c065f09a4b")
 	)
 	(wire
 		(pts
@@ -57029,6 +57021,16 @@
 		)
 		(uuid "0b48a50c-5b48-43e1-b2ff-834b9a7deb2d")
 	)
+	(label "GNSS_TIMEPULSE"
+		(at 73.66 41.91 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "0c80b2b4-2195-42e9-83a5-7992fb41785e")
+	)
 	(label "D5"
 		(at 199.39 49.53 0)
 		(effects
@@ -57198,16 +57200,6 @@
 			(justify left bottom)
 		)
 		(uuid "3f8f0d42-7988-4524-a14f-81cd58584fc6")
-	)
-	(label "BTN3"
-		(at 389.89 224.79 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "408fff94-fd26-48be-acfd-2c9f74b2abd0")
 	)
 	(label "SWDCLK"
 		(at 167.64 243.84 0)
@@ -57818,6 +57810,16 @@
 			(justify left bottom)
 		)
 		(uuid "d5b2c712-ea23-45ce-9e9f-282ed1b761db")
+	)
+	(label "GNSS_TIMEPULSE"
+		(at 389.89 219.71 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "da3b4ce6-56d8-4a7f-85b0-0dea2de6b972")
 	)
 	(label "QSPI_CSN"
 		(at 335.28 332.74 0)
@@ -58589,6 +58591,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "ERJ-H3EF1002V"
@@ -58597,6 +58600,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -58749,6 +58753,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "ERJ-H3EF2201V"
@@ -58757,6 +58762,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -59876,6 +59882,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "MR06X1001FTL"
@@ -59884,6 +59891,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -61173,6 +61181,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "GRT033C81A104KE01D"
@@ -61181,6 +61190,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -62401,6 +62411,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "GRM188Z71A106MA73J"
@@ -62409,6 +62420,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -62753,6 +62765,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "GRM188Z71C225KE43D"
@@ -62761,6 +62774,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -64203,6 +64217,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "ERJ-H3EF2201V"
@@ -64211,6 +64226,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -64588,6 +64604,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "ERJ-H3EF1002V"
@@ -64596,6 +64613,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -64851,6 +64869,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "GRM188Z71A106MA73J"
@@ -64859,6 +64878,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -65023,6 +65043,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "GRM21BR71A475KE51L"
@@ -65031,6 +65052,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -65184,6 +65206,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "GRM188Z71A475KE15D"
@@ -65192,6 +65215,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -66704,6 +66728,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "GRM188R71A225KE15D"
@@ -66712,6 +66737,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -67874,6 +67900,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "CGA3E2X7R1H103K080AE"
@@ -67882,6 +67909,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -69256,6 +69284,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "ERJ-H3EF2201V"
@@ -69264,6 +69293,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -69356,6 +69386,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "MR06X2001FTL"
@@ -69364,6 +69395,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -69603,7 +69635,7 @@
 			)
 		)
 		(property "MPN" "MX25R6435FZNIL0-TR"
-			(at 370.84 332.74 0)
+			(at 385.572 312.166 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -69715,6 +69747,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "ERJ-H3EF2201V"
@@ -69723,6 +69756,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -70160,6 +70194,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "ERJ-H3EF2201V"
@@ -70168,6 +70203,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -70261,6 +70297,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "0603DC105KAT2A"
@@ -70269,6 +70306,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -70947,6 +70985,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "ERJ-H3EF1002V"
@@ -70955,6 +70994,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
@@ -71163,6 +71203,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(property "MPN" "GRM188Z71A475KE15D"
@@ -71171,6 +71212,7 @@
 				(font
 					(size 1.27 1.27)
 				)
+				(hide yes)
 			)
 		)
 		(pin "1"
