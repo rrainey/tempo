@@ -8,10 +8,75 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
+#include <zephyr/fs/fs.h>
+#include <string.h>
 
 #include "app_init.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+
+static int smoke_test_file_write(void)
+{
+    struct fs_file_t file;
+    int ret;
+    const char *test_str = "test\n";
+    char read_buf[32];
+    ssize_t bytes_written, bytes_read;
+
+    fs_file_t_init(&file);
+
+    /* Open file for writing */
+    ret = fs_open(&file, "/lfs/logs/smoke.txt", FS_O_CREATE | FS_O_WRITE);
+    if (ret < 0) {
+        LOG_ERR("Failed to open file for writing: %d", ret);
+        return ret;
+    }
+
+    /* Write test string */
+    bytes_written = fs_write(&file, test_str, strlen(test_str));
+    if (bytes_written < 0) {
+        LOG_ERR("Failed to write to file: %d", bytes_written);
+        fs_close(&file);
+        return bytes_written;
+    }
+    LOG_INF("Wrote %d bytes to smoke.txt", bytes_written);
+
+    /* Close file */
+    ret = fs_close(&file);
+    if (ret < 0) {
+        LOG_ERR("Failed to close file: %d", ret);
+        return ret;
+    }
+
+    /* Open file for reading to verify */
+    ret = fs_open(&file, "/lfs/logs/smoke.txt", FS_O_READ);
+    if (ret < 0) {
+        LOG_ERR("Failed to open file for reading: %d", ret);
+        return ret;
+    }
+
+    /* Read back the content */
+    bytes_read = fs_read(&file, read_buf, sizeof(read_buf) - 1);
+    if (bytes_read < 0) {
+        LOG_ERR("Failed to read from file: %d", bytes_read);
+        fs_close(&file);
+        return bytes_read;
+    }
+    read_buf[bytes_read] = '\0';
+    LOG_INF("Read %d bytes: '%s'", bytes_read, read_buf);
+
+    /* Close file */
+    fs_close(&file);
+
+    /* Verify content matches */
+    if (bytes_read == bytes_written && memcmp(test_str, read_buf, bytes_read) == 0) {
+        LOG_INF("File write/read smoke test PASSED");
+        return 0;
+    } else {
+        LOG_ERR("File content mismatch!");
+        return -1;
+    }
+}
 
 int main(void)
 {
@@ -53,6 +118,12 @@ int main(void)
     if (ret < 0) {
         LOG_ERR("Failed to initialize storage: %d", ret);
         /* Continue anyway for now */
+    }
+    
+    /* Run smoke test */
+    ret = smoke_test_file_write();
+    if (ret < 0) {
+        LOG_ERR("Smoke test failed: %d", ret);
     }
     
     /* Log periodic heartbeat */
