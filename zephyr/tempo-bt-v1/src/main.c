@@ -31,9 +31,14 @@ static void test_event_handler(const app_event_t *event, void *user_data)
 static event_subscriber_t test_subscriber;
 
 /* Test NMEA callback */
+static int nmea_count = 0;
 static void test_nmea_callback(const char *sentence, size_t len)
 {
-    LOG_INF("NMEA received (%d bytes): %s", len, sentence);
+    nmea_count++;
+    /* Only log every 10th sentence to avoid flooding */
+    if (nmea_count % 10 == 1) {
+        LOG_INF("NMEA #%d (%d bytes): %s", nmea_count, len, sentence);
+    }
 }
 
 static int smoke_test_file_write(void)

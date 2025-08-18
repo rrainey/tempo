@@ -9,6 +9,8 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include "services/gnss.h"
 
@@ -84,6 +86,40 @@ static void uart_cb(const struct device *dev, struct uart_event *evt, void *user
     }
 }
 
+/* Validate NMEA checksum */
+static bool validate_nmea_checksum(const char *sentence, size_t len)
+{
+    uint8_t calc_checksum = 0;
+
+    if (len < 8 || sentence[0] != '$') {
+        LOG_WRN("NMEA checksum failed: malformed sentence");
+        return false;
+    }
+    
+    const char *p = &sentence[1];
+    for (size_t i = 1; i < len - 3; i++) {
+        if (*p == '*') {
+            break;
+        }
+        calc_checksum ^= (uint8_t)*p;
+        p++;
+    }
+
+    if (*p != '*') {
+        LOG_WRN("NMEA checksum failed: no asterisk");
+        return false;
+    }
+    
+    /* Parse provided checksum */
+    char checksum_str[3] = {p[1], p[2], '\0'};
+
+    uint8_t provided_checksum = (uint8_t)strtol(checksum_str, NULL, 16);
+
+    //LOG_WRN("NMEA checksums: %02x %02x", provided_checksum, calc_checksum);
+
+    return calc_checksum == provided_checksum;
+}
+
 /* Process received data from ring buffer */
 static void process_uart_data(void)
 {
@@ -96,12 +132,16 @@ static void process_uart_data(void)
                 /* Null terminate the line */
                 nmea_line_buf[nmea_line_pos] = '\0';
                 
-                /* Log the received line */
-                LOG_DBG("NMEA: %s", nmea_line_buf);
-                
-                /* Call NMEA callback if registered */
-                if (nmea_callback) {
-                    nmea_callback((char *)nmea_line_buf, nmea_line_pos);
+                /* Validate checksum */
+                if (validate_nmea_checksum((char *)nmea_line_buf, nmea_line_pos)) {
+                    LOG_DBG("NMEA valid: %s", nmea_line_buf);
+                    
+                    /* Call NMEA callback if registered */
+                    if (nmea_callback) {
+                        nmea_callback((char *)nmea_line_buf, nmea_line_pos);
+                    }
+                } else {
+                    LOG_WRN("NMEA checksum failed: %s", nmea_line_buf);
                 }
                 
                 /* Reset line buffer */
