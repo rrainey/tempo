@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 #include "services/gnss.h"
+#include "services/timebase.h"
 
 LOG_MODULE_REGISTER(gnss, LOG_LEVEL_INF);
 
@@ -86,7 +87,10 @@ static void uart_cb(const struct device *dev, struct uart_event *evt, void *user
     }
 }
 
-/* Validate NMEA checksum */
+/* 
+ * Validate NMEA checksum
+ * Do Not Modify this algorithm!
+ */
 static bool validate_nmea_checksum(const char *sentence, size_t len)
 {
     uint8_t calc_checksum = 0;
@@ -114,10 +118,188 @@ static bool validate_nmea_checksum(const char *sentence, size_t len)
     char checksum_str[3] = {p[1], p[2], '\0'};
 
     uint8_t provided_checksum = (uint8_t)strtol(checksum_str, NULL, 16);
+    
+    return calc_checksum == (uint8_t)provided_checksum;
+}
 
-    //LOG_WRN("NMEA checksums: %02x %02x", provided_checksum, calc_checksum);
+/* Parse NMEA time to components */
+static bool parse_nmea_time(const char *time_str, gnss_fix_t *fix)
+{
+    if (strlen(time_str) < 6) {
+        return false;
+    }
+    
+    char buf[3] = {0};
+    
+    /* Hours */
+    buf[0] = time_str[0];
+    buf[1] = time_str[1];
+    fix->hours = (uint8_t)strtol(buf, NULL, 10);
+    
+    /* Minutes */
+    buf[0] = time_str[2];
+    buf[1] = time_str[3];
+    fix->minutes = (uint8_t)strtol(buf, NULL, 10);
+    
+    /* Seconds */
+    buf[0] = time_str[4];
+    buf[1] = time_str[5];
+    fix->seconds = (uint8_t)strtol(buf, NULL, 10);
+    
+    /* Milliseconds if present */
+    fix->milliseconds = 0;
+    if (time_str[6] == '.' && strlen(time_str) >= 9) {
+        char ms_buf[4] = {0};
+        ms_buf[0] = time_str[7];
+        ms_buf[1] = time_str[8];
+        ms_buf[2] = '0';  /* Assume trailing zero if only 2 digits */
+        fix->milliseconds = (uint16_t)strtol(ms_buf, NULL, 10);
+    }
+    
+    return true;
+}
 
-    return calc_checksum == provided_checksum;
+/* Parse coordinate from NMEA format to decimal degrees */
+static double parse_nmea_coord(const char *coord_str, char hemisphere)
+{
+    double coord = strtod(coord_str, NULL);
+    
+    /* NMEA format: ddmm.mmmm or dddmm.mmmm */
+    int degrees = (int)(coord / 100.0);
+    double minutes = coord - (degrees * 100.0);
+    double decimal = degrees + (minutes / 60.0);
+    
+    /* Apply hemisphere */
+    if (hemisphere == 'S' || hemisphere == 'W') {
+        decimal = -decimal;
+    }
+    
+    return decimal;
+}
+
+/* Parse GGA sentence */
+static void parse_gga(const char *sentence)
+{
+    char *tokens[15];
+    int token_count = 0;
+    static char sentence_copy[GNSS_UART_BUFFER_SIZE];
+    
+    /* Make a copy since strtok modifies the string */
+    strncpy(sentence_copy, sentence, sizeof(sentence_copy) - 1);
+    sentence_copy[sizeof(sentence_copy) - 1] = '\0';
+    
+    /* Tokenize the sentence */
+    char *token = strtok(sentence_copy, ",");
+    while (token && token_count < 15) {
+        tokens[token_count++] = token;
+        token = strtok(NULL, ",");
+    }
+    
+    if (token_count < 10) {
+        return;
+    }
+    
+    k_mutex_lock(&fix_mutex, K_FOREVER);
+    
+    /* Parse time */
+    if (strlen(tokens[1]) > 0) {
+        parse_nmea_time(tokens[1], &current_fix);
+        current_fix.time_valid = true;
+    }
+    
+    /* Parse position */
+    if (strlen(tokens[2]) > 0 && strlen(tokens[4]) > 0) {
+        current_fix.latitude = parse_nmea_coord(tokens[2], tokens[3][0]);
+        current_fix.longitude = parse_nmea_coord(tokens[4], tokens[5][0]);
+        current_fix.position_valid = true;
+    }
+    
+    /* Fix quality */
+    current_fix.fix_quality = (uint8_t)strtol(tokens[6], NULL, 10);
+    
+    /* Number of satellites */
+    current_fix.num_satellites = (uint8_t)strtol(tokens[7], NULL, 10);
+    
+    /* HDOP */
+    if (strlen(tokens[8]) > 0) {
+        current_fix.hdop = strtof(tokens[8], NULL);
+    }
+    
+    /* Altitude */
+    if (strlen(tokens[9]) > 0) {
+        current_fix.altitude = strtod(tokens[9], NULL);
+    }
+    
+    /* Update timestamp */
+    current_fix.timestamp_us = time_now_us();
+    
+    k_mutex_unlock(&fix_mutex);
+    
+    LOG_DBG("GGA: Fix=%d, Sats=%d, Lat=%.6f, Lon=%.6f, Alt=%.1f",
+            current_fix.fix_quality, current_fix.num_satellites,
+            current_fix.latitude, current_fix.longitude,
+            current_fix.altitude);
+}
+
+/* Parse VTG sentence */
+static void parse_vtg(const char *sentence)
+{
+    char *tokens[10];
+    int token_count = 0;
+    static char sentence_copy[GNSS_UART_BUFFER_SIZE];
+    
+    /* Make a copy since strtok modifies the string */
+    strncpy(sentence_copy, sentence, sizeof(sentence_copy) - 1);
+    sentence_copy[sizeof(sentence_copy) - 1] = '\0';
+    
+    /* Tokenize the sentence */
+    char *token = strtok(sentence_copy, ",");
+    while (token && token_count < 10) {
+        tokens[token_count++] = token;
+        token = strtok(NULL, ",");
+    }
+    
+    if (token_count < 8) {
+        return;
+    }
+    
+    k_mutex_lock(&fix_mutex, K_FOREVER);
+    
+    /* Course over ground (true) */
+    if (strlen(tokens[1]) > 0) {
+        current_fix.course_deg = strtof(tokens[1], NULL);
+    }
+    
+    /* Speed in km/h is at index 7, convert to m/s */
+    if (strlen(tokens[7]) > 0) {
+        float speed_kmh = strtof(tokens[7], NULL);
+        current_fix.speed_mps = speed_kmh / 3.6f;
+    }
+    
+    k_mutex_unlock(&fix_mutex);
+    
+    LOG_DBG("VTG: Course=%.1f deg, Speed=%.2f m/s",
+            current_fix.course_deg, current_fix.speed_mps);
+    
+    /* VTG typically follows GGA, so trigger fix callback now */
+    if (fix_callback && current_fix.position_valid) {
+        fix_callback(&current_fix);
+    }
+}
+
+/* Process NMEA sentence by type */
+static void process_nmea_sentence(const char *sentence, size_t len)
+{
+    /* Check sentence type */
+    if (len > 6) {
+        if (strncmp(sentence, "$GNGGA", 6) == 0 || 
+            strncmp(sentence, "$GPGGA", 6) == 0) {
+            parse_gga(sentence);
+        } else if (strncmp(sentence, "$GNVTG", 6) == 0 || 
+                   strncmp(sentence, "$GPVTG", 6) == 0) {
+            parse_vtg(sentence);
+        }
+    }
 }
 
 /* Process received data from ring buffer */
@@ -135,6 +317,9 @@ static void process_uart_data(void)
                 /* Validate checksum */
                 if (validate_nmea_checksum((char *)nmea_line_buf, nmea_line_pos)) {
                     LOG_DBG("NMEA valid: %s", nmea_line_buf);
+                    
+                    /* Process specific sentence types */
+                    process_nmea_sentence((char *)nmea_line_buf, nmea_line_pos);
                     
                     /* Call NMEA callback if registered */
                     if (nmea_callback) {
@@ -225,6 +410,9 @@ int gnss_init(void)
     
     /* Initialize mutex */
     k_mutex_init(&fix_mutex);
+    
+    /* Initialize fix data */
+    memset(&current_fix, 0, sizeof(current_fix));
     
     /* Set up async UART */
     ret = uart_callback_set(uart_dev, uart_cb, NULL);
