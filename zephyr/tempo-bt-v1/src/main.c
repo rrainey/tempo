@@ -13,8 +13,20 @@
 
 #include "app_init.h"
 #include "app/app_state.h"
+#include "app/events.h"
+#include "config/settings.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+
+/* Test event handler */
+static void test_event_handler(const app_event_t *event, void *user_data)
+{
+    LOG_INF("Test handler received event type %d at %u ms", 
+            event->type, event->timestamp_ms);
+}
+
+/* Test event subscriber */
+static event_subscriber_t test_subscriber;
 
 static int smoke_test_file_write(void)
 {
@@ -92,6 +104,37 @@ int main(void)
     if (ret < 0) {
         LOG_ERR("Failed to initialize app state: %d", ret);
     }
+    
+    /* Initialize event bus */
+    ret = event_bus_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize event bus: %d", ret);
+    }
+    
+    /* Subscribe to test events */
+    ret = event_bus_subscribe(&test_subscriber, 
+                             test_event_handler,
+                             (1U << EVT_TEST_DUMMY) | (1U << EVT_MODE_CHANGE),
+                             NULL);
+    if (ret < 0) {
+        LOG_ERR("Failed to subscribe to events: %d", ret);
+    }
+    
+    /* Publish a test event */
+    LOG_INF("Publishing test event");
+    event_bus_publish_simple(EVT_TEST_DUMMY);
+    
+    /* Give event thread time to process */
+    k_msleep(10);
+    
+    /* Initialize settings */
+    ret = app_settings_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize settings: %d", ret);
+    }
+    
+    /* Test settings */
+    app_settings_test();
     
     /* Print current mode on boot */
     LOG_INF("Current mode: %s", 
