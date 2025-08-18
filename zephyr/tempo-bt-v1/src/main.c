@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "app_init.h"
+#include "app/app_state.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -85,6 +86,16 @@ int main(void)
     printk("boot\n");
     LOG_INF("hello");
     LOG_INF("Tempo-BT V1 started successfully");
+    
+    /* Initialize app state first */
+    ret = app_state_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize app state: %d", ret);
+    }
+    
+    /* Print current mode on boot */
+    LOG_INF("Current mode: %s", 
+            app_state_get_mode() == APP_MODE_IDLE ? "IDLE" : "UNKNOWN");
     
     /* Check if QSPI flash device is ready */
     const struct device *flash_dev = DEVICE_DT_GET(DT_NODELABEL(mx25r64));

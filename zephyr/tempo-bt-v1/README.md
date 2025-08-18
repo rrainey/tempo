@@ -13,6 +13,8 @@ tempo-bt-v1/
 │   └── partitions.yml          # Partition layout documentation
 ├── include/
 │   └── app_init.h              # Application initialization headers
+|   └── app/
+|       └── app_state.h
 └── src/
     ├── main.c                  # Main application entry
     └── app_init.c              # Storage initialization

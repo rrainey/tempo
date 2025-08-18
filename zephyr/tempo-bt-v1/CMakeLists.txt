@@ -8,6 +8,7 @@ project(tempo-bt)
 target_sources(app PRIVATE 
     src/main.c
     src/app_init.c
+    src/app_state.c
 )
 
 target_include_directories(app PRIVATE include)
