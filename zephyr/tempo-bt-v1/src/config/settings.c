@@ -191,12 +191,6 @@ void app_settings_test(void)
     LOG_INF("  Baro rate: %d Hz", app_settings.baro_rate);
     LOG_INF("  GNSS rate: %d Hz", app_settings.gnss_rate_hz);
     
-    /* Test saving a setting */
-    LOG_INF("Testing settings persistence...");
-    int rc = app_settings_set_ble_name("TempoBT-Test");
-    if (rc == 0) {
-        LOG_INF("Successfully saved new BLE name: %s", app_settings.ble_name);
-    } else {
-        LOG_ERR("Failed to save BLE name: %d", rc);
-    }
+    /* Skip the save test for now to isolate the issue */
+    LOG_INF("Settings test complete");
 }

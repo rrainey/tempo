@@ -15,6 +15,7 @@
 #include "app/app_state.h"
 #include "app/events.h"
 #include "config/settings.h"
+#include "services/timebase.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -134,11 +135,39 @@ int main(void)
     }
     
     /* Test settings */
+    LOG_INF("About to test settings...");
     app_settings_test();
+    LOG_INF("Settings test done");
+    
+    /* Initialize timebase */
+    LOG_INF("About to init timebase...");
+    ret = timebase_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize timebase: %d", ret);
+    }
+    LOG_INF("Timebase init done");
+    
+    /* Test monotonic timer */
+    LOG_INF("Testing monotonic timer...");
+    uint64_t t1 = time_now_us();
+    k_msleep(10);
+    uint64_t t2 = time_now_us();
+    LOG_INF("10ms sleep measured as %llu us", t2 - t1);
+    
+    /* Test UTC correlation (should fail initially) */
+    uint64_t utc_ms;
+    if (timebase_mono_to_utc(time_now_us(), &utc_ms)) {
+        LOG_INF("UTC time available: %llu ms", utc_ms);
+    } else {
+        LOG_INF("UTC correlation not available yet: %s", 
+                timebase_utc_string_placeholder());
+    }
     
     /* Print current mode on boot */
     LOG_INF("Current mode: %s", 
             app_state_get_mode() == APP_MODE_IDLE ? "IDLE" : "UNKNOWN");
+    
+    LOG_INF("About to check QSPI flash...");
     
     /* Check if QSPI flash device is ready */
     const struct device *flash_dev = DEVICE_DT_GET(DT_NODELABEL(mx25r64));

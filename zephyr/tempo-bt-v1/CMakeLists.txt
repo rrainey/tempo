@@ -11,6 +11,7 @@ target_sources(app PRIVATE
     src/app_state.c
     src/events.c
     src/config/settings.c
+    src/services/timebase.c
 )
 
 target_include_directories(app PRIVATE include)
