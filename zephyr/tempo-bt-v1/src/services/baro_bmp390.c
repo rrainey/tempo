@@ -14,7 +14,7 @@
 #include "services/baro.h"
 #include "services/timebase.h"
 
-LOG_MODULE_REGISTER(baro, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(baro, LOG_LEVEL_DBG);
 
 /* BMP390 I2C Address */
 #define BMP390_I2C_ADDR         0x76
@@ -135,44 +135,53 @@ static int bmp390_write_reg(uint8_t reg, uint8_t data)
     return i2c_write(i2c_dev, buf, sizeof(buf), BMP390_I2C_ADDR);
 }
 
-/* Temperature compensation calculation */
-static float compensate_temperature(uint32_t raw_temp, int32_t *t_fine)
+/* BMP390 Compensation - Based on Bosch BMP3 driver */
+
+/* Calculate temperature compensation */
+static void calc_temp_comp(uint32_t uncomp_temp, float *temp, struct bmp390_calib_data *calib)
 {
-    int64_t var1, var2;
-    
-    var1 = ((int64_t)(raw_temp - (256 * calib_data.par_t1))) * calib_data.par_t2;
-    var2 = (int64_t)calib_data.par_t3 * ((int64_t)(raw_temp - (256 * calib_data.par_t1)) * 
-           (raw_temp - (256 * calib_data.par_t1)));
-    
-    *t_fine = (int32_t)(var1 + var2);
-    
-    return (float)((var1 + var2) / 5120.0) / 256.0f;
+    float partial_data1;
+    float partial_data2;
+
+    partial_data1 = (float)(uncomp_temp - (256 * calib->par_t1));
+    partial_data2 = calib->par_t2 * partial_data1;
+    partial_data2 = partial_data2 + (partial_data1 * partial_data1) * calib->par_t3;
+    *temp = partial_data2 / 5120.0f;
 }
 
-/* Pressure compensation calculation */
-static float compensate_pressure(uint32_t raw_press, int32_t t_fine)
+/* Calculate pressure compensation */
+static void calc_press_comp(uint32_t uncomp_press, float temp, float *pressure, struct bmp390_calib_data *calib)
 {
-    int64_t var1, var2, var3, var4, var5, var6, offset, sensitivity;
-    uint64_t comp_press;
-    
-    offset = ((int64_t)calib_data.par_p1 - 16384) * 4611686018427387904LL +
-             (((int64_t)calib_data.par_p2 - 16384) * t_fine) * 35184372088832LL;
-    var1 = (((int64_t)calib_data.par_p3 * t_fine) * t_fine) / 8589934592LL;
-    var2 = ((int64_t)calib_data.par_p4 * 34359738368LL);
-    var3 = ((int64_t)calib_data.par_p5 * t_fine) * 281474976710656LL;
-    sensitivity = ((int64_t)calib_data.par_p6 + 16384) * 68719476736LL +
-                  (((int64_t)calib_data.par_p7 * t_fine) * 131072LL);
-    
-    var4 = (((int64_t)calib_data.par_p8 * t_fine) * t_fine) / 32768LL;
-    var5 = ((int64_t)calib_data.par_p9 * 4294967296LL);
-    var6 = ((int64_t)raw_press) * ((int64_t)raw_press);
-    
-    comp_press = (uint64_t)((((var6 * calib_data.par_p10) / 8192LL) +
-                 ((raw_press * calib_data.par_p11) * 128LL)) + offset) +
-                 ((var1 + var2 + var3 + sensitivity) / 16LL) +
-                 (var4 + var5);
-    
-    return (float)(comp_press / 64.0);
+    float partial_data1;
+    float partial_data2;
+    float partial_data3;
+    float partial_data4;
+    float partial_out1;
+    float partial_out2;
+
+    partial_data1 = temp * temp;
+    partial_data2 = partial_data1 / 64.0f;
+    partial_data3 = (partial_data2 * temp) / 256.0f;
+    partial_data1 = (calib->par_p8 * partial_data3) / 32.0f;
+    partial_data2 = (calib->par_p7 * partial_data2) * 16.0f;
+    partial_data3 = (calib->par_p6 * temp) * 4194304.0f;
+    partial_data4 = (calib->par_p5) * 140737488355328.0f;
+    partial_out1 = partial_data1 + partial_data2 + partial_data3 + partial_data4;
+
+    partial_data1 = (calib->par_p4 * partial_data3) / 32.0f;
+    partial_data2 = (calib->par_p3 * partial_data2) * 4.0f;
+    partial_data3 = ((float)calib->par_p2 - 16384.0f) * temp * 2097152.0f;
+    partial_data4 = ((float)calib->par_p1 - 16384.0f) * 70368744177664.0f;
+    partial_out2 = uncomp_press * (partial_data1 + partial_data2 + partial_data3 + partial_data4);
+
+    partial_data1 = (float)uncomp_press * (float)uncomp_press;
+    partial_data2 = (calib->par_p11 * partial_data1) / 65536.0f;
+    partial_data3 = (partial_data2 * uncomp_press) / 128.0f;
+    partial_data4 = (partial_out1 / 4.0f) + partial_data3;
+    partial_data1 = ((calib->par_p10 * partial_data1) * uncomp_press) / 8192.0f;
+    partial_data1 = ((partial_data1 / 48.0f) + (partial_out2 / 8192.0f)) / 524288.0f;
+
+    *pressure = partial_data1 + partial_data4;
 }
 
 /* Calculate altitude from pressure */
@@ -200,16 +209,22 @@ static int read_sensor_data(baro_sample_t *sample)
     uint32_t raw_temp = (uint32_t)data[3] | ((uint32_t)data[4] << 8) | ((uint32_t)data[5] << 16);
     
     /* Apply compensation */
-    int32_t t_fine;
-    sample->temperature_c = compensate_temperature(raw_temp, &t_fine);
-    sample->pressure_pa = compensate_pressure(raw_press, t_fine);
-    sample->altitude_m = calculate_altitude(sample->pressure_pa);
+    float temp_c;
+    float press_pa;
+    
+    calc_temp_comp(raw_temp, &temp_c, &calib_data);
+    calc_press_comp(raw_press, temp_c, &press_pa, &calib_data);
+    
+    sample->temperature_c = temp_c;
+    sample->pressure_pa = press_pa;
+    sample->altitude_m = calculate_altitude(press_pa);
     
     sample->temperature_valid = true;
     sample->pressure_valid = true;
     sample->timestamp_us = time_now_us();
     
-    LOG_DBG("Pressure: %.2f Pa, Temp: %.2f C, Alt: %.2f m", 
+    LOG_DBG("Raw: P=%u, T=%u", raw_press, raw_temp);
+    LOG_DBG("Compensated: P=%.2f Pa, T=%.2f C, Alt=%.2f m", 
             sample->pressure_pa, sample->temperature_c, sample->altitude_m);
     
     return 0;
@@ -355,6 +370,19 @@ int baro_init(void)
     }
     
     LOG_INF("Calibration data loaded");
+    LOG_DBG("Calib T: T1=%u, T2=%u, T3=%d", calib_data.par_t1, calib_data.par_t2, calib_data.par_t3);
+    LOG_DBG("Calib P: P1=%d, P2=%d, P3=%d, P4=%d", 
+            calib_data.par_p1, calib_data.par_p2, calib_data.par_p3, calib_data.par_p4);
+    LOG_DBG("Calib P: P5=%u, P6=%u, P7=%d, P8=%d", 
+            calib_data.par_p5, calib_data.par_p6, calib_data.par_p7, calib_data.par_p8);
+    LOG_DBG("Calib P: P9=%d, P10=%d, P11=%d", 
+            calib_data.par_p9, calib_data.par_p10, calib_data.par_p11);
+    
+    /* Sanity check calibration data */
+    if (calib_data.par_t1 == 0 || calib_data.par_t1 == 0xFFFF) {
+        LOG_ERR("Invalid calibration data - T1=%u", calib_data.par_t1);
+        return -EINVAL;
+    }
     
     /* Configure sensor with defaults */
     ret = baro_configure(&current_config);

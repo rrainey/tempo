@@ -8,7 +8,7 @@
 #include <zephyr/logging/log.h>
 #include "services/baro.h"
 
-LOG_MODULE_REGISTER(test_baro, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(test_baro, LOG_LEVEL_DBG);
 
 static int sample_count = 0;
 

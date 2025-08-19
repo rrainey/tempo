@@ -13,6 +13,8 @@ target_sources(app PRIVATE
     src/config/settings.c
     src/services/timebase.c
     src/services/baro_bmp390.c
+    src/services/imu_icm42688.c
+    src/services/gnss_m10q.c
     tests/test_baro.c
 )
 

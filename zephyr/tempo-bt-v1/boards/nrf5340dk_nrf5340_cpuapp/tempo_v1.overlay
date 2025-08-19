@@ -1,18 +1,20 @@
-/* UART for GNSS - Using UART1 instead */
-&uart1 {
-    status = "okay";
-    current-speed = <38400>;  /* SAM-M10Q default baud rate */
-    pinctrl-0 = <&uart1_default>;
-    pinctrl-1 = <&uart1_sleep>;
-    pinctrl-names = "default", "sleep";
-};
-
-/*/*
+/*
  * Copyright (c) 2024 Tempo-BT
  * SPDX-License-Identifier: Apache-2.0
  *
  * Tempo-BT V1 Board Overlay
  */
+
+/* UART for GNSS - Using uart2 */
+/* UART0 is typically used for console, so we'll use uart2 */
+&uart2 {
+    status = "okay";
+    current-speed = <9600>;  /* SAM-M10Q default baud rate */
+    pinctrl-0 = <&uart2_default>;
+    pinctrl-1 = <&uart2_sleep>;
+    pinctrl-names = "default", "sleep";
+    /* No hw-flow-control property = flow control disabled */
+};
 
 / {
     aliases {
@@ -71,7 +73,20 @@
 /* Placeholder sections for peripherals to be added in later tasks */
 
 /* SPI4 for IMU - Task 16 */
-/* &spi4 { }; */
+&spi4 {
+    status = "okay";
+    cs-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;  /* P0.11 for CS */
+    pinctrl-0 = <&spi4_default>;
+    pinctrl-1 = <&spi4_sleep>;
+    pinctrl-names = "default", "sleep";
+    
+    /* ICM-42688-V */
+    icm42688: icm42688@0 {
+        compatible = "invensense,icm42688";
+        reg = <0>;
+        spi-max-frequency = <8000000>;  /* Start at 8MHz, max is 24MHz */
+    };
+};
 
 /* I2C1 for Barometer and Magnetometer */
 &i2c1 {
@@ -81,7 +96,7 @@
 	pinctrl-1 = <&i2c1_sleep>;
 	pinctrl-names = "default", "sleep";
     
-    bmp390: bmp390@77 {
+    bmp390: bmp390@76 {
         compatible = "bosch,bmp390";
         reg = <0x76>;
         label = "BMP390";
@@ -96,18 +111,18 @@
     */
 };
 
-/* UART for GNSS - Using UART1 */
-/* UART0 is typically used for console, so we'll use UART1 */
-&uart1 {
-    status = "disabled";
+/* UART for GNSS - Using uart2 */
+/* UART0 is typically used for console, so we'll use uart2 */
+&uart2 {
+    status = "okay";
     current-speed = <9600>;  /* SAM-M10Q default baud rate */
-    pinctrl-0 = <&uart1_default>;
-    pinctrl-1 = <&uart1_sleep>;
+    pinctrl-0 = <&uart2_default>;
+    pinctrl-1 = <&uart2_sleep>;
     pinctrl-names = "default", "sleep";
     /* No hw-flow-control property = flow control disabled */
 };
 
-/* UART1 pin configuration - TX/RX only, RTS/CTS explicitly disconnected */
+/* uart2 pin configuration - TX/RX only, RTS/CTS explicitly disconnected */
 &pinctrl {
     i2c1_default: i2c1_default {
 		group1 {
@@ -124,7 +139,7 @@
 		};
 	};
 
-    uart1_default: uart1_default {
+    uart2_default: uart2_default {
         group1 {
             psels = <NRF_PSEL(UART_TX, 0, 25)>,   /* P0.25 (VCOM1_TX) -> GNSS RX */
                     <NRF_PSEL(UART_RX, 0, 26)>;   /* P0.26 (VCOM1_RX) <- GNSS TX */
@@ -135,7 +150,7 @@
         };
     };
 
-    uart1_sleep: uart1_sleep {
+    uart2_sleep: uart2_sleep {
         group1 {
             psels = <NRF_PSEL(UART_TX, 0, 25)>,
                     <NRF_PSEL(UART_RX, 0, 26)>;
@@ -147,4 +162,21 @@
             low-power-enable;
         };
     };
+
+    spi4_default: spi4_default {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK, 0, 8)>,// mikroBUS slot 1
+				<NRF_PSEL(SPIM_MISO, 0, 10)>,// mikroBUS slot 1
+				<NRF_PSEL(SPIM_MOSI, 0, 9)>;// mikroBUS slot 1
+		};
+	};
+
+	spi4_sleep: spi4_sleep {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK, 0, 8)>,// mikroBUS slot 1
+				<NRF_PSEL(SPIM_MISO, 0, 10)>,// mikroBUS slot 1
+				<NRF_PSEL(SPIM_MOSI, 0, 9)>;// mikroBUS slot 1
+			low-power-enable;
+		};
+	};
 };

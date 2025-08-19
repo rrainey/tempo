@@ -18,7 +18,7 @@
 LOG_MODULE_REGISTER(gnss, LOG_LEVEL_INF);
 
 /* UART configuration */
-#define GNSS_UART_NODE DT_NODELABEL(uart1)
+#define GNSS_UART_NODE DT_NODELABEL(uart2)
 #define GNSS_UART_BUFFER_SIZE 256
 #define GNSS_RX_TIMEOUT_US 100000  /* 100ms timeout */
 

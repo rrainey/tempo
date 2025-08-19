@@ -3,7 +3,7 @@
  * 
  * Tempo-BT V1 - Main Application Entry
  */
-
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/device.h>
@@ -17,6 +17,8 @@
 #include "config/settings.h"
 #include "services/timebase.h"
 #include "services/gnss.h"
+#include "services/imu.h"
+#include "services/baro.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -35,9 +37,37 @@ static int nmea_count = 0;
 static void test_nmea_callback(const char *sentence, size_t len)
 {
     nmea_count++;
-    /* Only log every 10th sentence to avoid flooding */
-    if (nmea_count % 10 == 1) {
+    /* Only log every 100th sentence to reduce output */
+    if (nmea_count % 100 == 1) {
         LOG_INF("NMEA #%d (%d bytes): %s", nmea_count, len, sentence);
+    }
+}
+
+/* Test fix callback */
+static void test_fix_callback(const gnss_fix_t *fix)
+{
+    /* Only log every 10th fix to reduce output */
+    static int fix_count = 0;
+    fix_count++;
+    
+    if (fix_count % 10 == 1) {
+        LOG_INF("Fix update #%d: Lat=%.6f, Lon=%.6f, Alt=%.1f m, Speed=%.1f m/s",
+                fix_count, fix->latitude, fix->longitude, fix->altitude, fix->speed_mps);
+        LOG_INF("  Time: %02d:%02d:%02d.%03d UTC, Sats=%d, HDOP=%.1f",
+                fix->hours, fix->minutes, fix->seconds, fix->milliseconds,
+                fix->num_satellites, fix->hdop);
+    }
+    
+    /* Update time correlation when we have a valid fix */
+    if (fix->time_valid && fix->position_valid && (fix_count % 10 == 1)) {
+        /* Calculate UTC time in milliseconds since epoch */
+        /* Note: This is simplified - doesn't handle date rollover */
+        uint64_t utc_ms = (fix->hours * 3600 + fix->minutes * 60 + fix->seconds) * 1000 
+                        + fix->milliseconds;
+        
+        /* Update timebase correlation */
+        timebase_update_correlation(utc_ms, 100);  /* 100ms accuracy estimate */
+        LOG_INF("Updated time correlation");
     }
 }
 
@@ -222,6 +252,7 @@ int main(void)
     }
     
     /* Initialize GNSS */
+    #if 1  /* Temporarily disabled to focus on IMU */
     LOG_INF("About to init GNSS...");
     ret = gnss_init();
     if (ret < 0) {
@@ -229,7 +260,30 @@ int main(void)
     } else {
         /* Register test callback */
         gnss_register_nmea_callback(test_nmea_callback);
+        gnss_register_fix_callback(test_fix_callback);
         LOG_INF("GNSS initialized, waiting for NMEA data...");
+    }
+    #endif
+    
+    /* Initialize IMU - but skip it for now due to hardware issues */
+    #if 1
+    LOG_INF("About to init IMU...");
+    ret = imu_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize IMU: %d", ret);
+    } else {
+        LOG_INF("IMU initialized successfully");
+    }
+    #endif
+    
+    /* Test Barometer (BMP390) */
+    LOG_INF("Testing BMP390 barometer...");
+    extern int test_baro(void);
+    ret = test_baro();
+    if (ret < 0) {
+        LOG_ERR("Barometer test failed: %d", ret);
+    } else {
+        LOG_INF("Barometer test completed successfully");
     }
     
     /* Log periodic heartbeat */
