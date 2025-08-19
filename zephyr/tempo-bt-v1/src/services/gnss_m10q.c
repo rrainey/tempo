@@ -3,7 +3,7 @@
  * 
  * Tempo-BT V1 - GNSS Service Implementation (u-blox SAM-M10Q)
  */
-
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/device.h>
@@ -25,6 +25,7 @@ LOG_MODULE_REGISTER(gnss, LOG_LEVEL_INF);
 /* UART device and buffers */
 static const struct device *uart_dev;
 static uint8_t uart_rx_buf[GNSS_UART_BUFFER_SIZE];
+static uint8_t uart_rx_buf2[GNSS_UART_BUFFER_SIZE];  /* Second buffer for double buffering */
 static uint8_t nmea_line_buf[GNSS_UART_BUFFER_SIZE];
 static size_t nmea_line_pos = 0;
 
@@ -44,33 +45,38 @@ static struct k_mutex fix_mutex;
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
 {
     ARG_UNUSED(user_data);
-    static uint8_t *next_buf = uart_rx_buf;
+    static uint8_t *next_buf = uart_rx_buf2;
     
     switch (evt->type) {
     case UART_RX_RDY:
         /* Data ready, add to ring buffer */
         if (evt->data.rx.len > 0) {
-            ring_buf_put(&rx_ring_buf, evt->data.rx.buf + evt->data.rx.offset, 
-                         evt->data.rx.len);
-            LOG_DBG("UART RX: %d bytes", evt->data.rx.len);
+            int written = ring_buf_put(&rx_ring_buf, 
+                                      evt->data.rx.buf + evt->data.rx.offset, 
+                                      evt->data.rx.len);
+            if (written < evt->data.rx.len) {
+                LOG_WRN("Ring buffer full, dropped %d bytes", 
+                        evt->data.rx.len - written);
+            }
         }
         break;
         
     case UART_RX_BUF_REQUEST:
         /* Provide next buffer */
-        uart_rx_buf_rsp(uart_dev, next_buf, sizeof(uart_rx_buf));
+        uart_rx_buf_rsp(uart_dev, next_buf, GNSS_UART_BUFFER_SIZE);
+        /* Swap buffers */
+        next_buf = (next_buf == uart_rx_buf) ? uart_rx_buf2 : uart_rx_buf;
         break;
         
     case UART_RX_BUF_RELEASED:
-        /* Buffer released, can reuse */
-        next_buf = evt->data.rx_buf.buf;
+        /* Buffer released, nothing to do */
         break;
         
     case UART_RX_DISABLED:
         LOG_WRN("UART RX disabled");
         /* Try to re-enable */
         k_msleep(10);
-        uart_rx_enable(uart_dev, uart_rx_buf, sizeof(uart_rx_buf), 
+        uart_rx_enable(uart_dev, uart_rx_buf, GNSS_UART_BUFFER_SIZE, 
                        GNSS_RX_TIMEOUT_US);
         break;
         
@@ -78,7 +84,7 @@ static void uart_cb(const struct device *dev, struct uart_event *evt, void *user
         LOG_ERR("UART RX stopped due to error: %d", evt->data.rx_stop.reason);
         /* Try to restart */
         k_msleep(10);
-        uart_rx_enable(uart_dev, uart_rx_buf, sizeof(uart_rx_buf), 
+        uart_rx_enable(uart_dev, uart_rx_buf, GNSS_UART_BUFFER_SIZE, 
                        GNSS_RX_TIMEOUT_US);
         break;
         
@@ -357,7 +363,7 @@ static void gnss_thread(void *p1, void *p2, void *p3)
         process_uart_data();
         
         /* Sleep briefly to avoid busy-waiting */
-        k_msleep(10);
+        k_msleep(5);  /* Reduced from 10ms to process faster */
     }
 }
 
