@@ -252,7 +252,7 @@ int main(void)
     }
     
     /* Initialize GNSS */
-    #if 1  /* Temporarily disabled to focus on IMU */
+    #if 0  /* Temporarily disabled */
     LOG_INF("About to init GNSS...");
     ret = gnss_init();
     if (ret < 0) {
@@ -266,7 +266,7 @@ int main(void)
     #endif
     
     /* Initialize IMU - but skip it for now due to hardware issues */
-    #if 1
+    #if 0
     LOG_INF("About to init IMU...");
     ret = imu_init();
     if (ret < 0) {
@@ -277,6 +277,7 @@ int main(void)
     #endif
     
     /* Test Barometer (BMP390) */
+    #if 1
     LOG_INF("Testing BMP390 barometer...");
     extern int test_baro(void);
     ret = test_baro();
@@ -285,6 +286,7 @@ int main(void)
     } else {
         LOG_INF("Barometer test completed successfully");
     }
+    #endif
     
     /* Log periodic heartbeat */
     int counter = 0;

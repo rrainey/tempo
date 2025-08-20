@@ -6,6 +6,7 @@
 #pragma GCC diagnostic ignored "-Wdouble-promotion"
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/byteorder.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
@@ -135,6 +136,91 @@ static int bmp390_write_reg(uint8_t reg, uint8_t data)
     return i2c_write(i2c_dev, buf, sizeof(buf), BMP390_I2C_ADDR);
 }
 
+
+static void bmp388_compensate_temp(uint32_t uncomp_temp, float *temp, struct bmp390_calib_data *cal, int64_t *comp_temp)
+{
+	/* Adapted from:
+	 * https://github.com/BoschSensortec/BMP3-Sensor-API/blob/master/bmp3.c
+	 */
+
+	int64_t partial_data1;
+	int64_t partial_data2;
+	int64_t partial_data3;
+	int64_t partial_data4;
+	int64_t partial_data5;
+
+	partial_data1 = ((int64_t)uncomp_temp - (256 * cal->par_t1));
+	partial_data2 = cal->par_t2 * partial_data1;
+	partial_data3 = (partial_data1 * partial_data1);
+	partial_data4 = (int64_t)partial_data3 * cal->par_t3;
+	partial_data5 = ((int64_t)(partial_data2 * 262144) + partial_data4);
+
+	/* Store for pressure calculation */
+	int64_t comp_temp_tmp = partial_data5 / 4294967296;
+
+    int64_t tmp = (comp_temp_tmp * 250000) / 16384;
+
+    *comp_temp = tmp;
+
+    *temp = tmp / 1000000;
+	//val->val1 = tmp / 1000000;
+	//val->val2 = tmp % 1000000;
+}
+
+
+static void bmp388_compensate_press(uint32_t raw_pressure, int64_t temp_fp, float *pressure, struct bmp390_calib_data *cal)
+{
+	/* Adapted from:
+	 * https://github.com/BoschSensortec/BMP3-Sensor-API/blob/master/bmp3.c
+	 */
+
+	int64_t partial_data1;
+	int64_t partial_data2;
+	int64_t partial_data3;
+	int64_t partial_data4;
+	int64_t partial_data5;
+	int64_t partial_data6;
+	int64_t offset;
+	int64_t sensitivity;
+	uint64_t comp_press;
+
+    // fixed point, calibrated version of temperature
+	int64_t t_lin = temp_fp;
+
+	partial_data1 = t_lin * t_lin;
+	partial_data2 = partial_data1 / 64;
+	partial_data3 = (partial_data2 * t_lin) / 256;
+	partial_data4 = (cal->par_p8 * partial_data3) / 32;
+	partial_data5 = (cal->par_p7 * partial_data1) * 16;
+	partial_data6 = (cal->par_p6 * t_lin) * 4194304;
+	offset = (cal->par_p5 * 140737488355328) + partial_data4 + partial_data5 +
+		 partial_data6;
+	partial_data2 = (cal->par_p4 * partial_data3) / 32;
+	partial_data4 = (cal->par_p3 * partial_data1) * 4;
+	partial_data5 = (cal->par_p2 - 16384) * t_lin * 2097152;
+	sensitivity = ((cal->par_p1 - 16384) * 70368744177664) + partial_data2 +
+		      partial_data4 + partial_data5;
+	partial_data1 = (sensitivity / 16777216) * raw_pressure;
+	partial_data2 = cal->par_p10 * t_lin;
+	partial_data3 = partial_data2 + (65536 * cal->par_p9);
+	partial_data4 = (partial_data3 * raw_pressure) / 8192;
+	/* Dividing by 10 followed by multiplying by 10 to avoid overflow caused
+	 * (raw_pressure * partial_data4)
+	 */
+	partial_data5 = (raw_pressure * (partial_data4 / 10)) / 512;
+	partial_data5 = partial_data5 * 10;
+	partial_data6 = ((int64_t)raw_pressure * (int64_t)raw_pressure);
+	partial_data2 = (cal->par_p11 * partial_data6) / 65536;
+	partial_data3 = (partial_data2 * raw_pressure) / 128;
+	partial_data4 = (offset / 4) + partial_data1 + partial_data5 +
+			partial_data3;
+
+	comp_press = (((uint64_t)partial_data4 * 25) / (uint64_t)1099511627776);
+
+	/* returned value is in hundredths of Pa. */
+	*pressure = comp_press / 100.0f;
+}
+
 /* BMP390 Compensation - Based on Bosch BMP3 driver */
 
 /* Calculate temperature compensation */
@@ -142,11 +228,12 @@ static void calc_temp_comp(uint32_t uncomp_temp, float *temp, struct bmp390_cali
 {
     float partial_data1;
     float partial_data2;
+    float t_lin;
 
-    partial_data1 = (float)(uncomp_temp - (256 * calib->par_t1));
-    partial_data2 = calib->par_t2 * partial_data1;
-    partial_data2 = partial_data2 + (partial_data1 * partial_data1) * calib->par_t3;
-    *temp = partial_data2 / 5120.0f;
+    partial_data1 = (float)(uncomp_temp - calib->par_t1);
+    partial_data2 = (float)(partial_data1 * calib->par_t2);
+    t_lin = partial_data2 + (partial_data1 * partial_data1) * calib->par_t3;
+    *temp = t_lin;
 }
 
 /* Calculate pressure compensation */
@@ -182,6 +269,8 @@ static void calc_press_comp(uint32_t uncomp_press, float temp, float *pressure, 
     partial_data1 = ((partial_data1 / 48.0f) + (partial_out2 / 8192.0f)) / 524288.0f;
 
     *pressure = partial_data1 + partial_data4;
+
+    
 }
 
 /* Calculate altitude from pressure */
@@ -203,17 +292,17 @@ static int read_sensor_data(baro_sample_t *sample)
         LOG_ERR("Failed to read sensor data: %d", ret);
         return ret;
     }
-    
-    /* Extract raw values (LSB first) */
-    uint32_t raw_press = (uint32_t)data[0] | ((uint32_t)data[1] << 8) | ((uint32_t)data[2] << 16);
-    uint32_t raw_temp = (uint32_t)data[3] | ((uint32_t)data[4] << 8) | ((uint32_t)data[5] << 16);
+
+    uint32_t raw_press = sys_get_le24(&data[0]);
+    uint32_t raw_temp = sys_get_le24(&data[3]);
     
     /* Apply compensation */
     float temp_c;
     float press_pa;
+    int64_t temp_fp;
     
-    calc_temp_comp(raw_temp, &temp_c, &calib_data);
-    calc_press_comp(raw_press, temp_c, &press_pa, &calib_data);
+    bmp388_compensate_temp(raw_temp, &temp_c, &calib_data, &temp_fp);
+    bmp388_compensate_press(raw_press, temp_fp, &press_pa, &calib_data);
     
     sample->temperature_c = temp_c;
     sample->pressure_pa = press_pa;
@@ -294,6 +383,13 @@ static void baro_thread(void *p1, void *p2, void *p3)
     }
 }
 
+void swap_bytes_16(const unsigned char* src, unsigned char* dst) {
+    unsigned char tmp = src[0];
+
+    dst[0] = src[1];
+    dst[1] = tmp;
+}
+
 int baro_init(void)
 {
     int ret;
@@ -368,14 +464,25 @@ int baro_init(void)
         LOG_ERR("Failed to read calibration data: %d", ret);
         return ret;
     }
-    
+    /*
+     * Byte-swap all 16-bit values in this structure after fetching
+     */
+
+    calib_data.par_t1 = sys_le16_to_cpu(calib_data.par_t1);
+	calib_data.par_t2 = sys_le16_to_cpu(calib_data.par_t2);
+	calib_data.par_p1 = (int16_t)sys_le16_to_cpu(calib_data.par_p1);
+	calib_data.par_p2 = (int16_t)sys_le16_to_cpu(calib_data.par_p2);
+	calib_data.par_p5 = sys_le16_to_cpu(calib_data.par_p5);
+	calib_data.par_p6 = sys_le16_to_cpu(calib_data.par_p6);
+	calib_data.par_p9 = (int16_t)sys_le16_to_cpu(calib_data.par_p9);
+
     LOG_INF("Calibration data loaded");
-    LOG_DBG("Calib T: T1=%u, T2=%u, T3=%d", calib_data.par_t1, calib_data.par_t2, calib_data.par_t3);
-    LOG_DBG("Calib P: P1=%d, P2=%d, P3=%d, P4=%d", 
+    LOG_INF("Calib T: T1=%u, T2=%u, T3=%d", calib_data.par_t1, calib_data.par_t2, calib_data.par_t3);
+    LOG_INF("Calib P: P1=%d, P2=%d, P3=%d, P4=%d", 
             calib_data.par_p1, calib_data.par_p2, calib_data.par_p3, calib_data.par_p4);
-    LOG_DBG("Calib P: P5=%u, P6=%u, P7=%d, P8=%d", 
+    LOG_INF("Calib P: P5=%u, P6=%u, P7=%d, P8=%d", 
             calib_data.par_p5, calib_data.par_p6, calib_data.par_p7, calib_data.par_p8);
-    LOG_DBG("Calib P: P9=%d, P10=%d, P11=%d", 
+    LOG_INF("Calib P: P9=%d, P10=%d, P11=%d", 
             calib_data.par_p9, calib_data.par_p10, calib_data.par_p11);
     
     /* Sanity check calibration data */
