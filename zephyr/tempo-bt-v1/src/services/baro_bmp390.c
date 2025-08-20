@@ -160,7 +160,7 @@ static void bmp388_compensate_temp(uint32_t uncomp_temp, float *temp, struct bmp
 
     int64_t tmp = (comp_temp_tmp * 250000) / 16384;
 
-    *comp_temp = tmp;
+    *comp_temp = comp_temp_tmp;
 
     *temp = tmp / 1000000;
 	//val->val1 = tmp / 1000000;
@@ -465,9 +465,8 @@ int baro_init(void)
         return ret;
     }
     /*
-     * Byte-swap all 16-bit values in this structure after fetching
+     * Byte-swap all 16-bit values in this structure after fetching if required
      */
-
     calib_data.par_t1 = sys_le16_to_cpu(calib_data.par_t1);
 	calib_data.par_t2 = sys_le16_to_cpu(calib_data.par_t2);
 	calib_data.par_p1 = (int16_t)sys_le16_to_cpu(calib_data.par_p1);
@@ -477,12 +476,12 @@ int baro_init(void)
 	calib_data.par_p9 = (int16_t)sys_le16_to_cpu(calib_data.par_p9);
 
     LOG_INF("Calibration data loaded");
-    LOG_INF("Calib T: T1=%u, T2=%u, T3=%d", calib_data.par_t1, calib_data.par_t2, calib_data.par_t3);
-    LOG_INF("Calib P: P1=%d, P2=%d, P3=%d, P4=%d", 
+    LOG_DBG("Calib T: T1=%u, T2=%u, T3=%d", calib_data.par_t1, calib_data.par_t2, calib_data.par_t3);
+    LOG_DBG("Calib P: P1=%d, P2=%d, P3=%d, P4=%d", 
             calib_data.par_p1, calib_data.par_p2, calib_data.par_p3, calib_data.par_p4);
-    LOG_INF("Calib P: P5=%u, P6=%u, P7=%d, P8=%d", 
+    LOG_DBG("Calib P: P5=%u, P6=%u, P7=%d, P8=%d", 
             calib_data.par_p5, calib_data.par_p6, calib_data.par_p7, calib_data.par_p8);
-    LOG_INF("Calib P: P9=%d, P10=%d, P11=%d", 
+    LOG_DBG("Calib P: P9=%d, P10=%d, P11=%d", 
             calib_data.par_p9, calib_data.par_p10, calib_data.par_p11);
     
     /* Sanity check calibration data */
