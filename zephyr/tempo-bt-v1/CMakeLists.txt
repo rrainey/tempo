@@ -12,10 +12,12 @@ target_sources(app PRIVATE
     src/events.c
     src/config/settings.c
     src/services/timebase.c
-    src/services/baro_bmp390.c
-    src/services/imu_icm42688.c
     src/services/gnss_m10q.c
+    src/services/imu_icm42688.c
+    src/services/baro_bmp390.c
+    src/services/aggregator.c
     tests/test_baro.c
+    tests/test_aggregator.c
 )
 
 target_include_directories(app PRIVATE include)

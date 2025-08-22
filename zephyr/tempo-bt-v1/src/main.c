@@ -3,7 +3,7 @@
  * 
  * Tempo-BT V1 - Main Application Entry
  */
-#pragma GCC diagnostic ignored "-Wdouble-promotion"
+
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/device.h>
@@ -52,10 +52,10 @@ static void test_fix_callback(const gnss_fix_t *fix)
     
     if (fix_count % 10 == 1) {
         LOG_INF("Fix update #%d: Lat=%.6f, Lon=%.6f, Alt=%.1f m, Speed=%.1f m/s",
-                fix_count, fix->latitude, fix->longitude, fix->altitude, fix->speed_mps);
+                fix_count, fix->latitude, fix->longitude, fix->altitude, (double) fix->speed_mps);
         LOG_INF("  Time: %02d:%02d:%02d.%03d UTC, Sats=%d, HDOP=%.1f",
                 fix->hours, fix->minutes, fix->seconds, fix->milliseconds,
-                fix->num_satellites, fix->hdop);
+                fix->num_satellites, (double) fix->hdop);
     }
     
     /* Update time correlation when we have a valid fix */
@@ -238,6 +238,7 @@ int main(void)
         }
     }
     
+    #if 0
     /* Initialize storage */
     ret = app_storage_init();
     if (ret < 0) {
@@ -250,9 +251,10 @@ int main(void)
     if (ret < 0) {
         LOG_ERR("Smoke test failed: %d", ret);
     }
+    #endif
     
     /* Initialize GNSS */
-    #if 0  /* Temporarily disabled */
+    #if 0  /* Temporarily disabled to focus on IMU */
     LOG_INF("About to init GNSS...");
     ret = gnss_init();
     if (ret < 0) {
@@ -266,7 +268,7 @@ int main(void)
     #endif
     
     /* Initialize IMU - but skip it for now due to hardware issues */
-    #if 0
+    #if 1
     LOG_INF("About to init IMU...");
     ret = imu_init();
     if (ret < 0) {
@@ -276,8 +278,8 @@ int main(void)
     }
     #endif
     
+    #if 0
     /* Test Barometer (BMP390) */
-    #if 1
     LOG_INF("Testing BMP390 barometer...");
     extern int test_baro(void);
     ret = test_baro();

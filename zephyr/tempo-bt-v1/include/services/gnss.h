@@ -19,12 +19,17 @@ typedef struct {
     
     /* Velocity */
     float speed_mps;        /* Speed in m/s */
-    float course_deg;       /* Course over ground in degrees */
+    float course_deg;       /* Course over ground in degrees, true */
     
     /* Quality */
     uint8_t fix_quality;    /* 0=invalid, 1=GPS, 2=DGPS, etc */
     uint8_t num_satellites; /* Number of satellites used */
     float hdop;             /* Horizontal dilution of precision */
+    float vdop;             /* Vertical dilution of precision */
+
+    uint8_t year;          /* UTC year (4 digits, 2000 = 0) */
+    uint8_t month;        /* UTC month (1-12) */    
+    uint8_t day;          /* UTC day (1-31) */
     
     /* Time */
     uint8_t hours;          /* UTC hours (0-23) */
@@ -35,6 +40,7 @@ typedef struct {
     /* Validity */
     bool position_valid;
     bool time_valid;
+    bool date_valid;        /* True if date is valid */
     
     /* Timestamp */
     uint64_t timestamp_us;  /* Monotonic timestamp when fix was received */
@@ -77,12 +83,14 @@ void gnss_register_nmea_callback(gnss_nmea_callback_t callback);
  */
 bool gnss_get_current_fix(gnss_fix_t *fix);
 
+
 /**
  * @brief Configure GNSS update rate
  * 
- * @param rate_hz Update rate in Hz (1-10)
+ * @param rate_hz Update rate in Hz (1 or 10 for SAM-M10Q)
  * @return 0 on success, negative error code on failure
  */
 int gnss_set_rate(uint8_t rate_hz);
+
 
 #endif /* SERVICES_GNSS_H */

@@ -122,9 +122,9 @@ tempo-bt/
 /* BMP390 + MMC5983MA on I2C bus P1.02/1.03; DRDY IRQs on D11/D9 */
 &i2c0 {
     status = "okay";
-    bmp390@77 {
+    bmp390@76 {
         compatible = "bosch,bmp3";
-        reg = <0x77>;
+        reg = <0x76>;
         int-gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;
         label = "BMP390";
     };

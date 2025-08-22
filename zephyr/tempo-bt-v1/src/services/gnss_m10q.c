@@ -293,10 +293,169 @@ static void parse_vtg(const char *sentence)
     }
 }
 
+/* Parse GSA sentence for DOP values */
+static void parse_gsa(const char *sentence)
+{
+    char *tokens[20];
+    int token_count = 0;
+    static char sentence_copy[GNSS_UART_BUFFER_SIZE];
+    
+    /* Make a copy since strtok modifies the string */
+    strncpy(sentence_copy, sentence, sizeof(sentence_copy) - 1);
+    sentence_copy[sizeof(sentence_copy) - 1] = '\0';
+    
+    /* Tokenize the sentence */
+    char *token = strtok(sentence_copy, ",");
+    while (token && token_count < 20) {
+        tokens[token_count++] = token;
+        token = strtok(NULL, ",");
+    }
+    
+    /* GSA format:
+     * $GPGSA,A,3,04,05,,09,12,,,24,,,,,2.5,1.3,2.1*39
+     * Field 0: $GPGSA
+     * Field 1: Mode (A=Auto, M=Manual)
+     * Field 2: Fix type (1=no fix, 2=2D, 3=3D)
+     * Fields 3-14: Satellite PRNs used in solution
+     * Field 15: PDOP
+     * Field 16: HDOP
+     * Field 17: VDOP
+     */
+    
+    if (token_count < 18) {
+        LOG_WRN("GSA sentence too short: %d tokens", token_count);
+        return;
+    }
+    
+    k_mutex_lock(&fix_mutex, K_FOREVER);
+    
+    /* Parse PDOP (field 15) - not currently stored but available */
+    /* float pdop = 0.0;
+    if (strlen(tokens[15]) > 0) {
+        pdop = strtof(tokens[15], NULL);
+    } */
+    
+    /* Parse HDOP (field 16) */
+    if (strlen(tokens[16]) > 0) {
+        current_fix.hdop = strtof(tokens[16], NULL);
+    }
+    
+    /* Parse VDOP (field 17) */
+    if (strlen(tokens[17]) > 0) {
+        current_fix.vdop = strtof(tokens[17], NULL);
+    }
+    
+    k_mutex_unlock(&fix_mutex);
+    
+    LOG_DBG("GSA: HDOP=%.1f, VDOP=%.1f", current_fix.hdop, current_fix.vdop);
+}
+
+/* Parse RMC sentence for date */
+static void parse_rmc(const char *sentence)
+{
+    char *tokens[15];
+    int token_count = 0;
+    static char sentence_copy[GNSS_UART_BUFFER_SIZE];
+    
+    /* Make a copy since strtok modifies the string */
+    strncpy(sentence_copy, sentence, sizeof(sentence_copy) - 1);
+    sentence_copy[sizeof(sentence_copy) - 1] = '\0';
+    
+    /* Tokenize the sentence */
+    char *token = strtok(sentence_copy, ",");
+    while (token && token_count < 15) {
+        tokens[token_count++] = token;
+        token = strtok(NULL, ",");
+    }
+    
+    /* RMC format:
+     * $GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A
+     * Field 0: $GPRMC
+     * Field 1: Time (HHMMSS.sss)
+     * Field 2: Status (A=active, V=void)
+     * Field 3: Latitude
+     * Field 4: N/S
+     * Field 5: Longitude
+     * Field 6: E/W
+     * Field 7: Speed over ground (knots)
+     * Field 8: Course over ground (degrees)
+     * Field 9: Date (DDMMYY)
+     * Field 10: Magnetic variation
+     * Field 11: E/W
+     */
+    
+    if (token_count < 10) {
+        LOG_WRN("RMC sentence too short: %d tokens", token_count);
+        return;
+    }
+    
+    k_mutex_lock(&fix_mutex, K_FOREVER);
+    
+    /* Check if data is valid */
+    if (strlen(tokens[2]) > 0 && tokens[2][0] == 'A') {
+        /* Parse time if present */
+        if (strlen(tokens[1]) > 0) {
+            parse_nmea_time(tokens[1], &current_fix);
+            current_fix.time_valid = true;
+        }
+        
+        /* Parse date (DDMMYY format) */
+        if (strlen(tokens[9]) >= 6) {
+            char buf[3] = {0};
+            
+            /* Day */
+            buf[0] = tokens[9][0];
+            buf[1] = tokens[9][1];
+            current_fix.day = (uint8_t)strtol(buf, NULL, 10);
+            
+            /* Month */
+            buf[0] = tokens[9][2];
+            buf[1] = tokens[9][3];
+            current_fix.month = (uint8_t)strtol(buf, NULL, 10);
+            
+            /* Year (YY format - assume 20YY for now) */
+            buf[0] = tokens[9][4];
+            buf[1] = tokens[9][5];
+            uint8_t year_yy = (uint8_t)strtol(buf, NULL, 10);
+            
+            /* Convert 2-digit year to 4-digit year */
+            /* Assume 2000-2099 range */
+            current_fix.year = 2000 + year_yy;
+            
+            current_fix.date_valid = true;
+            
+            LOG_DBG("RMC: Date=%04d-%02d-%02d", 
+                    current_fix.year, current_fix.month, current_fix.day);
+        }
+        
+        /* Parse position if present (redundant with GGA but can be useful) */
+        if (strlen(tokens[3]) > 0 && strlen(tokens[5]) > 0) {
+            current_fix.latitude = parse_nmea_coord(tokens[3], tokens[4][0]);
+            current_fix.longitude = parse_nmea_coord(tokens[5], tokens[6][0]);
+            /* Don't set position_valid here - let GGA handle that */
+        }
+        
+        /* Parse speed over ground (knots to m/s) */
+        if (strlen(tokens[7]) > 0) {
+            float speed_knots = strtof(tokens[7], NULL);
+            current_fix.speed_mps = speed_knots * 0.514444f; /* 1 knot = 0.514444 m/s */
+        }
+        
+        /* Parse course over ground */
+        if (strlen(tokens[8]) > 0) {
+            current_fix.course_deg = strtof(tokens[8], NULL);
+        }
+    } else {
+        LOG_DBG("RMC: Status void");
+    }
+    
+    k_mutex_unlock(&fix_mutex);
+}
+
+
 /* Process NMEA sentence by type */
 static void process_nmea_sentence(const char *sentence, size_t len)
 {
-    /* Check sentence type */
     if (len > 6) {
         if (strncmp(sentence, "$GNGGA", 6) == 0 || 
             strncmp(sentence, "$GPGGA", 6) == 0) {
@@ -304,6 +463,12 @@ static void process_nmea_sentence(const char *sentence, size_t len)
         } else if (strncmp(sentence, "$GNVTG", 6) == 0 || 
                    strncmp(sentence, "$GPVTG", 6) == 0) {
             parse_vtg(sentence);
+        } else if (strncmp(sentence, "$GNGSA", 6) == 0 || 
+                   strncmp(sentence, "$GPGSA", 6) == 0) {
+            parse_gsa(sentence);  
+        } else if (strncmp(sentence, "$GNRMC", 6) == 0 || 
+                   strncmp(sentence, "$GPRMC", 6) == 0) {
+            parse_rmc(sentence);  
         }
     }
 }
@@ -471,7 +636,55 @@ bool gnss_get_current_fix(gnss_fix_t *fix)
 
 int gnss_set_rate(uint8_t rate_hz)
 {
-    /* TODO: Implement UBX command to set update rate */
-    LOG_WRN("GNSS rate configuration not implemented yet");
-    return -ENOSYS;
+    int ret;
+    uint8_t ubx_cfg_rate[14];
+    uint16_t period_ms;
+    
+    /* SAM-M10Q supports 1Hz to 10Hz */
+    if (rate_hz < 1 || rate_hz > 10) {
+        LOG_ERR("Invalid rate %d Hz (SAM-M10Q supports 1-10 Hz)", rate_hz);
+        return -EINVAL;
+    }
+    
+    /* Calculate period in milliseconds */
+    period_ms = 1000 / rate_hz;
+    
+    LOG_INF("Setting GNSS rate to %d Hz (period %d ms)", rate_hz, period_ms);
+    
+    /* Build UBX-CFG-RATE message */
+    ubx_cfg_rate[0] = 0xB5;  /* Sync char 1 */
+    ubx_cfg_rate[1] = 0x62;  /* Sync char 2 */
+    ubx_cfg_rate[2] = 0x06;  /* Class: CFG */
+    ubx_cfg_rate[3] = 0x08;  /* ID: RATE */
+    ubx_cfg_rate[4] = 0x06;  /* Length LSB */
+    ubx_cfg_rate[5] = 0x00;  /* Length MSB */
+    ubx_cfg_rate[6] = period_ms & 0xFF;  /* measRate LSB */
+    ubx_cfg_rate[7] = (period_ms >> 8) & 0xFF;  /* measRate MSB */
+    ubx_cfg_rate[8] = 0x01;  /* navRate LSB (1 = every measurement) */
+    ubx_cfg_rate[9] = 0x00;  /* navRate MSB */
+    ubx_cfg_rate[10] = 0x01; /* timeRef LSB (1 = GPS time) */
+    ubx_cfg_rate[11] = 0x00; /* timeRef MSB */
+    
+    /* Calculate and add checksum */
+    uint8_t ck_a = 0, ck_b = 0;
+    for (int i = 2; i < 12; i++) {
+        ck_a += ubx_cfg_rate[i];
+        ck_b += ck_a;
+    }
+    ubx_cfg_rate[12] = ck_a;
+    ubx_cfg_rate[13] = ck_b;
+    
+    /* Send command */
+    ret = uart_tx(uart_dev, ubx_cfg_rate, sizeof(ubx_cfg_rate), SYS_FOREVER_MS);
+    if (ret < 0) {
+        LOG_ERR("Failed to send rate config: %d", ret);
+        return ret;
+    }
+    
+    /* TODO: Wait for UBX-ACK-ACK response to confirm */
+    k_msleep(100);
+    
+    LOG_INF("GNSS rate configuration sent");
+    
+    return 0;
 }
