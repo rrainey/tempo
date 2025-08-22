@@ -104,8 +104,8 @@
 
 16. **WHO\_AM\_I**
 
-* Do: SPI read 0x75; expect 0x47.
-* Done when: RTT prints chip ID 0x47.
+* Do: SPI read 0x5; expect 0x4C (ICM-42688-P - not used on this PCB - is 0x47)
+* Done when: RTT prints chip ID 0x4C
 
 17. **Basic configure (ODR, ranges)**
 

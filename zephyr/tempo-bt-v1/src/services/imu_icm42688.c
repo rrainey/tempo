@@ -28,7 +28,7 @@ LOG_MODULE_REGISTER(imu, LOG_LEVEL_INF);
 #define ICM42688_REG_INT_SOURCE0        0x65
 
 /* ICM-42688 Constants */
-#define ICM42688_WHO_AM_I_VALUE         0x47
+#define ICM42688_WHO_AM_I_VALUE         0x4C // ICM-42688-V
 #define ICM42688_SPI_READ_BIT           0x80
 
 /* SPI device configuration */

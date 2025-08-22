@@ -119,6 +119,7 @@
 
 /* SPI4 for IMU - Task 16 */
 &spi4 {
+    compatible = "nordic,nrf-spim";
     status = "okay";
     cs-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;  /* P0.11 for CS */
     pinctrl-0 = <&spi4_default>;
@@ -129,7 +130,8 @@
     icm42688: icm42688@0 {
         compatible = "invensense,icm42688";
         reg = <0>;
-        spi-max-frequency = <8000000>;  /* Start at 8MHz, max is 24MHz */
+        spi-max-frequency = <1000000>;  /* Start at 1MHz for validation, max is 24MHz */
+        int-gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;  /* P1.07 (D6) for INT1 */
     };
 };
 
