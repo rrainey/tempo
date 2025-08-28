@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "services/aggregator.h"
+#include "services/timebase.h"
 #include "services/imu.h"
 #include "services/baro.h"
 #include "services/gnss.h"

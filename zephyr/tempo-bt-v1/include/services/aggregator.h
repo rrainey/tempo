@@ -116,4 +116,25 @@ int aggregator_set_gnss_rate(uint16_t rate_hz);
 void aggregator_get_stats(uint32_t *imu_count, uint32_t *env_count,
                           uint32_t *gnss_count, uint32_t *dropped_count);
 
+/**
+ * @brief Write header sentences for new session
+ * 
+ * Writes $PVER and $PSFC sentences at the start of a log file
+ */
+void aggregator_write_session_header(void);
+
+/**
+ * @brief Set session start time
+ * 
+ * @param start_us Session start time in microseconds
+ */
+void aggregator_set_session_start_time(uint64_t start_us);
+
+/**
+ * @brief Set session ID
+ * 
+ * @param id Unique session identifier
+ */
+void aggregator_set_session_id(uint32_t id);
+
 #endif /* SERVICES_AGGREGATOR_H */

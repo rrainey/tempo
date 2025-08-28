@@ -8,6 +8,8 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
+#include <time.h>
+#include <zephyr/posix/time.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,6 +18,9 @@
 #include "services/timebase.h"
 
 LOG_MODULE_REGISTER(gnss, LOG_LEVEL_INF);
+
+// forward declaration
+static void update_system_time_from_fix(void);
 
 /* UART configuration */
 #define GNSS_UART_NODE DT_NODELABEL(uart2)
@@ -245,6 +250,9 @@ static void parse_gga(const char *sentence)
             current_fix.fix_quality, current_fix.num_satellites,
             current_fix.latitude, current_fix.longitude,
             current_fix.altitude);
+
+    // set date/time (one time event after boot and GPS signal acquisition)
+    update_system_time_from_fix();
 }
 
 /* Parse VTG sentence */
@@ -450,6 +458,9 @@ static void parse_rmc(const char *sentence)
     }
     
     k_mutex_unlock(&fix_mutex);
+
+    // set date/time (one time event after boot and GPS signal acquisition)
+    update_system_time_from_fix();
 }
 
 
@@ -688,3 +699,86 @@ int gnss_set_rate(uint8_t rate_hz)
     
     return 0;
 }
+
+/* Set system time from GNSS fix data */
+static void update_system_time_from_fix(void)
+{
+    struct timespec ts;
+    time_t unix_time;
+    struct tm time_tm;
+    
+    /* Check if we have valid date AND time */
+    if (!current_fix.date_valid || !current_fix.time_valid) {
+        return;
+    }
+    
+    /* Check if we've already set the time this session */
+    static bool time_set = false;
+    if (time_set) {
+        return;  /* Only set once per boot */
+    }
+    
+    /* Build tm structure */
+    memset(&time_tm, 0, sizeof(time_tm));
+    time_tm.tm_year = current_fix.year - 1900;  /* tm_year is years since 1900 */
+    time_tm.tm_mon = current_fix.month - 1;     /* tm_mon is 0-11 */
+    time_tm.tm_mday = current_fix.day;
+    time_tm.tm_hour = current_fix.hours;
+    time_tm.tm_min = current_fix.minutes;
+    time_tm.tm_sec = current_fix.seconds;
+    time_tm.tm_isdst = 0;  /* UTC has no DST */
+    
+    /* Convert to Unix timestamp */
+    unix_time = mktime(&time_tm);
+    if (unix_time == (time_t)-1) {
+        LOG_ERR("Failed to convert GNSS time to Unix timestamp");
+        return;
+    }
+    
+    /* Set system time */
+    ts.tv_sec = unix_time;
+    ts.tv_nsec = current_fix.milliseconds * 1000000;  /* Convert ms to ns */
+    
+    int ret = clock_settime(CLOCK_REALTIME, &ts);
+    if (ret == 0) {
+        time_set = true;
+        LOG_INF("System time set from GNSS: %04d-%02d-%02d %02d:%02d:%02d.%03d UTC",
+                current_fix.year, current_fix.month, current_fix.day,
+                current_fix.hours, current_fix.minutes, current_fix.seconds,
+                current_fix.milliseconds);
+                
+        /* Also update the global date string used by aggregator */
+        extern char gps_date_string[14];
+        snprintf(gps_date_string, sizeof(gps_date_string), 
+                 "%04d-%02d-%02d", current_fix.year, current_fix.month, current_fix.day);
+    } else {
+        LOG_ERR("Failed to set system time: %d", ret);
+    }
+}
+
+#ifdef CONFIG_RTC
+#include <zephyr/drivers/rtc.h>
+
+static void update_rtc_from_fix(void)
+{
+    const struct device *rtc = DEVICE_DT_GET(DT_ALIAS(rtc0));
+    struct rtc_time rtc_tm;
+    
+    if (!device_is_ready(rtc)) {
+        return;
+    }
+    
+    memset(&rtc_tm, 0, sizeof(rtc_tm));
+    rtc_tm.tm_year = current_fix.year - 1900;
+    rtc_tm.tm_mon = current_fix.month - 1;
+    rtc_tm.tm_mday = current_fix.day;
+    rtc_tm.tm_hour = current_fix.hours;
+    rtc_tm.tm_min = current_fix.minutes;
+    rtc_tm.tm_sec = current_fix.seconds;
+    
+    int ret = rtc_set_time(rtc, &rtc_tm);
+    if (ret == 0) {
+        LOG_INF("RTC updated from GNSS");
+    }
+}
+#endif

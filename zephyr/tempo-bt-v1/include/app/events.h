@@ -19,6 +19,7 @@ typedef enum {
     /* State change events */
     EVT_MODE_CHANGE,
     EVT_PHASE_CHANGE,
+    EVT_STATE_CHANGE,
     
     /* Storage events */
     EVT_STORAGE_LOW,
@@ -34,11 +35,15 @@ typedef enum {
     EVT_SENSOR_ERROR,
     EVT_GNSS_FIX_ACQUIRED,
     EVT_GNSS_FIX_LOST,
-    
+
+    EVT_BLE_CONNECTED,
+    EVT_BLE_DISCONNECTED,
+
     /* Test event */
     EVT_TEST_DUMMY,
     
     EVT_TYPE_COUNT
+    
 } event_type_t;
 
 /* Event data structure */
@@ -65,6 +70,15 @@ typedef struct {
         
         /* Generic data */
         uint32_t data[4];
+
+        struct {
+            uint32_t id;
+        } session;
+
+        struct {
+            uint8_t old_state;
+            uint8_t new_state;
+        } state_change; 
     } payload;
 } app_event_t;
 

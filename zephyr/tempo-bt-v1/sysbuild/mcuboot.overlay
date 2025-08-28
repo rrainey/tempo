@@ -1,0 +1,21 @@
+/ {
+    chosen {
+        nordic,pm-ext-flash = &mx25r64;
+    };
+};
+
+&qspi {
+    status = "okay";
+    mx25r64: mx25r6435f@0 {
+        compatible = "nordic,qspi-nor";
+        reg = <0>;
+        writeoc = "pp2o";
+        readoc = "read2io";
+        sck-frequency = <8000000>;
+        jedec-id = [c2 28 17];
+        size = <67108864>;
+        has-dpd;
+        t-enter-dpd = <10000>;
+        t-exit-dpd = <35000>;
+    };
+};

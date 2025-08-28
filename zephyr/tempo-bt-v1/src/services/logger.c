@@ -1,0 +1,388 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * 
+ * Tempo-BT V1 - Logger Service Implementation
+ */
+
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/random/random.h>
+#include <time.h>
+#include <string.h>
+#include <stdio.h>
+
+#include "services/logger.h"
+#include "services/aggregator.h"
+#include "services/file_writer.h"
+#include "services/storage.h"
+#include "services/timebase.h"
+#include "app/app_state.h"
+#include "app/events.h"
+
+LOG_MODULE_REGISTER(logger, LOG_LEVEL_INF);
+
+/* Session state */
+static struct {
+    logger_state_t state;
+    logger_config_t config;
+    
+    /* Current session */
+    uint32_t session_id;
+    uint64_t session_start_us;
+    char session_path[256];
+    char log_file_path[256];
+    
+    /* Synchronization */
+    struct k_mutex lock;
+} logger_state;
+
+/* Forward declarations */
+static void aggregator_output_to_file(const char *line, size_t len);
+static int create_session_directory(void);
+static const char *state_to_string(logger_state_t state);
+
+/* Public API */
+int logger_init(const logger_config_t *config)
+{
+    LOG_INF("Initializing logger service");
+    
+    if (!config) {
+        return -EINVAL;
+    }
+    
+    k_mutex_init(&logger_state.lock);
+    
+    k_mutex_lock(&logger_state.lock, K_FOREVER);
+    
+    logger_state.config = *config;
+    logger_state.state = LOGGER_STATE_IDLE;
+    logger_state.session_id = 0;
+    
+    k_mutex_unlock(&logger_state.lock);
+    
+    /* Initialize file writer with reasonable defaults */
+    file_writer_config_t writer_config = {
+        .buffer_size = 2048,
+        .flush_interval_ms = 250,
+        .queue_depth = 128
+    };
+    
+    int ret = file_writer_init(&writer_config);
+    if (ret != 0) {
+        LOG_ERR("Failed to initialize file writer: %d", ret);
+        return ret;
+    }
+    
+    LOG_INF("Logger initialized");
+    
+    return 0;
+}
+
+int logger_start(void)
+{
+    int ret;
+    
+    k_mutex_lock(&logger_state.lock, K_FOREVER);
+    
+    if (logger_state.state != LOGGER_STATE_IDLE && 
+        logger_state.state != LOGGER_STATE_ARMED) {
+        LOG_WRN("Cannot start logging from state %s", 
+                state_to_string(logger_state.state));
+        k_mutex_unlock(&logger_state.lock);
+        return -EINVAL;
+    }
+    
+    LOG_INF("Starting logging session");
+    
+    /* Generate session ID and timestamp */
+    logger_state.session_id = sys_rand32_get();
+    logger_state.session_start_us = time_now_us();
+    
+    /* Create session directory and file */
+    ret = create_session_directory();
+    if (ret != 0) {
+        LOG_ERR("Failed to create session directory: %d", ret);
+        k_mutex_unlock(&logger_state.lock);
+        return ret;
+    }
+    
+    /* Open log file */
+    ret = file_writer_open(logger_state.log_file_path);
+    if (ret != 0) {
+        LOG_ERR("Failed to open log file: %d", ret);
+        k_mutex_unlock(&logger_state.lock);
+        return ret;
+    }
+    
+    /* Configure aggregator */
+    aggregator_config_t agg_config = {
+        .imu_output_rate = logger_state.config.imu_rate_hz,
+        .env_output_rate = logger_state.config.env_rate_hz,
+        .gnss_output_rate = logger_state.config.gnss_rate_hz,
+        .mag_output_rate = logger_state.config.enable_magnetometer ? 10 : 0,
+        .enable_quaternion = logger_state.config.enable_quaternion,
+        .enable_magnetometer = logger_state.config.enable_magnetometer,
+        .session_id = logger_state.session_id,
+        .session_start_us = logger_state.session_start_us
+    };
+    
+    aggregator_configure(&agg_config);
+    aggregator_register_output_callback(aggregator_output_to_file);
+    
+    /* Write session header */
+    aggregator_write_session_header();
+    
+    /* Start aggregator */
+    ret = aggregator_start();
+    if (ret != 0) {
+        LOG_ERR("Failed to start aggregator: %d", ret);
+        file_writer_close();
+        k_mutex_unlock(&logger_state.lock);
+        return ret;
+    }
+    
+    /* Update state and emit event */
+    logger_state_t old_state = logger_state.state;
+    logger_state.state = LOGGER_STATE_LOGGING;
+    
+    k_mutex_unlock(&logger_state.lock);
+    
+    /* Write state change to log */
+    aggregator_write_state_change(state_to_string(old_state),
+                                  state_to_string(LOGGER_STATE_LOGGING),
+                                  "manual_start");
+    
+    /* Emit event */
+    app_event_t evt = {
+        .type = EVT_SESSION_START,
+        .payload.session.id = logger_state.session_id
+    };
+    event_bus_publish(&evt);
+    
+    LOG_INF("Logging started: session=%08x, path=%s", 
+            logger_state.session_id, logger_state.session_path);
+    
+    return 0;
+}
+
+int logger_stop(void)
+{
+    k_mutex_lock(&logger_state.lock, K_FOREVER);
+    
+    if (logger_state.state != LOGGER_STATE_LOGGING &&
+        logger_state.state != LOGGER_STATE_POSTFLIGHT) {
+        LOG_WRN("Cannot stop logging from state %s",
+                state_to_string(logger_state.state));
+        k_mutex_unlock(&logger_state.lock);
+        return -EINVAL;
+    }
+    
+    LOG_INF("Stopping logging session");
+    
+    logger_state_t old_state = logger_state.state;
+    logger_state.state = LOGGER_STATE_IDLE;
+    
+    k_mutex_unlock(&logger_state.lock);
+    
+    /* Write final state change */
+    aggregator_write_state_change(state_to_string(old_state),
+                                  state_to_string(LOGGER_STATE_IDLE),
+                                  "manual_stop");
+    
+    /* Stop aggregator */
+    aggregator_stop();
+    
+    /* Get final statistics */
+    file_writer_stats_t stats;
+    file_writer_get_stats(&stats);
+    
+    /* Close file */
+    file_writer_close();
+    
+    /* Log session summary */
+    LOG_INF("Session complete: %llu bytes, %u lines, %u errors",
+            stats.bytes_written, stats.lines_written, stats.write_errors);
+    
+    /* Emit event */
+    app_event_t evt = {
+        .type = EVT_SESSION_STOP,
+        .payload.session.id = logger_state.session_id
+    };
+    event_bus_publish(&evt);
+    
+    return 0;
+}
+
+int logger_arm(void)
+{
+    k_mutex_lock(&logger_state.lock, K_FOREVER);
+    
+    if (logger_state.state != LOGGER_STATE_IDLE) {
+        LOG_WRN("Cannot arm from state %s", state_to_string(logger_state.state));
+        k_mutex_unlock(&logger_state.lock);
+        return -EINVAL;
+    }
+    
+    logger_state_t old_state = logger_state.state;
+    logger_state.state = LOGGER_STATE_ARMED;
+    
+    k_mutex_unlock(&logger_state.lock);
+    
+    LOG_INF("Logger armed");
+    
+    /* Emit event */
+    app_event_t evt = {
+        .type = EVT_STATE_CHANGE,
+        .payload.state_change.old_state = old_state,
+        .payload.state_change.new_state = LOGGER_STATE_ARMED
+    };
+    event_bus_publish(&evt);
+    
+    return 0;
+}
+
+int logger_disarm(void)
+{
+    k_mutex_lock(&logger_state.lock, K_FOREVER);
+    
+    if (logger_state.state != LOGGER_STATE_ARMED) {
+        LOG_WRN("Cannot disarm from state %s", state_to_string(logger_state.state));
+        k_mutex_unlock(&logger_state.lock);
+        return -EINVAL;
+    }
+    
+    logger_state_t old_state = logger_state.state;
+    logger_state.state = LOGGER_STATE_IDLE;
+    
+    k_mutex_unlock(&logger_state.lock);
+    
+    LOG_INF("Logger disarmed");
+    
+    /* Emit event */
+    app_event_t evt = {
+        .type = EVT_STATE_CHANGE,
+        .payload.state_change.old_state = old_state,
+        .payload.state_change.new_state = LOGGER_STATE_IDLE
+    };
+    event_bus_publish(&evt);
+    
+    return 0;
+}
+
+logger_state_t logger_get_state(void)
+{
+    logger_state_t state;
+    
+    k_mutex_lock(&logger_state.lock, K_FOREVER);
+    state = logger_state.state;
+    k_mutex_unlock(&logger_state.lock);
+    
+    return state;
+}
+
+int logger_get_session_info(uint32_t *session_id, uint64_t *start_time,
+                            char *path, size_t path_size)
+{
+    k_mutex_lock(&logger_state.lock, K_FOREVER);
+    
+    if (logger_state.state != LOGGER_STATE_LOGGING &&
+        logger_state.state != LOGGER_STATE_POSTFLIGHT) {
+        k_mutex_unlock(&logger_state.lock);
+        return -EINVAL;
+    }
+    
+    if (session_id) {
+        *session_id = logger_state.session_id;
+    }
+    
+    if (start_time) {
+        *start_time = logger_state.session_start_us;
+    }
+    
+    if (path && path_size > 0) {
+        strncpy(path, logger_state.session_path, path_size - 1);
+        path[path_size - 1] = '\0';
+    }
+    
+    k_mutex_unlock(&logger_state.lock);
+    
+    return 0;
+}
+
+/* Internal functions */
+static void aggregator_output_to_file(const char *line, size_t len)
+{
+    write_priority_t priority = WRITE_PRIORITY_MEDIUM;
+    
+    /* Determine priority based on sentence type */
+    if (strncmp(line, "$PIMU", 5) == 0 || strncmp(line, "$PIM2", 5) == 0) {
+        priority = WRITE_PRIORITY_CRITICAL;  /* IMU data is critical */
+    } else if (strncmp(line, "$PENV", 5) == 0) {
+        priority = WRITE_PRIORITY_HIGH;      /* Baro data is high priority */
+    } else if (strncmp(line, "$PMAG", 5) == 0) {
+        priority = WRITE_PRIORITY_MEDIUM;    /* Mag data is medium */
+    } else if (strncmp(line, "$PFIX", 5) == 0 || strncmp(line, "$PTH", 4) == 0) {
+        priority = WRITE_PRIORITY_LOW;       /* GNSS data is low priority */
+    }
+    
+    /* Queue for writing */
+    int ret = file_writer_write(line, len, priority);
+    if (ret != 0 && ret != -ENOSPC) {
+        LOG_ERR("Failed to write line: %d", ret);
+    }
+}
+
+static int create_session_directory(void)
+{
+    //int ret;
+    struct tm *tm;
+    time_t now = logger_state.session_start_us / 1000000;
+    
+    /* Base path */
+    strcpy(logger_state.session_path, logger_state.config.base_path);
+    
+    /* Add date folder if configured */
+    if (logger_state.config.use_date_folders) {
+        char date_str[16];
+        tm = gmtime(&now);
+        strftime(date_str, sizeof(date_str), "%Y%m%d", tm);
+        
+        strcat(logger_state.session_path, "/");
+        strcat(logger_state.session_path, date_str);
+    }
+    
+    /* Add session folder */
+    strcat(logger_state.session_path, "/");
+    
+    if (logger_state.config.use_uuid_names) {
+        char uuid[9];
+        snprintf(uuid, sizeof(uuid), "%08X", logger_state.session_id);
+        strcat(logger_state.session_path, uuid);
+    } else {
+        char time_str[16];
+        tm = gmtime(&now);
+        strftime(time_str, sizeof(time_str), "%H%M%S", tm);
+        strcat(logger_state.session_path, time_str);
+    }
+    
+    /* Create directories - storage layer should handle this */
+    /* For now, we'll just create the file path */
+    
+    /* Build full file path */
+    snprintf(logger_state.log_file_path, sizeof(logger_state.log_file_path),
+             "%s/flight.csv", logger_state.session_path);
+    
+    return 0;
+}
+
+static const char *state_to_string(logger_state_t state)
+{
+    switch (state) {
+    case LOGGER_STATE_IDLE:       return "IDLE";
+    case LOGGER_STATE_ARMED:      return "ARMED";
+    case LOGGER_STATE_LOGGING:    return "LOGGING";
+    case LOGGER_STATE_POSTFLIGHT: return "POSTFLIGHT";
+    case LOGGER_STATE_ERROR:      return "ERROR";
+    default:                      return "UNKNOWN";
+    }
+}

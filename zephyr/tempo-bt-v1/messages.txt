@@ -1,0 +1,19 @@
+warning: BT_CTLR_DATA_LENGTH_MAX (defined at
+C:/ncs/v3.1.0/nrf\samples\common\mcumgr_bt_ota_dfu/Kconfig:125,
+C:/ncs/v3.1.0/nrf\subsys\bluetooth\services\fast_pair/Kconfig.fast_pair:125,
+subsys/bluetooth\controller/Kconfig:613) was assigned the value '251' but got the value ''. Check
+these unsatisfied dependencies: (NCS_SAMPLE_MCUMGR_BT_OTA_DFU_SPEEDUP || (BT_FAST_PAIR_GATT_SERVICE
+&& BT_FAST_PAIR && BT) || (BT_CTLR_DATA_LENGTH && BT_CONN && HAS_BT_CTLR && BT_HCI && BT)) (=n). See
+http://docs.zephyrproject.org/latest/kconfig.html#CONFIG_BT_CTLR_DATA_LENGTH_MAX and/or look up
+BT_CTLR_DATA_LENGTH_MAX in the menuconfig/guiconfig interface. The Application Development Primer,
+Setting Configuration Values, and Kconfig - Tips and Best Practices sections of the manual might be
+helpful too.
+
+
+warning: PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY (defined at
+C:/ncs/v3.1.0/nrf\subsys\partition_manager/Kconfig:187) was assigned the value 'y' but got the value
+'n'. Check these unsatisfied dependencies: (PM_EXTERNAL_FLASH_ENABLED || MCUBOOT) (=n). See
+http://docs.zephyrproject.org/latest/kconfig.html#CONFIG_PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY and/or
+look up PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY in the menuconfig/guiconfig interface. The Application
+Development Primer, Setting Configuration Values, and Kconfig - Tips and Best Practices sections of
+the manual might be helpful too.

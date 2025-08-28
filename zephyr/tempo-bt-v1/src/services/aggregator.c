@@ -10,11 +10,14 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#include "generated/app_version.h"
+
 #include "services/aggregator.h"
 #include "services/timebase.h"
 #include "services/imu.h"
 #include "services/baro.h"
 #include "services/gnss.h"
+#include "services/file_writer.h"
 #include "app/log_format.h"
 
 LOG_MODULE_REGISTER(aggregator, LOG_LEVEL_INF);
@@ -206,17 +209,16 @@ static void gnss_fix_callback(const gnss_fix_t *fix)
                  fix->year, fix->month, fix->day,
                  fix->hours, fix->minutes, fix->seconds, fix->milliseconds);
         
-        /* Format $PFIX sentence with VDOP */
+        /* Output standard NMEA GGA sentence (if needed) */
+        /* ... GGA output code ... */
+        
+        /* Output $PTH sentence immediately after
+         * $PTH contains the millis() timestamp when the GNSS sentence arrived
+         */
+        uint32_t timestamp_ms = log_get_timestamp_ms(config.session_start_us);
         int len = log_format_sentence(line, sizeof(line),
-                                      "$PFIX,%u,%s,%.7f,%.7f,%.1f,%d,%.1f,%.1f",
-                                      log_get_timestamp_ms(config.session_start_us),
-                                      time_str,
-                                      fix->latitude,
-                                      fix->longitude,
-                                      fix->altitude,
-                                      fix->fix_quality,
-                                      fix->hdop,
-                                      fix->vdop);  
+                                      "$PTH,%u",
+                                      timestamp_ms);
         
         if (len > 0) {
             output_callback(line, len);
@@ -224,7 +226,6 @@ static void gnss_fix_callback(const gnss_fix_t *fix)
     }
 }
 
-/* Update version sentence to include date */
 void aggregator_write_version(void)
 {
     if (!output_callback) {
@@ -232,9 +233,20 @@ void aggregator_write_version(void)
     }
     
     char line[LOG_MAX_SENTENCE_LEN];
+    char version_string[64];
+    
+    /* Format: $PVER,<description>,<numeric_version> */
+    /* For Tempo V1, we use the new format with extended info */
+    snprintf(version_string, sizeof(version_string),
+             "Tempo %s %s (%s)",
+             APP_DEVICE_TYPE,
+             APP_VERSION_STRING,
+             APP_GIT_COMMIT);
+    
     int len = log_format_sentence(line, sizeof(line),
-                                  "$PVER,1.0,V1,0.1.0,%s",
-                                  gps_date_string);  // Added date
+                                  "$PVER,\"%s\",%d",
+                                  version_string,
+                                  APP_VERSION_NUMERIC);
     
     if (len > 0) {
         output_callback(line, len);
@@ -295,13 +307,24 @@ static void env_output_handler(struct k_work *work)
     char line[LOG_MAX_SENTENCE_LEN];
     uint32_t timestamp_ms = log_get_timestamp_ms(config.session_start_us);
     
-    /* Output environmental sentence using latest sample */
+    /* Convert pressure from Pa to hPa for compatibility */
+    float pressure_hpa = last_baro_sample.pressure_pa / 100.0f;
+    
+    /* Convert altitude from meters to feet for compatibility */
+    float altitude_ft = last_baro_sample.altitude_m * 3.28084f;
+    
+    /* Battery voltage is -1 for V1 (no battery monitoring) */
+    float battery_v = -1.0f;
+    
+    /* Output environmental sentence using latest sample
+     * Format: $PENV,timestamp_ms,pressure_hPa,altitude_ft,battery_v
+     */
     int len = log_format_sentence(line, sizeof(line),
-                                  "$PENV,%u,%.1f,%.2f,%.1f",
+                                  "$PENV,%u,%.2f,%.2f,%.2f",
                                   timestamp_ms,
-                                  last_baro_sample.pressure_pa,
-                                  last_baro_sample.temperature_c,
-                                  last_baro_sample.altitude_m);
+                                  pressure_hpa,
+                                  altitude_ft,
+                                  battery_v);
     
     if (len > 0) {
         output_callback(line, len);
@@ -431,7 +454,6 @@ int aggregator_stop(void)
     return 0;
 }
 
-
 void aggregator_write_session_config(void)
 {
     if (!output_callback) {
@@ -439,8 +461,25 @@ void aggregator_write_session_config(void)
     }
     
     char line[LOG_MAX_SENTENCE_LEN];
-    const char *time_str = "unknown";  /* TODO: Get from GNSS when available */
+    char time_str[32];
     
+    /* Get current time for session start */
+    uint64_t now_us = time_now_us();
+    uint32_t now_ms = (uint32_t)(now_us / 1000);
+    
+    /* If we have GPS time, use ISO format, otherwise use milliseconds */
+    if (gps_date_string[0] != '\0') {
+        /* We have GPS date but might not have full time yet */
+        snprintf(time_str, sizeof(time_str), "%sT00:00:00Z", gps_date_string);
+    } else {
+        /* No GPS yet, use relative timestamp */
+        snprintf(time_str, sizeof(time_str), "T+%u", now_ms);
+    }
+    
+    /* Format: $PSFC,session_id,time,rates,axes
+     * rates format: imu:env:gnss:mag
+     * axes: always NED for V1
+     */
     int len = log_format_sentence(line, sizeof(line),
                                   "$PSFC,%u,%s,%d:%d:%d:%d,NED",
                                   config.session_id,
@@ -465,6 +504,7 @@ void aggregator_write_state_change(const char *old_state, const char *new_state,
     char line[LOG_MAX_SENTENCE_LEN];
     uint32_t timestamp_ms = log_get_timestamp_ms(config.session_start_us);
     
+    /* Format: $PST,timestamp_ms,old_state,new_state,trigger */
     int len = log_format_sentence(line, sizeof(line),
                                   "$PST,%u,%s,%s,%s",
                                   timestamp_ms,
@@ -501,4 +541,23 @@ void aggregator_get_stats(uint32_t *imu_count, uint32_t *env_count,
     if (env_count) *env_count = stats.env_count;
     if (gnss_count) *gnss_count = stats.gnss_count;
     if (dropped_count) *dropped_count = stats.dropped_count;
+}
+
+void aggregator_set_session_start_time(uint64_t start_us)
+{
+    config.session_start_us = start_us;
+}
+
+void aggregator_set_session_id(uint32_t id)
+{
+    config.session_id = id;
+}
+
+void aggregator_write_session_header(void)
+{
+    /* First write version */
+    aggregator_write_version();
+    
+    /* Then write session file config */
+    aggregator_write_session_config();
 }

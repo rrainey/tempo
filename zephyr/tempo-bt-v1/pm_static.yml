@@ -1,0 +1,71 @@
+# MCUboot bootloader partition
+mcuboot:
+  address: 0x0
+  region: flash_primary
+  size: 0x10000
+
+# Critical padding partition - MUST be included to fix PM_MCUBOOT_PAD_SIZE error
+mcuboot_pad:
+  address: 0x10000
+  region: flash_primary
+  size: 0x200
+
+# Application partition
+app:
+  address: 0x10200
+  region: flash_primary
+  size: 0xdfe00
+
+# Primary slot spanning pad + app
+mcuboot_primary:
+  address: 0x10000
+  region: flash_primary
+  size: 0xe0000
+  span: [mcuboot_pad, app]
+
+# Primary slot specifically for app
+mcuboot_primary_app:
+  address: 0x10200
+  region: flash_primary
+  size: 0xdfe00
+  span: [app]
+
+# Network core primary slot in RAM flash
+mcuboot_primary_1:
+  address: 0x0
+  size: 0x40000
+  device: flash_ctrl
+  region: ram_flash
+
+# Settings storage
+settings_storage:
+  address: 0xf0000
+  region: flash_primary
+  size: 0x10000
+
+# Application core secondary slot in external flash
+mcuboot_secondary:
+  address: 0x00000
+  size: 0xe0000
+  device: mx25r64
+  region: external_flash
+
+# Network core secondary slot in external flash
+mcuboot_secondary_1:
+  address: 0xe0000
+  size: 0x40000
+  device: mx25r64
+  region: external_flash
+
+# Remaining external flash for application use
+external_flash:
+  address: 0x120000
+  size: 0x6e0000
+  device: mx25r64
+  region: external_flash
+
+# Protocol Control Driver SRAM partition
+pcd_sram:
+  address: 0x20000000
+  size: 0x2000
+  region: sram_primary
