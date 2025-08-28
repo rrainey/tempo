@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+
+cmake_minimum_required(VERSION 3.20.0)
+
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+project(tempo-bt)
+
+target_sources(app PRIVATE 
+    src/main.c
+    src/app_init.c
+    src/app_state.c
+    src/events.c
+    src/config/settings.c
+    src/services/timebase.c
+    src/services/gnss_m10q.c
+    src/services/imu_icm42688.c
+    src/services/baro_bmp390.c
+    src/services/aggregator.c
+    tests/test_baro.c
+    tests/test_aggregator.c
+)
+
+target_include_directories(app PRIVATE include)

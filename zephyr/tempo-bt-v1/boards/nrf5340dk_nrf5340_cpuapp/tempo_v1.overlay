@@ -1,0 +1,247 @@
+/*
+ * Copyright (c) 2025 Riley Rainey
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Tempo-BT V1 Board Overlay
+ * Golden board definition
+ */
+
+/* UART for SAM-M10Q GNSS */
+&uart2 {
+    status = "okay";
+    current-speed = <9600>;  /* SAM-M10Q default baud rate */
+    pinctrl-0 = <&uart2_default>;
+    pinctrl-1 = <&uart2_sleep>;
+    pinctrl-names = "default", "sleep";
+    /* No hw-flow-control property = flow control disabled */
+};
+
+/ {
+    /* STANDARD LEDs */
+    leds {
+		compatible = "gpio-leds";
+		led0: led_0 {
+			gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+			label = "Green LED 0";
+		};
+		led1: led_1 {
+			gpios = <&gpio1 06 GPIO_ACTIVE_LOW>;
+			label = "Red LED 1";
+		};
+	};
+
+    /* RGB LED */
+    pwmleds {
+		compatible = "pwm-leds";
+		pwm_led0: pwm_led_0 {
+			pwms = <&pwm0 0 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+			label = "Red PWM LED";
+		};
+		pwm_led1: pwm_led_1 {
+			pwms = <&pwm0 1 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+			label = "Green PWM LED";
+		};
+		pwm_led2: pwm_led_2 {
+			pwms = <&pwm0 2 PWM_MSEC(20) PWM_POLARITY_INVERTED>;
+			label = "Blue PWM LED";
+		};
+	};
+
+    /* OPTIONAL HARDWARE-DEBOUNCED PUSHBUTTONS */
+    buttons {
+		compatible = "gpio-keys";
+		button0: button_0 {
+			gpios = <&gpio0 23 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			label = "Push button 1";
+			zephyr,code = <INPUT_KEY_0>;
+		};
+		button1: button_1 {
+			gpios = <&gpio0 24 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			label = "Push button 2";
+			zephyr,code = <INPUT_KEY_1>;
+		};
+	};
+
+    aliases {
+        spi-flash0 = &mx25r64;
+    };
+
+    chosen {
+        /* Zephyr console on UART0 (default) */
+        zephyr,console = &uart0;
+        zephyr,shell-uart = &uart0;
+    };
+};
+
+/* QSPI NOR Flash - MX25R6435F (64 Mbit) */
+&qspi {
+    status = "okay";
+    
+    mx25r64: mx25r6435f@0 {
+        compatible = "nordic,qspi-nor";
+        reg = <0>;
+        
+        /* MX25R6435F supports up to 80MHz in SDR mode */
+        sck-frequency = <8000000>; /* Start conservative at 8MHz */
+        
+        /* JEDEC ID for MX25R6435F */
+        jedec-id = [c2 28 17];
+        
+        /* 64 Mbit = 8 MByte */
+        size = <67108864>;
+        
+        /* Memory organization */
+        has-dpd;
+        t-enter-dpd = <10000>;
+        t-exit-dpd = <35000>;
+        
+        /* Quad mode configuration */
+        quad-enable-requirements = "S1B6";
+        
+        /* Read modes supported */
+        readoc = "read4io";
+        writeoc = "pp4io";
+        
+        partitions {
+            compatible = "fixed-partitions";
+            #address-cells = <1>;
+            #size-cells = <1>;
+            
+            lfs_storage: partition@0 {
+                label = "lfs_storage";
+                reg = <0x00000000 0x00800000>;  /* 8MB */
+            };
+        };
+    };
+};
+
+/* Placeholder sections for peripherals to be added in later tasks */
+
+/* SPI4 for IMU - Task 16 */
+&spi4 {
+    compatible = "nordic,nrf-spim";
+    status = "okay";
+    cs-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;  /* P0.11 for CS */
+    pinctrl-0 = <&spi4_default>;
+    pinctrl-1 = <&spi4_sleep>;
+    pinctrl-names = "default", "sleep";
+    
+    /* ICM-42688-V */
+    icm42688: icm42688@0 {
+        compatible = "invensense,icm42688";
+        reg = <0>;
+        spi-max-frequency = <1000000>;  /* Start at 1MHz for validation, max is 24MHz */
+        int-gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;  /* P1.07 (D6) for INT1 */
+    };
+};
+
+/* I2C1 for Barometer and Magnetometer */
+&i2c1 {
+	compatible = "nordic,nrf-twim";
+	status = "okay";
+	pinctrl-0 = <&i2c1_default>;
+	pinctrl-1 = <&i2c1_sleep>;
+	pinctrl-names = "default", "sleep";
+    
+    bmp390: bmp390@76 {
+        compatible = "bosch,bmp390";
+        reg = <0x76>;
+        label = "BMP390";
+    };
+    
+    /* 
+    mmc5983ma: mmc5983ma@30 {
+        compatible = "memsic,mmc5983ma";
+        reg = <0x30>;
+        label = "MMC5983MA";
+    };
+    */
+};
+
+/* UART for GNSS - Using uart2 */
+&uart2 {
+    status = "okay";
+    current-speed = <9600>;  /* SAM-M10Q default baud rate */
+    pinctrl-0 = <&uart2_default>;
+    pinctrl-1 = <&uart2_sleep>;
+    pinctrl-names = "default", "sleep";
+    /* No hw-flow-control property = flow control disabled */
+};
+
+/* uart2 pin configuration - TX/RX only, RTS/CTS explicitly disconnected */
+&pinctrl {
+    i2c1_default: i2c1_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 1, 2)>,
+				<NRF_PSEL(TWIM_SCL, 1, 3)>;
+		};
+	};
+
+	i2c1_sleep: i2c1_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SDA, 1, 2)>,
+				<NRF_PSEL(TWIM_SCL, 1, 3)>;
+			low-power-enable;
+		};
+	};
+
+    uart2_default: uart2_default {
+        group1 {
+            psels = <NRF_PSEL(UART_TX, 0, 25)>,   /* P0.25 (VCOM1_TX) -> GNSS RX */
+                    <NRF_PSEL(UART_RX, 0, 26)>;   /* P0.26 (VCOM1_RX) <- GNSS TX */
+        };
+        group2 {
+            psels = <NRF_PSEL(UART_RTS, 0, 0xFFFFFFFF)>,  /* Disconnected */
+                    <NRF_PSEL(UART_CTS, 0, 0xFFFFFFFF)>;  /* Disconnected */
+        };
+    };
+
+    uart2_sleep: uart2_sleep {
+        group1 {
+            psels = <NRF_PSEL(UART_TX, 0, 25)>,
+                    <NRF_PSEL(UART_RX, 0, 26)>;
+            low-power-enable;
+        };
+        group2 {
+            psels = <NRF_PSEL(UART_RTS, 0, 0xFFFFFFFF)>,
+                    <NRF_PSEL(UART_CTS, 0, 0xFFFFFFFF)>;
+            low-power-enable;
+        };
+    };
+
+    spi4_default: spi4_default {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK, 0, 8)>,// mikroBUS slot 1
+				<NRF_PSEL(SPIM_MISO, 0, 10)>,// mikroBUS slot 1
+				<NRF_PSEL(SPIM_MOSI, 0, 9)>;// mikroBUS slot 1
+		};
+	};
+
+	spi4_sleep: spi4_sleep {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK, 0, 8)>,// mikroBUS slot 1
+				<NRF_PSEL(SPIM_MISO, 0, 10)>,// mikroBUS slot 1
+				<NRF_PSEL(SPIM_MOSI, 0, 9)>;// mikroBUS slot 1
+			low-power-enable;
+		};
+	};
+
+    pwm0_default: pwm0_default {
+		group1 {
+			psels = <NRF_PSEL(PWM_OUT0, 0, 4)>,
+				<NRF_PSEL(PWM_OUT1, 0, 5)>,
+				<NRF_PSEL(PWM_OUT2, 0, 6)>;
+			nordic,invert;
+		};
+	};
+
+	pwm0_sleep: pwm0_sleep {
+		group1 {
+			psels = <NRF_PSEL(PWM_OUT0, 0, 4)>,
+				<NRF_PSEL(PWM_OUT1, 0, 5)>,
+				<NRF_PSEL(PWM_OUT2, 0, 6)>;
+			nordic,invert;
+			low-power-enable;
+		};
+	};
+};

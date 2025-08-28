@@ -1,0 +1,20 @@
+# Tempo-BT V1 Flash Partition Layout
+# This file documents the partition layout defined in the device tree overlay
+# 
+# Total Flash: 8MB (MX25R6435F on QSPI)
+#
+# Partitions:
+# - lfs_storage: 8MB (0x000000 - 0x800000)
+#   Used for LittleFS filesystem storing flight logs
+#
+# Note: In V2, we may want to reserve space for:
+# - OTA update staging area
+# - Configuration backup
+# - Diagnostic logs
+
+# This is handled by device tree in boards/nrf5340dk_nrf5340_cpuapp/tempo_v1.overlay
+# The partition is defined as:
+#   lfs_storage: partition@0 {
+#       label = "lfs_storage";
+#       reg = <0x00000000 0x00800000>;  /* 8MB */
+#   };

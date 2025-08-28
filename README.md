@@ -1,29 +1,29 @@
 # Tempo
 
-## One Project, Two Boards
+## One Project, Three Boards
 
-Two boards are part of the Tempo project: Tempo and Peakick. Both explore modern sensor ICs for use in skydiving.  The Peakick board is more research oriented. 
-Peakick is design as a daughter board for
-a experimentation with a range of microcontroller boards. It is most easily connected to SparkFun "Thing Plus" form factor boards, although 
-it can be connected to almost any modern MCU/SOC board supporting 3.3V
-peripherals.
+This repository is a collection point for a number of jump logging devices I designed for skydivers.
 
-Tempo is a purpose built single board logger derived from Peakick.  It adds a SAMD51 MCU onto a Peakick board.  This project includes PlatformIO-based firmware to drive this board as a stand-alone
-skidiving data logger.
+Three boards are part of the Tempo project: Tempo-BT, Tempo, and Peakick. All three explore modern sensor ICs for use in skydiving.  The Peakick board is more research oriented. 
+Peakick is design as a daughter board for experimentation with a range of microcontroller boards. It is most easily connected to SparkFun "Thing Plus" form factor boards, although 
+it can be connected to almost any modern MCU/SOC board designed for 3.3V peripherals.
 
-### Experiments in audible feedback for skydivers.
+Tempo is a purpose built single board logger derived from Peakick.  Essentially, it is a SAMD51 MCU dropped onto a Peakick board.  This project includes PlatformIO-based firmware to drive this board as a stand-alone
+skydiving data logger.  The firmware is operational and reliable and I use this board most often for my logging experiments.
 
-This project was originally designed to experiment with real-time audible feedback at assist a skydiver in freefall. The original Peakick design stacks a [SparkFun ESP32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) atop a custom GNSS/sensor combo board. The SparkFun board supports an audio connection to Bluetooth earbuds or headphones.
+### Tempo-BT: Experiments in audible feedback for skydivers.
+
+This project was originally designed to experiment with real-time audible feedback at assist a skydiver in freefall. The original Peakick design stacks a [SparkFun ESP32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) atop a custom GNSS/sensor combo board. The SparkFun board supports an audio connection to Bluetooth earbuds or headphones.  That work led me to design the Tempo-BT board.
 
 
-### Sensors and Capabilites
+### Sensors and Capabilities
 
 - GPS/GNSS using a u-blox SAM-M10Q
 - 6-DOF Inertial measurement / gyro using a ICM-42688-V
 - Barometric pressure / temperature using a BPM390
 - 3-DOF Compass/Magnetic measurement using a MMC5983MA
 
-I am just getting started with this project, so all I'm doing for now is velidating the sensor board designs and (soon) experimenting with basic BT audio capabilities.
+I am just getting started with this project, so all I'm doing for now is validating the sensor board designs and (soon) experimenting with basic BT audio capabilities.
 
 ![temp assembly](images/tempo-assembly.png)
 
@@ -34,10 +34,11 @@ I am just getting started with this project, so all I'm doing for now is velidat
 | hardware    | KiCad PCB projects (using KiCad 7)    |
 | hardware/peakick | (original) u-blox GNSS + IMU + Barometric sensor PCB |
 | hardware/tempo |(newer design)  SAMD51 + u-blox GNSS + IMU + Barometric sensor PCB |
-| enclosure    | 3D-printable enclosure (Fusion360 format)
-| firmware    | Arduino sketches       |
-| platformio  | Platformio test and operational projects for Tempo board |
-| platformio/tempo-logger  | Skydiving logger firmware for the Tempo board |
+| hardware/tempo-bt |(newest design) u-blox NORA-B106 Bluetooth SOC (Nordic nRF5340) + u-blox GNSS + IMU + Barometric sensor PCB |
+| enclosure    | 3D-printable enclosures (Fusion360 format)
+| firmware    | various Arduino sketches (mostly for historical reference)       |
+| platformio  | Platformio test and operational projects for the Tempo board |
+| platformio/tempo-logger  | Skydiving logger firmware for the Tempo board - tested and reliable |
 
 ## Enclosure
 
@@ -47,9 +48,9 @@ The PCBs are secured to the enclosure using M2.5 brass inserts and screws. The i
 
 ### PCB Notes
 
-Both boards were created using KiCad 7.0.  In peakick, in order to get the header alignment with the parent board as acccurate as possible, I imported the [SparkFun STM32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) GitHub project to use its PCB layout. 
+All three boards were created using KiCad.  In Peakick, in order to get the header alignment with the parent board as accurate as possible, I imported the [SparkFun STM32 Thing Plus](https://github.com/sparkfun/STM32_Thing_Plus) GitHub project to use its PCB layout. 
 
-I prefer 1 oz. Copper with ENIG finish. I ordered the V1 PCB from OSHPark and stencils from OSH as well.
+I prefer 1 oz. Copper with ENIG finish. I ordered the Peakick V1 PCB from OSHPark and stencils from OSH as well.  Tempo boards were ordered from PCBWay.
 
 ## Peakick Assembly Parts List
 
