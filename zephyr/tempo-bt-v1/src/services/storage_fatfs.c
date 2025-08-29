@@ -9,6 +9,7 @@
 #include <zephyr/fs/fs.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/device.h>
+#include <zephyr/drivers/gpio.h>
 #include <ff.h>
 #include <string.h>
 #include <stdio.h>
@@ -23,6 +24,12 @@ LOG_MODULE_REGISTER(storage_fatfs, LOG_LEVEL_INF);
 
 /* Maximum path length */
 #define MAX_PATH_LEN 256
+
+/* SD Card detect GPIO */
+#define SD_DETECT_NODE DT_PATH(sdcard_detect, sdcard_detect_pin)
+#if DT_NODE_HAS_STATUS(SD_DETECT_NODE, okay)
+static const struct gpio_dt_spec sd_detect = GPIO_DT_SPEC_GET(SD_DETECT_NODE, gpios);
+#endif
 
 /* Storage state */
 static struct {
@@ -466,12 +473,39 @@ static int fatfs_list_dir(void *ctx, const char *path, storage_list_cb_t cb, voi
 /* Card detect helper */
 bool storage_fatfs_card_present(void)
 {
-    /* Check if card detect GPIO indicates card is present */
-    /* This would need to be implemented based on your GPIO setup */
-    /* For now, we'll try to access the disk to detect presence */
+#if DT_NODE_HAS_STATUS(SD_DETECT_NODE, okay)
+    int ret;
     
-    //uint8_t status;
-    int ret = disk_access_status(STORAGE_PARTITION);
+    /* Check if the GPIO device is ready */
+    if (!device_is_ready(sd_detect.port)) {
+        LOG_WRN("SD card detect GPIO not ready, falling back to disk status check");
+        goto fallback_check;
+    }
     
-    return (ret == DISK_STATUS_OK);
+    /* Configure the GPIO pin as input with pull-up (card detect is active low) */
+    ret = gpio_pin_configure_dt(&sd_detect, GPIO_INPUT);
+    if (ret < 0) {
+        LOG_WRN("Failed to configure SD detect pin: %d, falling back to disk status", ret);
+        goto fallback_check;
+    }
+    
+    /* Read the pin state - active low, so 0 = card present, 1 = no card */
+    ret = gpio_pin_get_dt(&sd_detect);
+    if (ret < 0) {
+        LOG_WRN("Failed to read SD detect pin: %d", ret);
+        goto fallback_check;
+    }
+    
+    /* Return true if pin is low (card present) */
+    bool card_present = (ret == 0);
+    LOG_DBG("SD card detect GPIO: %s", card_present ? "card present" : "no card");
+    return card_present;
+
+fallback_check:
+#endif
+    /* Fallback: try to access the disk to detect presence */
+    int ret1 = disk_access_status(STORAGE_PARTITION);
+    bool disk_ok = (ret1 == DISK_STATUS_OK);
+    LOG_DBG("SD card disk status: %s (code %d)", disk_ok ? "OK" : "Not OK", ret1);
+    return disk_ok;
 }

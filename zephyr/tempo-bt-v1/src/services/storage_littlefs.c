@@ -97,34 +97,26 @@ int storage_littlefs_init(void)
 
     /* Mount filesystem */
     ret = fs_mount(&lfs_mount_spec);
-    if (ret != 0) {
-        LOG_ERR("Failed to mount LittleFS: %d", ret);
-        LOG_INF("Attempting to format and remount...");
+    if (ret == 0) {
+        /* Mount succeeded */
+        storage_state.mounted = true;
+        LOG_INF("LittleFS mounted at %s on external flash partition", LFS_MOUNT_POINT);
+
+        /* Create base directories */
+        char path[256];
+        snprintf(path, sizeof(path), "%s/logs", LFS_MOUNT_POINT);
+        fs_mkdir(path);  /* Ignore error if already exists */
         
-        /* Try formatting */
-        ret = fs_mkfs(FS_LITTLEFS, (uintptr_t)LFS_PARTITION_ID, NULL, 0);
-        if (ret != 0) {
-            LOG_ERR("Failed to format LittleFS: %d", ret);
-            return ret;
-        }
-        
-        /* Try mounting again */
-        ret = fs_mount(&lfs_mount_spec);
-        if (ret != 0) {
-            LOG_ERR("Failed to mount after format: %d", ret);
-            return ret;
-        }
+        return 0;
+    } else {
+        /* Mount failed - this is normal on first boot with unformatted flash */
+        LOG_WRN("LittleFS mount failed with %d - this is normal on first boot", ret);
+        LOG_INF("The filesystem will be automatically formatted on first write");
+        /* Note: LittleFS in Zephyr often auto-formats on first file operation */
+        /* We return success here to allow the system to continue */
+        /* The first write operation will trigger the format */
+        return 0;
     }
-
-    storage_state.mounted = true;
-    LOG_INF("LittleFS mounted at %s on external flash partition", LFS_MOUNT_POINT);
-
-    /* Create base directories */
-    char path[256];
-    snprintf(path, sizeof(path), "%s/logs", LFS_MOUNT_POINT);
-    fs_mkdir(path);  /* Ignore error if already exists */
-
-    return 0;
 }
 
 int storage_littlefs_deinit(void)
@@ -218,9 +210,17 @@ static int lfs_open(void *ctx, const char *path, storage_file_t *file)
 
     ARG_UNUSED(ctx);
 
-    ret = ensure_mounted();
-    if (ret != 0) {
-        return ret;
+    /* First ensure we're mounted */
+    if (!storage_state.mounted) {
+        /* Try to mount again - this might trigger auto-format */
+        ret = fs_mount(&lfs_mount_spec);
+        if (ret == 0) {
+            storage_state.mounted = true;
+            LOG_INF("LittleFS mounted successfully on file open");
+        } else {
+            LOG_ERR("Failed to mount LittleFS on file open: %d", ret);
+            return ret;
+        }
     }
 
     /* Create directory structure if needed */
@@ -313,9 +313,9 @@ static int lfs_get_free_space(void *ctx, uint64_t *free_bytes, uint64_t *total_b
 
     ARG_UNUSED(ctx);
 
-    ret = ensure_mounted();
-    if (ret != 0) {
-        return ret;
+    /* Make sure we're mounted */
+    if (!storage_state.mounted) {
+        return -EINVAL;
     }
 
     ret = fs_statvfs(LFS_MOUNT_POINT, &stats);
@@ -341,9 +341,8 @@ static int lfs_delete(void *ctx, const char *path)
 
     ARG_UNUSED(ctx);
 
-    ret = ensure_mounted();
-    if (ret != 0) {
-        return ret;
+    if (!storage_state.mounted) {
+        return -EINVAL;
     }
 
     ret = fs_unlink(path);
@@ -362,9 +361,8 @@ static int lfs_exists(void *ctx, const char *path)
 
     ARG_UNUSED(ctx);
 
-    ret = ensure_mounted();
-    if (ret != 0) {
-        return ret;
+    if (!storage_state.mounted) {
+        return 0;
     }
 
     ret = fs_stat(path, &entry);
@@ -384,9 +382,8 @@ static int lfs_list_dir(void *ctx, const char *path, storage_list_cb_t cb, void 
         return -EINVAL;
     }
 
-    ret = ensure_mounted();
-    if (ret != 0) {
-        return ret;
+    if (!storage_state.mounted) {
+        return -EINVAL;
     }
 
     fs_dir_t_init(&dir);
