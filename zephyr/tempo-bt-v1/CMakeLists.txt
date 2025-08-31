@@ -51,6 +51,7 @@ target_sources(app PRIVATE
     src/services/storage_littlefs.c
     src/services/logger.c
     src/services/file_writer.c
+    src/services/led.c
 )
 
 # Utility sources

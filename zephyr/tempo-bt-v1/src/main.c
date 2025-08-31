@@ -17,6 +17,7 @@
 #include "app/app_state.h"
 #include "app/events.h"
 #include "config/settings.h"
+
 #include "services/timebase.h"
 #include "services/storage.h"
 #include "services/file_writer.h"
@@ -24,7 +25,7 @@
 #include "services/imu.h"
 #include "services/baro.h"
 #include "services/logger.h"
-
+#include "services/led.h"
 #include "services/aggregator.h"
 #include "util/nmea_checksum.h"
 
@@ -213,6 +214,140 @@ int buttons_init(void)
     return 0;
 }
 
+/* State change handler */
+static void update_led_for_state(logger_state_t state)
+{
+    switch (state) {
+    case LOGGER_STATE_IDLE:
+        /* Blue slow blink for idle */
+        set_color_led_state(RGB_BLUE, true);
+        LOG_INF("LED: Blue (idle)");
+        break;
+        
+    case LOGGER_STATE_ARMED:
+        /* Green slow blink for armed */
+        set_color_led_state(RGB_GREEN, true);
+        LOG_INF("LED: Green (armed)");
+        break;
+        
+    case LOGGER_STATE_LOGGING:
+        /* Red slow blink for logging */
+        set_color_led_state(RGB_RED, true);
+        LOG_INF("LED: Red (logging)");
+        break;
+        
+    case LOGGER_STATE_ERROR:
+    default:
+        /* Orange slow blink for error */
+        set_color_led_state(RGB_ORANGE, true);
+        LOG_INF("LED: Orange (error)");
+        break;
+    }
+}
+
+/* Event handler for state changes */
+static void led_event_handler(const app_event_t *event, void *user_data)
+{
+    ARG_UNUSED(user_data);
+    
+    switch (event->type) {
+    case EVT_MODE_CHANGE:
+        /* Update LED based on logger state */
+        update_led_for_state(logger_get_state());
+        break;
+        
+    case EVT_STORAGE_ERROR:
+    case EVT_SENSOR_ERROR:
+        /* Flash orange for errors */
+        set_color_led_state(RGB_ORANGE, true);
+        break;
+        
+    case EVT_STORAGE_LOW:
+        /* Could flash yellow as warning */
+        break;
+        
+    default:
+        break;
+    }
+}
+
+#if 0
+/* Event subscriber for LED */
+static event_subscriber_t led_subscriber;
+
+/* In main() after logger_init(): */
+
+    /* Initialize LED service */
+    ret = led_service_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize LED service: %d", ret);
+        /* Non-critical, continue without LED */
+    } else {
+        /* Subscribe to events for LED updates */
+        ret = event_bus_subscribe(&led_subscriber, 
+                                 led_event_handler,
+                                 (1U << EVT_MODE_CHANGE) | 
+                                 (1U << EVT_STORAGE_ERROR) |
+                                 (1U << EVT_SENSOR_ERROR),
+                                 NULL);
+        if (ret < 0) {
+            LOG_ERR("Failed to subscribe LED to events: %d", ret);
+        }
+        
+        /* Set initial state */
+        update_led_for_state(logger_get_state());
+    }
+
+#endif
+
+/* Alternative: Manual state indication without events */
+static void indicate_system_error(const char *error_msg)
+{
+    LOG_ERR("%s", error_msg);
+    set_color_led_state(RGB_ORANGE, true);
+}
+
+static void indicate_system_ready(void)
+{
+    LOG_INF("System ready");
+    set_color_led_state(RGB_BLUE, true);
+}
+
+#if 0
+/* Example usage in button handlers: */
+static void button0_work_handler_with_led(struct k_work *work)
+{
+    /* ... existing code ... */
+    
+    if (press_duration >= BUTTON_LONG_PRESS_MS) {
+        logger_state_t state = logger_get_state();
+        if (state == LOGGER_STATE_IDLE) {
+            logger_arm();
+            set_color_led_state(RGB_GREEN, true);  /* Armed */
+        } else if (state == LOGGER_STATE_ARMED) {
+            logger_disarm();
+            set_color_led_state(RGB_BLUE, true);   /* Back to idle */
+        }
+    }
+}
+#endif
+
+/* Special patterns for specific conditions */
+static void indicate_storage_full(void)
+{
+    /* Could implement a fast blink or different pattern */
+    set_color_led_state(RGB_MAGENTA, true);
+}
+
+static void indicate_gnss_lock(void)
+{
+    /* Brief green flash when GNSS gets lock */
+    set_color_led_state(RGB_GREEN, true);
+    k_msleep(100);
+    /* Return to current state color */
+    update_led_for_state(logger_get_state());
+}
+
 static void test_version_output(const char *line, size_t len)
 {
     /* Print to console for verification */
@@ -384,8 +519,26 @@ int main(void)
     }
     
     printk("boot\n");
-    LOG_INF("hello");
     LOG_INF("Tempo-BT V1 started successfully");
+    
+    #if 0
+    ret = led_service_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize LED service: %d", ret);
+    }
+    
+    indicate_system_ready();
+    #endif
+
+    if (!gpio_is_ready_dt(&led)) {
+		//return 0;
+	}
+	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+
+    ret = buttons_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize buttons: %d", ret);
+    }   
     
     /* Initialize app state first */
     ret = app_state_init();
@@ -420,20 +573,12 @@ int main(void)
     }
 
     // Now initialize app (which includes BLE/mcumgr)
+
+    LOG_INF("Calling app_init()");
     ret = app_init();
     if (ret < 0) {
         LOG_ERR("Failed to initialize app: %d", ret);
     }
-
-    if (!gpio_is_ready_dt(&led)) {
-		//return 0;
-	}
-	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
-
-    ret = buttons_init();
-    if (ret < 0) {
-        LOG_ERR("Failed to initialize buttons: %d", ret);
-    }   
 
     /* Initialize event bus */
     ret = event_bus_init();
@@ -546,22 +691,20 @@ int main(void)
     #endif
     
     /* Initialize GNSS */
-    #if 0  /* Temporarily disabled to focus on IMU */
     LOG_INF("About to init GNSS...");
     ret = gnss_init();
     if (ret < 0) {
         LOG_ERR("Failed to initialize GNSS: %d", ret);
+        /* GNSS failure is not critical - continue without it */
     } else {
-        /* Register test callback */
-        gnss_register_nmea_callback(test_nmea_callback);
-        gnss_register_fix_callback(test_fix_callback);
-        LOG_INF("GNSS initialized, waiting for NMEA data...");
+        LOG_INF("GNSS initialized successfully");
+        
+        /* Configure GNSS for flight operations */
+        ret = gnss_set_rate(1);  /* 5Hz update rate as per settings */
+        if (ret < 0) {
+            LOG_WRN("Failed to set GNSS rate: %d", ret);
+        }
     }
-   
-
-    test_sentence_generation();
-
-     #endif
     
     /* Initialize IMU - but skip it for now due to hardware issues */
     #if 1

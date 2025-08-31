@@ -30,7 +30,7 @@ static void update_system_time_from_fix(void);
 /* UART device and buffers */
 static const struct device *uart_dev;
 static uint8_t uart_rx_buf[GNSS_UART_BUFFER_SIZE];
-static uint8_t uart_rx_buf2[GNSS_UART_BUFFER_SIZE];  /* Second buffer for double buffering */
+static uint8_t uart_rx_buf2[GNSS_UART_BUFFER_SIZE];  
 static uint8_t nmea_line_buf[GNSS_UART_BUFFER_SIZE];
 static size_t nmea_line_pos = 0;
 
@@ -738,6 +738,11 @@ static void update_system_time_from_fix(void)
     /* Set system time */
     ts.tv_sec = unix_time;
     ts.tv_nsec = current_fix.milliseconds * 1000000;  /* Convert ms to ns */
+
+    LOG_INF("Initializing system time from GNSS: %04d-%02d-%02d %02d:%02d:%02d.%03d UTC",
+                current_fix.year, current_fix.month, current_fix.day,
+                current_fix.hours, current_fix.minutes, current_fix.seconds,
+                current_fix.milliseconds);
     
     int ret = clock_settime(CLOCK_REALTIME, &ts);
     if (ret == 0) {

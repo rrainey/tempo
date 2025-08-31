@@ -79,6 +79,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
     LOG_INF("Disconnected (reason 0x%02x)", reason);
 
+    /* Stop advertising first */
+    bt_le_adv_stop();
+
     if (current_conn) {
         bt_conn_unref(current_conn);
         current_conn = NULL;
@@ -97,6 +100,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
         LOG_ERR("Failed to restart advertising: %d", ret);
     }
 }
+
 
 static void param_updated(struct bt_conn *conn, uint16_t interval,
                           uint16_t latency, uint16_t timeout)

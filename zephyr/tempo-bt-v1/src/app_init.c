@@ -18,6 +18,9 @@
 #include <zephyr/mgmt/mcumgr/mgmt/callbacks.h>
 //#include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt.h>
 
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+
 LOG_MODULE_REGISTER(app_init, LOG_LEVEL_INF);
 
 #include "ble_mcumgr.h"
@@ -123,11 +126,30 @@ int app_init(void)
         return ret;
     }
 
+    /* Define advertising parameters */
+    static const struct bt_le_adv_param adv_param = BT_LE_ADV_PARAM_INIT(
+        BT_LE_ADV_OPT_CONN,
+        BT_GAP_ADV_FAST_INT_MIN_2,
+        BT_GAP_ADV_FAST_INT_MAX_2,
+        NULL
+    );
+
+    /* Start advertising */
+    ret = bt_le_adv_start(&adv_param, NULL, 0, NULL, 0);
+    if (ret) {
+        LOG_ERR("Advertising failed to start (err %d)", ret);
+        return ret;
+    }
+
+    LOG_INF("Bluetooth advertising started");
+
     /* Register custom mcumgr handlers */
     tempo_mgmt_register();
 
     /* Initialize DFU safety */
     dfu_safety_init();
+
+    LOG_INF("app_init() complete");
 
     return 0;
 }

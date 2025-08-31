@@ -20,7 +20,7 @@ LOG_MODULE_REGISTER(storage_fatfs, LOG_LEVEL_INF);
 
 /* FAT filesystem mount point */
 #define FATFS_MOUNT_POINT "/SD:"
-#define STORAGE_PARTITION "SD0"  /* Matches disk-name in DTS */
+#define STORAGE_PARTITION "SD" 
 
 /* Maximum path length */
 #define MAX_PATH_LEN 256
