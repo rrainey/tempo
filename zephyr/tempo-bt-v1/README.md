@@ -152,6 +152,8 @@ Many settings can be changed at runtime via mcumgr:
 
 ### Connecting via Bluetooth
 
+We use [`mcumgr`](https://github.com/apache/mynewt-mcumgr) for testing the Bluetooth interfaces.  This software runs on Mac and Linux systems.  We can also use the nRF Connect mobile apps for some forms of tests.
+
 1. **Find the device**:
 ```bash
 mcumgr --conntype ble --connstring ctlr_name=hci0 conn find
