@@ -306,6 +306,13 @@ flowchart TB
 * UART DMA reader; NMEA line framing; optional UBX for accuracy/velocity.
 * Publishes fixes; updates **timebase** correlation; triggers `$PTH` emission cadence.
 
+###E 5.5 GNSS Service - Dynamic Rates
+
+* **Default**: 2 Hz (ground/climb)
+* **Freefall**: 10 Hz during LOGGING state
+* **Auto-adjustment**: Based on flight phase
+* **Buffer sizing**: 32 samples to handle rate bursts
+
 ### 5.6 `aggregator`
 
 * Pulls newest batches from IMU/BARO/MAG/GNSS.
@@ -329,11 +336,12 @@ flowchart TB
 * Dedicated thread; drains sentence queue to append to active file.
 * Write coalescing (e.g., 1–4 KB) and timed flushes; tracks FS errors and signals `logger` on failure; ensures sync on session stop.
 
-### 5.9 `storage_*`
+### 5.9 Storage Backends
 
-* **littlefs (QSPI)** backend for V1 (default).
-* **fatfs (SD)** backend compiled in but disabled at runtime if HW absent.
-* Common `ILogSink` interface → seamless switch/future dual-write.
+* **Primary**: SD Card via SPI when available (exFAT support)
+* **Fallback**: Internal QSPI flash with littlefs
+* **Auto-detection**: System checks for SD card at boot
+* **Path abstraction**: `/logs/` maps to active storage
 
 ### 5.10 `upload_mcumgr`
 
@@ -345,6 +353,25 @@ flowchart TB
 
 * MCUboot image mgmt over SMP, gated by state (not during active logging).
 * Raises events for UI feedback (LED blinks, etc.).
+
+### 5.12 Custom mcumgr Commands (Group ID: 64)
+
+Beyond standard mcumgr file/image/OS management, Tempo-BT implements custom commands:
+
+* **Session List** (ID: 0): Returns JSON array of logging sessions with metadata
+* **Session Info** (ID: 1): Detailed info about a specific session
+* **Storage Info** (ID: 2): Storage statistics and health
+
+All commands use CBOR encoding per mcumgr standards.
+
+### 5.13 LED Service
+
+RGB LED provides system status:
+- **Blue pulse**: IDLE
+- **Green pulse**: ARMED  
+- **Red fast**: LOGGING
+- **Yellow**: File transfer active
+- **Magenta**: Error state
 
 ---
 
@@ -400,7 +427,11 @@ stateDiagram-v2
     ERROR --> IDLE: user ack / auto-recover
 ```
 
-**Transitions managed by `logger`**; each transition emits `$PST` and header/footer markers in the CSV (where applicable).
+Arming Methods:
+- Manual: Long button press or BLE command
+- Auto: Takeoff detection (altitude/acceleration threshold)
+
+Transitions emit `$PST` records with trigger reasons.
 
 ---
 
@@ -410,6 +441,16 @@ stateDiagram-v2
 * Additions are **optional** sentences (e.g., `$PMAG`) that legacy parsers can ignore.
 * File begins with `$PVER`, `$PSFC`; consider one-shot `$PMETA` for firmware, ODRs, axes.
 * iOS app can parse lines incrementally; integrity checks via per-line checksum and (optionally) a final file hash stored in a tiny sidecar.
+
+### 8) Logging Format - Modifications to the original Dropkick format
+
+* **$PFIX** (formerly $PTH): Consolidated GPS fix data
+  * Format: `$PFIX,<timestamp_ms>,<utc_time>,<lat>,<lon>,<alt>,<fix_quality>,<hdop>,<vdop>*HH`
+  * Example: `$PFIX,123456,2025-01-15T12:34:56.789Z,37.7749,-122.4194,10.5,3,1.2,1.5*AB`
+  
+* **$PVER** enhanced: Now includes GPS date
+  * Format: `$PVER,<version>,<device>,<firmware>,<date>*HH`
+  * Example: `$PVER,1.0,V1,0.1.0,2025-01-15*CD`
 
 ---
 
@@ -432,12 +473,38 @@ stateDiagram-v2
 
 ---
 
-## 11) Extensibility Notes (V2 and beyond)
+### 11) BLE Transfer Performance
 
-* **PPS discipline**: drop-in replacement in `timebase` (no API changes).
-* **SD card**: enable `storage_fatfs` and background copier task.
-* **Higher-rate IMU**: tunable ODRs via `settings`.
-* **Custom BLE service**: can replace mcumgr later with L2CAP CoC for throughput without disturbing logger/FS layers.
+* **mcumgr over BLE**: 100-200 KB/s typical
+* **Chunk size**: 512 bytes optimal
+* **Connection parameters**: Optimized for throughput
+* **iOS compatibility**: nRF Connect, custom apps via mcumgr
+
+---
+
+### UI Controls
+
+Button 1:
+- **Short press**: Start/stop logging (when armed)
+- **Long press** (3s): Arm/disarm toggle
+
+Button 2: Reserved for future use
+
+---
+
+## Implementation Status (V1)
+
+Implemented:
+- Core logging to SD/Flash
+- BLE file transfer  
+- IMU, Baro, GNSS integration
+- State machine with auto-detection
+- mcumgr custom commands
+
+Pending/Optional:
+- Magnetometer integration
+- PPS time sync (V2 hardware)
+- Advanced flight detection algorithms
 
 ---
 
