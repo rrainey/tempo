@@ -102,6 +102,8 @@
 
 ## Phase 5 — IMU (ICM-42688-V on SPI4)
 
+Base all driver code as closely as practical to the Zephyr 42688 drivers and enumeration definitions.  Note: The "who am I" ID code for a -V variant of this chip is different than the -P variant expected by the Zephyr driver.
+
 16. **WHO\_AM\_I**
 
 * Do: SPI read 0x5; expect 0x4C (ICM-42688-P - not used on this PCB - is 0x47)
@@ -181,7 +183,7 @@
 
 29. **`$PIM2` (quaternion)**
 
-* Do: Add simple Madgwick step (fixed beta) using IMU dt; identity fallback if unstable.
+* Do: Use open source [Madwick Fusion library](https://github.com/xioTechnologies/Fusion) using IMU data and time delta information to maintain an orientation state.  Note: The orientation frame used to express PIMU2 values is relative to the startup frame of the sensor.  Analysis algorithms will later convert this to an estimated human body frame orientation.
 * Done when: `$PIM2*HH` follows each `$PIMU`.
 
 30. **`$PENV` at 4 Hz**

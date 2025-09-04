@@ -63,10 +63,19 @@ static int set_pwm_channel(uint32_t channel, uint8_t brightness)
     uint32_t pulse_ns;
     int ret;
     
-    pulse_ns = ((uint32_t)brightness * PWM_PERIOD_NS) / 255;
+    // For common anode LEDs, we need to invert the brightness
+    // 0 brightness = full PWM duty (LED OFF)
+    // 255 brightness = 0 PWM duty (LED ON)
+    uint8_t inverted_brightness = 255 - brightness;
     
-    LOG_INF("Setting PWM ch%d: brightness=%d, pulse=%d ns", 
-            channel, brightness, pulse_ns);
+    // Still use the bit-shifted value if you want dimmer LEDs
+    // For full brightness, remove the >> 3
+    inverted_brightness = inverted_brightness >> 3;  // Scale to 0-31 range
+    
+    pulse_ns = ((uint32_t)inverted_brightness * PWM_PERIOD_NS) / 31;
+    
+    LOG_INF("Setting PWM ch%d: brightness=%d (inverted=%d), pulse=%d ns", 
+            channel, brightness, inverted_brightness, pulse_ns);
     
     ret = pwm_set(led_state.pwm_dev, channel, PWM_PERIOD_NS, pulse_ns, 0);
     if (ret < 0) {
@@ -200,4 +209,127 @@ int led_service_get_state(rgb_color_t *color, bool *state)
     k_mutex_unlock(&led_state.mutex);
     
     return 0;
+}
+
+/**
+ * @brief Test individual PWM channels
+ */
+void led_test_channels(void)
+{
+    LOG_INF("Testing individual PWM channels...");
+    
+    // Test each channel individually at different brightness levels
+    uint8_t test_values[] = {0, 1, 10, 50, 100, 200, 255};
+    
+    for (int ch = 0; ch < 3; ch++) {
+        const char *color_name = (ch == 0) ? "RED" : (ch == 1) ? "GREEN" : "BLUE";
+        LOG_INF("Testing %s channel", color_name);
+        
+        for (int i = 0; i < ARRAY_SIZE(test_values); i++) {
+            LOG_INF("  Setting %s to %d", color_name, test_values[i]);
+            
+            // Turn off all channels first
+            set_pwm_channel(LED_PWM_CHANNEL_R, 0);
+            set_pwm_channel(LED_PWM_CHANNEL_G, 0);
+            set_pwm_channel(LED_PWM_CHANNEL_B, 0);
+            
+            // Set only the test channel
+            set_pwm_channel(ch, test_values[i]);
+            
+            k_sleep(K_SECONDS(2));
+        }
+    }
+    
+    // Turn off all
+    set_pwm_channel(LED_PWM_CHANNEL_R, 0);
+    set_pwm_channel(LED_PWM_CHANNEL_G, 0);
+    set_pwm_channel(LED_PWM_CHANNEL_B, 0);
+}
+
+/**
+ * @brief Test PWM period variations
+ */
+void led_test_pwm_periods(void)
+{
+    uint32_t test_periods[] = {
+        1000000,    // 1ms (1kHz) - current
+        10000000,   // 10ms (100Hz)
+        20000000,   // 20ms (50Hz)
+        100000000   // 100ms (10Hz)
+    };
+    
+    LOG_INF("Testing different PWM periods...");
+    
+    for (int i = 0; i < ARRAY_SIZE(test_periods); i++) {
+        uint32_t period = test_periods[i];
+        uint32_t pulse = period / 2; // 50% duty cycle
+        
+        LOG_INF("Testing period: %d ns (%d Hz)", period, 1000000000 / period);
+        
+        // Test on red channel
+        pwm_set(led_state.pwm_dev, LED_PWM_CHANNEL_R, period, pulse, 0);
+        pwm_set(led_state.pwm_dev, LED_PWM_CHANNEL_G, period, 0, 0);
+        pwm_set(led_state.pwm_dev, LED_PWM_CHANNEL_B, period, 0, 0);
+        
+        k_sleep(K_SECONDS(3));
+    }
+    
+    // Turn off
+    pwm_set(led_state.pwm_dev, LED_PWM_CHANNEL_R, test_periods[0], 0, 0);
+}
+
+/**
+ * @brief Test timing accuracy
+ */
+void led_test_timing(void)
+{
+    LOG_INF("Testing blink timing accuracy...");
+    
+    // Manually control LED timing to verify
+    for (int i = 0; i < 5; i++) {
+        int64_t start = k_uptime_get();
+        
+        // Turn on
+        set_pwm_channel(LED_PWM_CHANNEL_R, 255);
+        k_sleep(K_MSEC(410));
+        
+        // Turn off
+        set_pwm_channel(LED_PWM_CHANNEL_R, 0);
+        
+        int64_t on_time = k_uptime_get() - start;
+        LOG_INF("Cycle %d: ON time = %lld ms (expected 410ms)", i, on_time);
+        
+        k_sleep(K_MSEC(590)); // Rest of the 1 second period
+    }
+}
+
+/**
+ * @brief Modified set_pwm_channel with better debugging
+ */
+static int set_pwm_channel_debug(uint32_t channel, uint8_t brightness)
+{
+    uint32_t pulse_ns;
+    int ret;
+    
+    // Try different scaling methods
+    #ifdef USE_LINEAR_SCALING
+        pulse_ns = ((uint32_t)brightness * PWM_PERIOD_NS) / 255;
+    #elif defined(USE_FULL_RANGE)
+        // Use full brightness value without scaling
+        pulse_ns = ((uint32_t)brightness * PWM_PERIOD_NS) / 255;
+    #else
+        // Original scaling
+        pulse_ns = ((uint32_t)(brightness >> 3) * PWM_PERIOD_NS) / 31;
+    #endif
+    
+    LOG_INF("PWM ch%d: bright=%d, pulse=%d ns (%.1f%%)", 
+            channel, brightness, pulse_ns, 
+            (float)pulse_ns * 100.0f / PWM_PERIOD_NS);
+    
+    ret = pwm_set(led_state.pwm_dev, channel, PWM_PERIOD_NS, pulse_ns, 0);
+    if (ret < 0) {
+        LOG_ERR("Failed to set PWM channel %d: %d", channel, ret);
+    }
+    
+    return ret;
 }
