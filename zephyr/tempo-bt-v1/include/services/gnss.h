@@ -92,5 +92,44 @@ bool gnss_get_current_fix(gnss_fix_t *fix);
  */
 int gnss_set_rate(uint8_t rate_hz);
 
+/**
+ * @brief Configure GNSS update rate
+ * 
+ * @param rate_hz Update rate in Hz (1 or 10 for SAM-M10Q)
+ * @return 0 on success, negative error code on failure
+ */
+int gnss_set_rate(uint8_t rate_hz);
+
+/**
+ * @brief Set GNSS power mode
+ * 
+ * @param low_power true for low power mode, false for full power
+ * @return 0 on success, negative error code on failure
+ */
+int gnss_set_power_mode(bool low_power);
+
+/**
+ * @brief Put GNSS into standby mode
+ * 
+ * Reduces power consumption while maintaining settings
+ * 
+ * @return 0 on success, negative error code on failure
+ */
+int gnss_standby(void);
+
+/**
+ * @brief Wake GNSS from standby
+ * 
+ * @return 0 on success, negative error code on failure
+ */
+int gnss_wakeup(void);
+
+/**
+ * @brief Save current GNSS configuration to non-volatile memory
+ * 
+ * @return 0 on success, negative error code on failure
+ */
+int gnss_save_config(void);
+
 
 #endif /* SERVICES_GNSS_H */

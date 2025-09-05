@@ -19,6 +19,47 @@
 
 LOG_MODULE_REGISTER(gnss, LOG_LEVEL_INF);
 
+/* UBX Protocol definitions */
+#define UBX_SYNC1       0xB5
+#define UBX_SYNC2       0x62
+
+/* UBX Message Classes */
+#define UBX_CLASS_NAV   0x01
+#define UBX_CLASS_RXM   0x02
+#define UBX_CLASS_INF   0x04
+#define UBX_CLASS_ACK   0x05
+#define UBX_CLASS_CFG   0x06
+#define UBX_CLASS_MON   0x0A
+
+/* UBX Message IDs */
+#define UBX_ID_ACK_NAK  0x00
+#define UBX_ID_ACK_ACK  0x01
+#define UBX_ID_CFG_RATE 0x08
+#define UBX_ID_CFG_MSG  0x01
+#define UBX_ID_CFG_CFG  0x09
+#define UBX_ID_CFG_PM2  0x3B
+#define UBX_ID_CFG_PMS  0x86
+
+/* UBX ACK timeout */
+#define UBX_ACK_TIMEOUT_MS 1000
+
+/* UBX message structure */
+struct ubx_msg {
+    uint8_t class;
+    uint8_t id;
+    uint16_t len;
+    uint8_t data[256];
+};
+
+/* UBX ACK/NAK tracking */
+static struct {
+    struct k_sem sem;
+    bool ack_received;
+    bool nak_received;
+    uint8_t waiting_class;
+    uint8_t waiting_id;
+} ubx_ack_state;
+
 // forward declaration
 static void update_system_time_from_fix(void);
 
@@ -759,6 +800,175 @@ static void update_system_time_from_fix(void)
     } else {
         LOG_ERR("Failed to set system time: %d", ret);
     }
+}
+
+/* Power Management Functions */
+
+int gnss_set_power_mode(bool low_power)
+{
+    int ret;
+    uint8_t payload[48] = {0};  /* UBX-CFG-PM2 payload */
+    
+    if (low_power) {
+        LOG_INF("Setting GNSS to low power mode");
+        
+        /* Configure Power Save Mode (PSM) parameters */
+        /* Version */
+        payload[0] = 0x01;
+        
+        /* Flags - enable cyclic tracking mode */
+        payload[1] = 0x06;  /* CYCLIC_TRACK_MODE | DO_NOT_ENTER_BACKUP */
+        
+        /* Update period (ms) - how often to wake up */
+        uint32_t update_period = 1000;  /* 1 second */
+        memcpy(&payload[4], &update_period, 4);
+        
+        /* Search period (ms) - how long to search for signals */
+        uint32_t search_period = 10000;  /* 10 seconds */
+        memcpy(&payload[8], &search_period, 4);
+        
+        /* Grid offset (ms) */
+        uint32_t grid_offset = 0;
+        memcpy(&payload[12], &grid_offset, 4);
+        
+        /* On time (s) - minimum on time */
+        uint16_t on_time = 5;
+        memcpy(&payload[16], &on_time, 2);
+        
+        /* Min acquisition time (s) */
+        uint16_t min_acq_time = 0;
+        memcpy(&payload[18], &min_acq_time, 2);
+    } else {
+        LOG_INF("Setting GNSS to full power mode");
+        
+        /* Disable power save mode */
+        payload[0] = 0x01;  /* Version */
+        payload[1] = 0x00;  /* No flags - continuous tracking */
+    }
+    
+    /* Send configuration */
+    ret = ubx_send_with_ack(UBX_CLASS_CFG, UBX_ID_CFG_PM2, payload, sizeof(payload));
+    if (ret < 0) {
+        LOG_ERR("Failed to set power mode: %d", ret);
+        return ret;
+    }
+    
+    LOG_INF("GNSS power mode updated successfully");
+    
+    return 0;
+}
+
+int gnss_standby(void)
+{
+    int ret;
+    uint8_t payload[16] = {0};
+    
+    LOG_INF("Putting GNSS into standby mode");
+    
+    /* UBX-CFG-PMS - Power Mode Setup */
+    /* Version */
+    payload[0] = 0x00;
+    
+    /* Power setup value */
+    payload[1] = 0x01;  /* Backup mode */
+    
+    /* Period - not used in backup mode */
+    payload[2] = 0x00;
+    payload[3] = 0x00;
+    
+    /* On time - not used in backup mode */
+    payload[4] = 0x00;
+    payload[5] = 0x00;
+    
+    /* Send configuration */
+    ret = ubx_send_with_ack(UBX_CLASS_CFG, UBX_ID_CFG_PMS, payload, 8);
+    if (ret < 0) {
+        LOG_ERR("Failed to enter standby mode: %d", ret);
+        return ret;
+    }
+    
+    LOG_INF("GNSS entered standby mode");
+    
+    return 0;
+}
+
+int gnss_wakeup(void)
+{
+    int ret;
+    
+    LOG_INF("Waking up GNSS from standby");
+    
+    /* Send any byte to wake up the module */
+    uint8_t wakeup_byte = 0xFF;
+    ret = uart_tx(uart_dev, &wakeup_byte, 1, SYS_FOREVER_MS);
+    if (ret < 0) {
+        LOG_ERR("Failed to send wakeup byte: %d", ret);
+        return ret;
+    }
+    
+    /* Wait for module to wake up */
+    k_msleep(100);
+    
+    /* Configure back to full power mode */
+    uint8_t payload[16] = {0};
+    
+    /* Version */
+    payload[0] = 0x00;
+    
+    /* Power setup value */
+    payload[1] = 0x00;  /* Full power */
+    
+    /* Send configuration */
+    ret = ubx_send_with_ack(UBX_CLASS_CFG, UBX_ID_CFG_PMS, payload, 8);
+    if (ret < 0) {
+        LOG_ERR("Failed to set full power mode: %d", ret);
+        return ret;
+    }
+    
+    LOG_INF("GNSS woken up successfully");
+    
+    return 0;
+}
+
+int gnss_save_config(void)
+{
+    int ret;
+    uint8_t payload[13] = {0};
+    
+    LOG_INF("Saving GNSS configuration to non-volatile memory");
+    
+    /* UBX-CFG-CFG - Save current configuration */
+    /* Clear mask - what to clear (nothing) */
+    payload[0] = 0x00;
+    payload[1] = 0x00;
+    payload[2] = 0x00;
+    payload[3] = 0x00;
+    
+    /* Save mask - what to save (all) */
+    payload[4] = 0x1F;  /* ioPort | msgConf | infMsg | navConf | rxmConf */
+    payload[5] = 0x1F;  /* senConf | rinvConf | antConf | logConf | ftsConf */
+    payload[6] = 0x00;
+    payload[7] = 0x00;
+    
+    /* Load mask - what to load (nothing) */
+    payload[8] = 0x00;
+    payload[9] = 0x00;
+    payload[10] = 0x00;
+    payload[11] = 0x00;
+    
+    /* Device mask - where to save */
+    payload[12] = 0x17;  /* devBBR | devFlash | devEEPROM | devSpiFlash */
+    
+    /* Send configuration */
+    ret = ubx_send_with_ack(UBX_CLASS_CFG, UBX_ID_CFG_CFG, payload, sizeof(payload));
+    if (ret < 0) {
+        LOG_ERR("Failed to save configuration: %d", ret);
+        return ret;
+    }
+    
+    LOG_INF("GNSS configuration saved successfully");
+    
+    return 0;
 }
 
 #ifdef CONFIG_RTC

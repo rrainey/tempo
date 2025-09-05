@@ -57,6 +57,8 @@ target_sources(app PRIVATE
 # Utility sources
 target_sources(app PRIVATE
     src/util/nmea_checksum.c
+    src/fusion.c
+    tests/test_imu.c
 )
 
 # NORDIC SDK APP END

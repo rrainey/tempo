@@ -17,6 +17,7 @@
 #include "services/imu.h"
 #include "services/baro.h"
 #include "services/gnss.h"
+#include "services/orientation.h"
 #include "services/file_writer.h"
 #include "app/log_format.h"
 
@@ -176,6 +177,9 @@ static void imu_data_callback(const imu_sample_t *samples, size_t count)
         last_imu_sample = samples[i];
         have_imu_sample = true;
         stats.imu_count++;
+        
+        /* Update orientation tracking */
+        orientation_update(&samples[i]);
     }
 }
 
@@ -280,11 +284,20 @@ static void imu_output_handler(struct k_work *work)
         output_callback(line, len);
     }
     
-    /* Output quaternion if enabled (placeholder for now) */
+    /* Output quaternion if enabled */
     if (config.enable_quaternion) {
-        len = log_format_sentence(line, sizeof(line),
-                                  "$PIM2,%u,1.0000,0.0000,0.0000,0.0000",
-                                  timestamp_ms);
+        orientation_quaternion_t quat;
+        if (orientation_get_quaternion(&quat) == 0) {
+            len = log_format_sentence(line, sizeof(line),
+                                      "$PIM2,%u,%.4f,%.4f,%.4f,%.4f",
+                                      timestamp_ms,
+                                      quat.w, quat.x, quat.y, quat.z);
+        } else {
+            /* Fallback to identity quaternion if orientation not available */
+            len = log_format_sentence(line, sizeof(line),
+                                      "$PIM2,%u,1.0000,0.0000,0.0000,0.0000",
+                                      timestamp_ms);
+        }
         if (len > 0) {
             output_callback(line, len);
         }
@@ -354,7 +367,6 @@ static void aggregator_thread_fn(void *p1, void *p2, void *p3)
     LOG_INF("Aggregator thread stopped");
 }
 
-/* Public API */
 int aggregator_init(void)
 {
     LOG_INF("Initializing aggregator service");
@@ -367,6 +379,23 @@ int aggregator_init(void)
     /* Initialize work items */
     k_work_init_delayable(&imu_output_work, imu_output_handler);
     k_work_init_delayable(&env_output_work, env_output_handler);
+    
+    /* ADD THIS SECTION: Initialize orientation tracking */
+    orientation_config_t orient_cfg = {
+        .gain = 2.5f,                    /* IMU-only mode gain */
+        .sample_period = 0.0025f,        /* 400Hz */
+        .use_magnetometer = false,
+        .acceleration_rejection = 10.0f,  /* 10 m/s² */
+        .magnetic_rejection = 10.0f,
+        .recovery_trigger_period = 5.0f
+    };
+    
+    int ret = orientation_init(&orient_cfg);
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize orientation service: %d", ret);
+        /* Not fatal - continue without quaternion output */
+    }
+    /* END OF ADDED SECTION */
     
     /* Register sensor callbacks */
     imu_register_callback(imu_data_callback);

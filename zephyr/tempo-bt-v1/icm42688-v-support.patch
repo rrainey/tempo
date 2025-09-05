@@ -1,0 +1,29 @@
+diff --git a/drivers/sensor/tdk/icm42688/icm42688_common.c b/drivers/sensor/icm42688/icm42688_common.c
+index 1234567..abcdefg 100644
+--- a/drivers/sensor/tdk/icm42688/icm42688_common.c
++++ b/drivers/sensor/tdk/icm42688/icm42688_common.c
+@@ -47,8 +47,9 @@ int icm42688_reset(const struct device *dev)
+ 	if (res) {
+ 		return res;
+ 	}
+ 
+-	if (value != WHO_AM_I_ICM42688) {
+-		LOG_ERR("invalid WHO_AM_I value, was %i but expected %i", value, WHO_AM_I_ICM42688);
++	if (value != WHO_AM_I_ICM42688 && value != WHO_AM_I_ICM42688V) {
++		LOG_ERR("invalid WHO_AM_I value, was 0x%02X but expected 0x%02X or 0x%02X",
++		        value, WHO_AM_I_ICM42688, WHO_AM_I_ICM42688V);
+ 		return -EINVAL;
+ 	}
+ 
+diff --git a/drivers/sensor/tdk/icm42688/icm42688_reg.h b/drivers/sensor/icm42688/icm42688_reg.h
+index 1234567..abcdefg 100644
+--- a/drivers/sensor/tdk/icm42688/icm42688_reg.h
++++ b/drivers/sensor/tdk/icm42688/icm42688_reg.h
+@@ -282,6 +282,7 @@
+ 
+ /* misc. defines */
+ #define WHO_AM_I_ICM42688     0x47
++#define WHO_AM_I_ICM42688V    0x4C  /* ICM42688-V variant */
+ #define MIN_ACCEL_SENS_SHIFT  11
+ #define ACCEL_DATA_SIZE	      6
+ #define GYRO_DATA_SIZE	      6

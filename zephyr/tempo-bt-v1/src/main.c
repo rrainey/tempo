@@ -26,7 +26,7 @@
 #include "services/baro.h"
 #include "services/logger.h"
 #include "services/led.h"
-#include "services/aggregator.h"
+//#include "services/aggregator.h"
 #include "util/nmea_checksum.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -361,152 +361,6 @@ static void test_version_output(const char *line, size_t len)
     }
 }
 
-#if 0
-
-/* Test event handler */
-static void test_event_handler(const app_event_t *event, void *user_data)
-{
-    LOG_INF("Test handler received event type %d at %u ms", 
-            event->type, event->timestamp_ms);
-}
-
-/* Test event subscriber */
-static event_subscriber_t test_subscriber;
-
-/* Test NMEA callback */
-static int nmea_count = 0;
-static void test_nmea_callback(const char *sentence, size_t len)
-{
-    nmea_count++;
-    /* Only log every 100th sentence to reduce output */
-    if (nmea_count % 100 == 1) {
-        LOG_INF("NMEA #%d (%d bytes): %s", nmea_count, len, sentence);
-    }
-}
-
-static void test_sentence_generation(void)
-{
-    LOG_INF("Testing sentence generation...");
-    
-    /* Set up aggregator */
-    aggregator_config_t config = {
-        .imu_output_rate = 40,
-        .env_output_rate = 4,
-        .gnss_output_rate = 1,
-        .mag_output_rate = 0,
-        .enable_quaternion = true,
-        .enable_magnetometer = false,
-        .session_id = 12345,
-        .session_start_us = time_now_us()
-    };
-    
-    aggregator_configure(&config);
-    aggregator_register_output_callback(test_version_output);
-    
-    /* Test session header */
-    LOG_INF("=== Session Header ===");
-    aggregator_write_session_header();
-    
-    /* Test state change */
-    LOG_INF("=== State Change ===");
-    aggregator_write_state_change("IDLE", "ARMED", "button_press");
-    
-    /* Simulate some sensor data and test output */
-    /* This would normally come from actual sensors */
-}
-
-/* Test fix callback */
-static void test_fix_callback(const gnss_fix_t *fix)
-{
-    /* Only log every 10th fix to reduce output */
-    static int fix_count = 0;
-    fix_count++;
-    
-    if (fix_count % 10 == 1) {
-        LOG_INF("Fix update #%d: Lat=%.6f, Lon=%.6f, Alt=%.1f m, Speed=%.1f m/s",
-                fix_count, fix->latitude, fix->longitude, fix->altitude, (double) fix->speed_mps);
-        LOG_INF("  Time: %02d:%02d:%02d.%03d UTC, Sats=%d, HDOP=%.1f",
-                fix->hours, fix->minutes, fix->seconds, fix->milliseconds,
-                fix->num_satellites, (double) fix->hdop);
-    }
-    
-    /* Update time correlation when we have a valid fix */
-    if (fix->time_valid && fix->position_valid && (fix_count % 10 == 1)) {
-        /* Calculate UTC time in milliseconds since epoch */
-        /* Note: This is simplified - doesn't handle date rollover */
-        uint64_t utc_ms = (fix->hours * 3600 + fix->minutes * 60 + fix->seconds) * 1000 
-                        + fix->milliseconds;
-        
-        /* Update timebase correlation */
-        timebase_update_correlation(utc_ms, 100);  /* 100ms accuracy estimate */
-        LOG_INF("Updated time correlation");
-    }
-}
-
-static int smoke_test_file_write(void)
-{
-    struct fs_file_t file;
-    int ret;
-    const char *test_str = "test\n";
-    char read_buf[32];
-    ssize_t bytes_written, bytes_read;
-
-    fs_file_t_init(&file);
-
-    /* Open file for writing */
-    ret = fs_open(&file, "/lfs/logs/smoke.txt", FS_O_CREATE | FS_O_WRITE);
-    if (ret < 0) {
-        LOG_ERR("Failed to open file for writing: %d", ret);
-        return ret;
-    }
-
-    /* Write test string */
-    bytes_written = fs_write(&file, test_str, strlen(test_str));
-    if (bytes_written < 0) {
-        LOG_ERR("Failed to write to file: %d", bytes_written);
-        fs_close(&file);
-        return bytes_written;
-    }
-    LOG_INF("Wrote %d bytes to smoke.txt", bytes_written);
-
-    /* Close file */
-    ret = fs_close(&file);
-    if (ret < 0) {
-        LOG_ERR("Failed to close file: %d", ret);
-        return ret;
-    }
-
-    /* Open file for reading to verify */
-    ret = fs_open(&file, "/lfs/logs/smoke.txt", FS_O_READ);
-    if (ret < 0) {
-        LOG_ERR("Failed to open file for reading: %d", ret);
-        return ret;
-    }
-
-    /* Read back the content */
-    bytes_read = fs_read(&file, read_buf, sizeof(read_buf) - 1);
-    if (bytes_read < 0) {
-        LOG_ERR("Failed to read from file: %d", bytes_read);
-        fs_close(&file);
-        return bytes_read;
-    }
-    read_buf[bytes_read] = '\0';
-    LOG_INF("Read %d bytes: '%s'", bytes_read, read_buf);
-
-    /* Close file */
-    fs_close(&file);
-
-    /* Verify content matches */
-    if (bytes_read == bytes_written && memcmp(test_str, read_buf, bytes_read) == 0) {
-        LOG_INF("File write/read smoke test PASSED");
-        return 0;
-    } else {
-        LOG_ERR("File content mismatch!");
-        return -1;
-    }
-}
-#endif
-
 int main(void)
 {
     int ret;
@@ -602,7 +456,7 @@ int main(void)
     
     /* Give event thread time to process */
     k_msleep(10);
-#endif
+
     
     /* Initialize settings */
     ret = app_settings_init();
@@ -614,7 +468,9 @@ int main(void)
     LOG_INF("About to test settings...");
     app_settings_test();
     LOG_INF("Settings test done");
+#endif
     
+    #if 0
     /* Initialize timebase */
     LOG_INF("About to init timebase...");
     ret = timebase_init();
@@ -631,7 +487,10 @@ int main(void)
 
     aggregator_register_output_callback(test_version_output);
     aggregator_write_version();
+
+    #endif
     
+    #if 0
     /* Test monotonic timer */
     LOG_INF("Testing monotonic timer...");
     uint64_t t1 = time_now_us();
@@ -681,15 +540,6 @@ int main(void)
         }
     }
     
-    #if 0
-    
-    /* Run smoke test */
-    ret = smoke_test_file_write();
-    if (ret < 0) {
-        LOG_ERR("Smoke test failed: %d", ret);
-    }
-    #endif
-    
     /* Initialize GNSS */
     LOG_INF("About to init GNSS...");
     ret = gnss_init();
@@ -705,9 +555,9 @@ int main(void)
             LOG_WRN("Failed to set GNSS rate: %d", ret);
         }
     }
+    #endif
     
     /* Initialize IMU - but skip it for now due to hardware issues */
-    #if 1
     LOG_INF("About to init IMU...");
     ret = imu_init();
     if (ret < 0) {
@@ -715,7 +565,11 @@ int main(void)
     } else {
         LOG_INF("IMU initialized successfully");
     }
-    #endif
+
+    //orientation_test_init();
+    extern int imu_test_init(void);
+
+    imu_test_init();
     
     #if 0
     /* Test Barometer (BMP390) */
