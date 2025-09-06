@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <zephyr/bluetooth/uuid.h>
 
 /**
  * @brief Initialize settings subsystem
@@ -27,25 +28,32 @@ int app_settings_init(void);
 const char *app_settings_get_ble_name(void);
 
 /**
- * @brief Get IMU output data rate
+ * @brief Get user UUID
  * 
- * @return IMU ODR in Hz
+ * @return Pointer to user UUID
  */
-uint16_t app_settings_get_imu_odr(void);
+const struct bt_uuid_128 *app_settings_get_user_uuid(void);
 
 /**
- * @brief Get barometer sampling rate
+ * @brief Get device UUID
  * 
- * @return Baro rate in Hz
+ * @return Pointer to device UUID
  */
-uint16_t app_settings_get_baro_rate(void);
+const struct bt_uuid_128 *app_settings_get_device_uuid(void);
 
 /**
- * @brief Get GNSS update rate
+ * @brief Get log backend type
  * 
- * @return GNSS rate in Hz
+ * @return Log backend string ("littlefs" or "fatfs")
  */
-uint8_t app_settings_get_gnss_rate(void);
+const char *app_settings_get_log_backend(void);
+
+/**
+ * @brief Get PPS enabled state
+ * 
+ * @return true if PPS is enabled (always false for V1)
+ */
+bool app_settings_get_pps_enabled(void);
 
 /**
  * @brief Set BLE device name
@@ -56,12 +64,36 @@ uint8_t app_settings_get_gnss_rate(void);
 int app_settings_set_ble_name(const char *name);
 
 /**
- * @brief Set IMU output data rate
+ * @brief Set user UUID
  * 
- * @param odr_hz New ODR in Hz
+ * @param uuid New user UUID
  * @return 0 on success, negative error code on failure
  */
-int app_settings_set_imu_odr(uint16_t odr_hz);
+int app_settings_set_user_uuid(const struct bt_uuid_128 *uuid);
+
+/**
+ * @brief Set device UUID
+ * 
+ * @param uuid New device UUID
+ * @return 0 on success, negative error code on failure
+ */
+int app_settings_set_device_uuid(const struct bt_uuid_128 *uuid);
+
+/**
+ * @brief Set log backend type
+ * 
+ * @param backend Backend type ("littlefs" or "fatfs")
+ * @return 0 on success, negative error code on failure
+ */
+int app_settings_set_log_backend(const char *backend);
+
+/**
+ * @brief Generate a new random UUID
+ * 
+ * @param uuid Output UUID structure
+ * @return 0 on success, negative error code on failure
+ */
+int app_settings_generate_uuid(struct bt_uuid_128 *uuid);
 
 /**
  * @brief Test function to demonstrate settings

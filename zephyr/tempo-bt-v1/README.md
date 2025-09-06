@@ -181,6 +181,8 @@ mcumgr --conntype ble --connstring peer_name='Tempo-BT' fs download /logs/202501
 mcumgr --conntype ble --connstring peer_name='Tempo-BT' fs delete /logs/20250117/12345678/flight.csv
 ```
 
+Within this example path, `20250117` corresponds to the calendar date of the jump (`YYYMMDD`). `12345678` is a pseudo-random number assigned to each jump in that directory. The actual flight log will always be named `flight.csv`.
+
 ### Device Control
 
 1. **Get device status**:
@@ -192,6 +194,76 @@ mcumgr --conntype ble --connstring peer_name='Tempo-BT' stat list
 ```bash
 mcumgr --conntype ble --connstring peer_name='Tempo-BT' custom storage_info -g 64
 ```
+
+### Non-volatile Device Configuration Control
+
+The device maintains several persistent settings that can be queried and modified over Bluetooth using mcumgr's config commands.
+
+#### Available Settings
+
+| Setting | Description | Type | Default |
+|---------|-------------|------|---------|
+| `app/ble_name` | Bluetooth device name | String (max 31 chars) | "TempoBT" |
+| `app/user_uuid` | User identifier UUID | UUID (128-bit) | Auto-generated on first boot |
+| `app/device_uuid` | Device identifier UUID | UUID (128-bit) | Auto-generated on first boot |
+| `app/log_backend` | Storage backend type | String | "littlefs" |
+| `app/pps_enabled` | PPS time sync enabled | Boolean | false (V1 hardware) |
+
+#### Reading Settings
+
+To read a specific setting:
+```bash
+# Read device name
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' config app/ble_name
+
+# Read user UUID
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' config app/user_uuid
+
+# Read device UUID
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' config app/device_uuid
+
+# Read storage backend
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' config app/log_backend
+```
+
+#### Writing Settings
+
+To modify a setting:
+```bash
+# Change device name
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' config app/ble_name set "MyTempo"
+
+# Set storage backend (choose "littlefs" or "fatfs")
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' config app/log_backend set "fatfs"
+
+# Note: UUIDs are typically not changed after initial generation, but can be set if needed
+# Format: UUID must be provided as a 32-character hex string (no dashes)
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' config app/user_uuid set "550e8400e29b41d4a716446655440000"
+```
+
+#### Viewing All Settings
+
+To see all current settings at once:
+```bash
+# List all settings under the "app" namespace
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' config app
+```
+
+#### Notes on UUIDs
+
+- Both `user_uuid` and `device_uuid` are automatically generated on first boot
+- UUIDs are version 4 (random) format
+- The `user_uuid` is intended to identify the person using the device
+- The `device_uuid` uniquely identifies this specific hardware unit
+- UUIDs are displayed in standard format (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+- When setting UUIDs via mcumgr, provide them as 32 hex characters without dashes
+
+#### Persistence
+
+All settings are stored in non-volatile memory and persist across power cycles and firmware updates.
+
+
+This revised section provides comprehensive documentation for all available settings, including examples of how to read and write each one using mcumgr commands.
 
 ### Manual Control
 

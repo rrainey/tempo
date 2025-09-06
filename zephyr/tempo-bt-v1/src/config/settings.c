@@ -7,23 +7,31 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/random/random.h>
 #include <string.h>
 
 LOG_MODULE_REGISTER(app_settings, LOG_LEVEL_INF);
+
+/* Default UUIDs - these will be replaced with generated values on first boot */
+static const struct bt_uuid_128 default_user_uuid = BT_UUID_INIT_128(
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+);
+
+static const struct bt_uuid_128 default_device_uuid = BT_UUID_INIT_128(
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+);
 
 /* Settings values with defaults */
 static struct {
     /* BLE settings */
     char ble_name[32];
     
-    /* Unit system */
-    uint8_t unit_system;  /* 0 = metric, 1 = imperial */
-    
-    /* Sensor rates */
-    uint16_t imu_odr;     /* IMU output data rate in Hz */
-    uint16_t baro_rate;   /* Barometer rate in Hz */
-    uint16_t mag_rate;    /* Magnetometer rate in Hz */
-    uint8_t gnss_rate_hz; /* GNSS rate in Hz */
+    /* User and device UUIDs */
+    struct bt_uuid_128 user_uuid;
+    struct bt_uuid_128 device_uuid;
     
     /* Features */
     bool pps_enabled;     /* PPS sync enabled (always false for V1) */
@@ -33,14 +41,39 @@ static struct {
 } app_settings = {
     /* Default values */
     .ble_name = "TempoBT",
-    .unit_system = 0,     /* Metric by default */
-    .imu_odr = 400,       /* 400 Hz */
-    .baro_rate = 50,      /* 50 Hz */
-    .mag_rate = 50,       /* 50 Hz */
-    .gnss_rate_hz = 5,    /* 5 Hz */
+    .user_uuid = BT_UUID_INIT_128(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    .device_uuid = BT_UUID_INIT_128(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
     .pps_enabled = false, /* No PPS on V1 */
     .log_backend = "littlefs"
 };
+
+/* Generate a new random UUID */
+int app_settings_generate_uuid(struct bt_uuid_128 *uuid)
+{
+    if (!uuid) {
+        return -EINVAL;
+    }
+
+    /* Generate 16 random bytes */
+    sys_rand_get(uuid->val, sizeof(uuid->val));
+    
+    /* Set UUID version to 4 (random) and variant bits */
+    uuid->val[6] = (uuid->val[6] & 0x0F) | 0x40;  /* Version 4 */
+    uuid->val[8] = (uuid->val[8] & 0x3F) | 0x80;  /* Variant bits */
+    
+    return 0;
+}
+
+/* Check if UUID is all zeros (uninitialized) */
+static bool is_uuid_empty(const struct bt_uuid_128 *uuid)
+{
+    for (int i = 0; i < 16; i++) {
+        if (uuid->val[i] != 0) {
+            return false;
+        }
+    }
+    return true;
+}
 
 /* Settings handler */
 static int settings_set_handler(const char *name, size_t len,
@@ -61,46 +94,42 @@ static int settings_set_handler(const char *name, size_t len,
         return rc;
     }
 
-    if (settings_name_steq(name, "unit_system", &next) && !next) {
-        if (len != sizeof(app_settings.unit_system)) {
+    if (settings_name_steq(name, "user_uuid", &next) && !next) {
+        if (len != sizeof(app_settings.user_uuid.val)) {
             return -EINVAL;
         }
-        rc = read_cb(cb_arg, &app_settings.unit_system, len);
+        rc = read_cb(cb_arg, app_settings.user_uuid.val, len);
         if (rc >= 0) {
-            LOG_INF("Set unit_system: %d", app_settings.unit_system);
+            char uuid_str[BT_UUID_STR_LEN];
+            bt_uuid_to_str((const struct bt_uuid *)&app_settings.user_uuid, 
+                          uuid_str, sizeof(uuid_str));
+            LOG_INF("Set user_uuid: %s", uuid_str);
         }
         return rc;
     }
 
-    if (settings_name_steq(name, "imu_odr", &next) && !next) {
-        if (len != sizeof(app_settings.imu_odr)) {
+    if (settings_name_steq(name, "device_uuid", &next) && !next) {
+        if (len != sizeof(app_settings.device_uuid.val)) {
             return -EINVAL;
         }
-        rc = read_cb(cb_arg, &app_settings.imu_odr, len);
+        rc = read_cb(cb_arg, app_settings.device_uuid.val, len);
         if (rc >= 0) {
-            LOG_INF("Set imu_odr: %d Hz", app_settings.imu_odr);
+            char uuid_str[BT_UUID_STR_LEN];
+            bt_uuid_to_str((const struct bt_uuid *)&app_settings.device_uuid, 
+                          uuid_str, sizeof(uuid_str));
+            LOG_INF("Set device_uuid: %s", uuid_str);
         }
         return rc;
     }
 
-    if (settings_name_steq(name, "baro_rate", &next) && !next) {
-        if (len != sizeof(app_settings.baro_rate)) {
+    if (settings_name_steq(name, "log_backend", &next) && !next) {
+        if (len >= sizeof(app_settings.log_backend)) {
             return -EINVAL;
         }
-        rc = read_cb(cb_arg, &app_settings.baro_rate, len);
+        rc = read_cb(cb_arg, app_settings.log_backend, len);
         if (rc >= 0) {
-            LOG_INF("Set baro_rate: %d Hz", app_settings.baro_rate);
-        }
-        return rc;
-    }
-
-    if (settings_name_steq(name, "gnss_rate_hz", &next) && !next) {
-        if (len != sizeof(app_settings.gnss_rate_hz)) {
-            return -EINVAL;
-        }
-        rc = read_cb(cb_arg, &app_settings.gnss_rate_hz, len);
-        if (rc >= 0) {
-            LOG_INF("Set gnss_rate_hz: %d Hz", app_settings.gnss_rate_hz);
+            app_settings.log_backend[len] = '\0';
+            LOG_INF("Set log_backend: %s", app_settings.log_backend);
         }
         return rc;
     }
@@ -139,6 +168,39 @@ int app_settings_init(void)
         return rc;
     }
 
+    /* Generate UUIDs if they haven't been set */
+    bool need_save = false;
+    
+    if (is_uuid_empty(&app_settings.user_uuid)) {
+        LOG_INF("Generating new user UUID");
+        rc = app_settings_generate_uuid(&app_settings.user_uuid);
+        if (rc == 0) {
+            need_save = true;
+        } else {
+            LOG_ERR("Failed to generate user UUID: %d", rc);
+        }
+    }
+
+    if (is_uuid_empty(&app_settings.device_uuid)) {
+        LOG_INF("Generating new device UUID");
+        rc = app_settings_generate_uuid(&app_settings.device_uuid);
+        if (rc == 0) {
+            need_save = true;
+        } else {
+            LOG_ERR("Failed to generate device UUID: %d", rc);
+        }
+    }
+
+    /* Save if we generated new UUIDs */
+    if (need_save) {
+        if (app_settings_set_user_uuid(&app_settings.user_uuid) < 0) {
+            LOG_WRN("Failed to persist user UUID");
+        }
+        if (app_settings_set_device_uuid(&app_settings.device_uuid) < 0) {
+            LOG_WRN("Failed to persist device UUID");
+        }
+    }
+
     LOG_INF("Settings loaded successfully");
     return 0;
 }
@@ -149,19 +211,24 @@ const char *app_settings_get_ble_name(void)
     return app_settings.ble_name;
 }
 
-uint16_t app_settings_get_imu_odr(void)
+const struct bt_uuid_128 *app_settings_get_user_uuid(void)
 {
-    return app_settings.imu_odr;
+    return &app_settings.user_uuid;
 }
 
-uint16_t app_settings_get_baro_rate(void)
+const struct bt_uuid_128 *app_settings_get_device_uuid(void)
 {
-    return app_settings.baro_rate;
+    return &app_settings.device_uuid;
 }
 
-uint8_t app_settings_get_gnss_rate(void)
+const char *app_settings_get_log_backend(void)
 {
-    return app_settings.gnss_rate_hz;
+    return app_settings.log_backend;
+}
+
+bool app_settings_get_pps_enabled(void)
+{
+    return app_settings.pps_enabled;
 }
 
 /* Setter functions with persistence */
@@ -175,22 +242,66 @@ int app_settings_set_ble_name(const char *name)
     return settings_save_one("app/ble_name", name, strlen(name));
 }
 
-int app_settings_set_imu_odr(uint16_t odr_hz)
+int app_settings_set_user_uuid(const struct bt_uuid_128 *uuid)
 {
-    app_settings.imu_odr = odr_hz;
-    return settings_save_one("app/imu_odr", &odr_hz, sizeof(odr_hz));
+    if (!uuid) {
+        return -EINVAL;
+    }
+    
+    memcpy(&app_settings.user_uuid, uuid, sizeof(struct bt_uuid_128));
+    return settings_save_one("app/user_uuid", uuid->val, sizeof(uuid->val));
+}
+
+int app_settings_set_device_uuid(const struct bt_uuid_128 *uuid)
+{
+    if (!uuid) {
+        return -EINVAL;
+    }
+    
+    memcpy(&app_settings.device_uuid, uuid, sizeof(struct bt_uuid_128));
+    return settings_save_one("app/device_uuid", uuid->val, sizeof(uuid->val));
+}
+
+int app_settings_set_log_backend(const char *backend)
+{
+    if (!backend || strlen(backend) >= sizeof(app_settings.log_backend)) {
+        return -EINVAL;
+    }
+    
+    strcpy(app_settings.log_backend, backend);
+    return settings_save_one("app/log_backend", backend, strlen(backend));
 }
 
 /* Test function to demonstrate settings */
 void app_settings_test(void)
 {
+    char uuid_str[BT_UUID_STR_LEN];
+    
     LOG_INF("Current settings:");
     LOG_INF("  BLE name: %s", app_settings.ble_name);
-    LOG_INF("  Unit system: %s", app_settings.unit_system ? "Imperial" : "Metric");
-    LOG_INF("  IMU ODR: %d Hz", app_settings.imu_odr);
-    LOG_INF("  Baro rate: %d Hz", app_settings.baro_rate);
-    LOG_INF("  GNSS rate: %d Hz", app_settings.gnss_rate_hz);
+    LOG_INF("  Log backend: %s", app_settings.log_backend);
+    LOG_INF("  PPS enabled: %s", app_settings.pps_enabled ? "Yes" : "No");
     
-    /* Skip the save test for now to isolate the issue */
+    /* Display user UUID */
+    bt_uuid_to_str((const struct bt_uuid *)&app_settings.user_uuid, 
+                   uuid_str, sizeof(uuid_str));
+    LOG_INF("  User UUID: %s", uuid_str);
+    
+    /* Display device UUID */
+    bt_uuid_to_str((const struct bt_uuid *)&app_settings.device_uuid, 
+                   uuid_str, sizeof(uuid_str));
+    LOG_INF("  Device UUID: %s", uuid_str);
+    
+    /* Test UUID generation */
+    struct bt_uuid_128 test_uuid;
+    int rc = app_settings_generate_uuid(&test_uuid);
+    if (rc == 0) {
+        bt_uuid_to_str((const struct bt_uuid *)&test_uuid, 
+                       uuid_str, sizeof(uuid_str));
+        LOG_INF("  Generated test UUID: %s", uuid_str);
+    } else {
+        LOG_ERR("  Failed to generate test UUID: %d", rc);
+    }
+    
     LOG_INF("Settings test complete");
 }
