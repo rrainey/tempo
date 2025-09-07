@@ -68,3 +68,10 @@ logs/
 # Temporary files
 tmp/
 temp/
+/src/generated/prisma
+
+
+.env
+.env.local
+.env.production.local
+.env.development.local

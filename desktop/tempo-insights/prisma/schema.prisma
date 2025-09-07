@@ -1,0 +1,186 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum DeviceState {
+  ACTIVE
+  INACTIVE
+  PROVISIONING
+}
+
+enum GroupRole {
+  MEMBER
+  ADMIN
+  OWNER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  slug      String   @unique
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  ownedDevices Device[] @relation("DeviceOwner")
+  borrowedDevices Device[] @relation("DeviceLentTo")
+  jumpLogs JumpLog[]
+  groupMemberships GroupMember[]
+  formationParticipations FormationParticipant[]
+  invitationsSent UserInvitation[] @relation("InvitationsSent")
+  invitationUsed UserInvitation? @relation("InvitationsUsed")
+
+  @@index([email])
+  @@index([slug])
+}
+
+model Device {
+  id          String      @id @default(cuid())
+  bluetoothId String      @unique
+  name        String
+  state       DeviceState @default(ACTIVE)
+  lastSeen    DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  ownerId     String
+  owner       User        @relation("DeviceOwner", fields: [ownerId], references: [id])
+  lentToId    String?
+  lentTo      User?       @relation("DeviceLentTo", fields: [lentToId], references: [id])
+  jumpLogs    JumpLog[]
+
+  @@index([bluetoothId])
+  @@index([ownerId])
+  @@index([lentToId])
+}
+
+model JumpLog {
+  id          String   @id @default(cuid())
+  hash        String   @unique
+  rawLog      Bytes
+  offsets     Json     // Store byte offsets for quick access to log sections
+  flags       Json     // Store extracted flags/metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  formationParticipant FormationParticipant?
+
+  @@index([hash])
+  @@index([deviceId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members     GroupMember[]
+  invitations UserInvitation[]
+
+  @@index([slug])
+}
+
+model GroupMember {
+  id        String    @id @default(cuid())
+  role      GroupRole @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+
+  // Relations
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  groupId   String
+  group     Group     @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+model FormationSkydive {
+  id              String   @id @default(cuid())
+  name            String
+  jumpTime        DateTime
+  aircraft        String?
+  altitude        Int?     // Exit altitude in feet
+  notes           String?
+  isPublic        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  participants    FormationParticipant[]
+
+  @@index([jumpTime])
+}
+
+model FormationParticipant {
+  id        String   @id @default(cuid())
+  position  Int      // Position in formation (1-based)
+  createdAt DateTime @default(now())
+
+  // Relations
+  formationId String
+  formation   FormationSkydive @relation(fields: [formationId], references: [id])
+  userId      String
+  user        User @relation(fields: [userId], references: [id])
+  jumpLogId   String @unique
+  jumpLog     JumpLog @relation(fields: [jumpLogId], references: [id])
+
+  @@unique([formationId, position])
+  @@unique([formationId, userId])
+  @@index([formationId])
+  @@index([userId])
+}
+
+model UserInvitation {
+  id          String   @id @default(cuid())
+  email       String
+  code        String   @unique
+  groupId     String?
+  groupRole   GroupRole? // Role they'll have if joining a group
+  userRole    UserRole   @default(USER) // System role they'll have
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime   @default(now())
+
+  // Relations
+  invitedById String
+  invitedBy   User       @relation("InvitationsSent", fields: [invitedById], references: [id])
+  usedById    String?    @unique
+  usedBy      User?      @relation("InvitationsUsed", fields: [usedById], references: [id])
+  group       Group?     @relation(fields: [groupId], references: [id])
+
+  @@index([code])
+  @@index([email])
+  @@index([invitedById])
+}
