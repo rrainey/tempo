@@ -1,6 +1,16 @@
-import { AppShell, Burger, Group, Text } from '@mantine/core';
+import { AppShell, Burger, Group, Text, NavLink, Stack } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { ReactNode } from 'react';
+import {
+  IconHome,
+  IconUser,
+  IconUsers,
+  IconCpu,
+  IconLogout
+} from '@tabler/icons-react';
+import { logout } from '../lib/auth/logout';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -8,6 +18,11 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [opened, { toggle }] = useDisclosure();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return (
     <AppShell
@@ -37,8 +52,43 @@ export function AppLayout({ children }: AppLayoutProps) {
       </AppShell.Header>
 
       <AppShell.Navbar p="md">
-        <Text>Left Navigation</Text>
-        {/* Navigation items will go here */}
+        <Stack gap="xs">
+          <NavLink
+            component={Link}
+            href="/home"
+            label="Home"
+            leftSection={<IconHome size={16} />}
+            active={router.pathname === '/home'}
+          />
+          <NavLink
+            component={Link}
+            href="/profile"
+            label="Profile"
+            leftSection={<IconUser size={16} />}
+            active={router.pathname === '/profile'}
+          />
+          <NavLink
+            component={Link}
+            href="/groups"
+            label="Groups"
+            leftSection={<IconUsers size={16} />}
+            active={router.pathname === '/groups'}
+          />
+          <NavLink
+            component={Link}
+            href="/devices"
+            label="Devices (Admin)"
+            leftSection={<IconCpu size={16} />}
+            active={router.pathname === '/devices'}
+          />
+        </Stack>
+        <NavLink
+          label="Logout"
+          leftSection={<IconLogout size={16} />}
+          onClick={handleLogout}
+          mt="auto"
+          style={{ position: 'absolute', bottom: 20 }}
+        />
       </AppShell.Navbar>
 
       <AppShell.Main>
@@ -46,8 +96,10 @@ export function AppLayout({ children }: AppLayoutProps) {
       </AppShell.Main>
 
       <AppShell.Aside p="md">
-        <Text>Right Sidebar</Text>
-        {/* Activity feed will go here */}
+        <Text fw={600} mb="md">Recent Activity</Text>
+        <Stack gap="xs">
+          <Text size="sm" c="dimmed">No recent activity</Text>
+        </Stack>
       </AppShell.Aside>
     </AppShell>
   );
