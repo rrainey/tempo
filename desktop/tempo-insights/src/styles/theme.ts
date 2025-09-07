@@ -49,7 +49,7 @@ export const theme = createTheme({
     }
   },
 
-  globalStyles: (theme) => ({
+  globalStyles: (theme:any) => ({
     body: {
       backgroundColor: '#002233',
       color: '#ddffee',
