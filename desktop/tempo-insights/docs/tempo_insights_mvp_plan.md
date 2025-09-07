@@ -228,73 +228,73 @@ Phase 5 — Users & Groups Basics
 
 ## Phase 7 — Jump Logs (CRUD + Lists)
 
-Create JumpLog API (internal)
-
+- **Task 49: Create JumpLog API (internal)**
 Do: /api/internal/jumps/create (protected to workers via shared token header)
-
 Done when: posting bytes creates JumpLog row with hash.
 
-My Jumps list
-
+- **Task 50: My Jumps list**
 Do: /api/jumps/mine returns paginated jump summaries
-
 Done when: right panel shows latest 5.
 
-Jump visibility toggle
+- **Task 51: Jump visibility toggle**
 Do: endpoint to set visibleToConnections
 Done when: toggle persists and affects visibility queries.
 
-Jump detail endpoint
+- **Task 52: Jump detail endpoint**
 Do: /api/jumps/[id] (owner or authorized viewer) returns analysis fields & note
 Done when: owner can GET; others depend on visibility rules.
 
-Edit jump note
+- **Task 53: Edit jump note**
 Do: PATCH notes (markdown) for owner
 Done when: updated note renders on detail card.
 
-Phase 8 — Bluetooth Scanner Worker (ingestion stub → real)
+---
 
-Worker skeleton
+## Phase 8 — Bluetooth Scanner Worker (ingestion stub → real)
+
+- **Task 54: Worker skeleton**
 Do: workers/bluetoothScanner.ts loop with sleep interval env DISCOVERY_WINDOW=300
 Done when: logs “scan cycle” on interval.
 
-mcumgr presence check
+- **Task 55: mcumgr presence check**
 Do: on startup, verify mcumgr in PATH; log error if missing
 Done when: prints version on success.
 
-Scan API wrapper (stub)
+- **Task 56: Scan API wrapper (stub)**
 Do: bluetooth.listTempoDevices() returns mocked devices for now
 Done when: worker logs found devices.
 
-Update lastSeen
+- **Task 57: Update lastSeen**
 Do: for each device, upsert in DB + set lastSeen=now(); mark online if seen within window
 Done when: /api/devices/list shows online.
 
-New-file detection (stub)
+- **Task 58: New-file detection (stub)**
 Do: maintain per-device uploaded filenames in DB (table DeviceFileIndex)
 Done when: calling ingestion simulates one new file per appearance.
 
-Upload → JumpLog
+- **Task 59: Upload → JumpLog**
 Do: write raw bytes (mock), compute SHA-256, set userId from device assignment
 Done when: new JumpLog rows appear with hash.
 
-Replace stubs with mcumgr list
+- **Task 60: Replace stubs with mcumgr list**
 Do: implement fs ls parse to list files on device
 Done when: real devices list files.
 
-Replace stubs with mcumgr read
+- **Task 61: Replace stubs with mcumgr read**
 Do: implement fs read to fetch bytes
 Done when: real transfer stores bytes in DB.
 
-Idempotency
+- **Task 62: Idempotency**
 Do: skip re-ingestion by filename or content hash
 Done when: second scan does not duplicate rows.
 
-Device online/offline accuracy
+- **Task 63: Device online/offline accuracy**
 Do: transition to offline if not seen for > window
 Done when: UI dot flips after timeout.
 
-Phase 9 — Analysis Worker
+---
+
+## Phase 9 — Analysis Worker
 
 Worker skeleton
 Do: workers/logProcessor.ts loop every 30s
