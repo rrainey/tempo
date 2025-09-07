@@ -4,6 +4,7 @@ import { serialize } from 'cookie';
 import { z } from 'zod';
 import { hashPassword } from '../../../lib/auth/hash';
 import { issueJWT } from '../../../lib/auth/jwt';
+import { generateUniqueSlug } from '../../../lib/utils/slug';
 
 const prisma = new PrismaClient();
 
@@ -12,13 +13,6 @@ const registerSchema = z.object({
   password: z.string().min(8),
   name: z.string().min(1),
 });
-
-function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
 
 export default async function handler(
   req: NextApiRequest,
@@ -45,14 +39,7 @@ export default async function handler(
     const hashedPassword = await hashPassword(password);
 
     // Generate unique slug
-    let slug = generateSlug(name);
-    let slugSuffix = 0;
-    let finalSlug = slug;
-
-    while (await prisma.user.findUnique({ where: { slug: finalSlug } })) {
-      slugSuffix++;
-      finalSlug = `${slug}-${slugSuffix}`;
-    }
+    const slug = await generateUniqueSlug(name, 'user');
 
     // Create user
     const user = await prisma.user.create({
@@ -60,7 +47,7 @@ export default async function handler(
         email: email.toLowerCase(),
         password: hashedPassword,
         name,
-        slug: finalSlug,
+        slug,
         role: 'USER',
       },
     });

@@ -156,22 +156,388 @@ Each task is small, testable, and focused on one concern.
 
 ---
 
-## (Remaining Phases)
+Phase 5 — Users & Groups Basics
 
-The plan continues through:  
-- **Phase 5: Users & Groups Basics**  
-- **Phase 6: Devices (Admin)**  
-- **Phase 7: Jump Logs**  
-- **Phase 8: Bluetooth Scanner Worker**  
-- **Phase 9: Analysis Worker**  
-- **Phase 10: Home Panels & Jump Details**  
-- **Phase 11: Formation Review**  
-- **Phase 12: Lending & Proxy Users**  
-- **Phase 13: Bluetooth Admin Actions**  
-- **Phase 14: Analysis Enhancements**  
-- **Phase 15: Visibility & Permissions**  
-- **Phase 16: Export & Deletion**  
-- **Phase 17: Polling & Performance**  
-- **Phase 18: Deployment**  
+- **Task 34: Slug generator**
+  Do: human-name → URL slug; de-dupe with “-nnn”, also add suffix for any collision with fixed app URL top-level components (e.g., "profile", "api", "users", "groups", "home", "review", "login", "register", "devices")
+  Done when: “Bill Jones” → “bill-jones”; collision → “bill-jones-123”.
+
+- **Task 35: User profile read**
+  Do: /api/users/me returns profile JSON
+  Done when: /profile loads current data.
+
+- **Task 36: Update profile**
+  Do: /api/users/me PATCH (name, photo MIME + bytes)
+  Done when: updating name/photo persists.
+
+- **Task 37: Change password**
+  Do: /api/users/password (old pwd verify, set new hash)
+  Done when: new login works; old fails.
+
+- **Task 38: Create group**
+  Do: /api/groups POST (name, description, public/private)
+  Done when: creator auto-member isAdmin=true.
+
+- **Task 39: Group page read**
+  Do: load group info + member list
+  Done when: shows members with admin badge.
+
+- **Task 40: Join public group**
+  Do: /api/groups/[id]/join for public groups
+  Done when: membership appears.
+
+- **Task 41: Invite to private group**
+  Do: /api/groups/[id]/invite (admin only) creates pending invite
+  Done when: target user sees pending in “Pending Actions”.
+
+- **Task 42: Accept/decline invite**
+  Do: endpoints to accept/decline
+  Done when: accept adds member; decline removes invite.
+
+---
+
+## Phase 6 — Devices (DB + Admin UI)
+
+- **Task 43: Device list API**
+  Do: /api/devices/list returns all devices + online status
+  Done when: seeded records appear.
+
+- **Task 44: Devices page list**
+  Do: table with name, owner, state, online dot
+  Done when: renders API data.
+
+- **Task 45: Poll device status**
+  Do: 15s polling with SWR/interval
+  Done when: manual DB toggle reflects in UI within 15s.
+
+- **Task 46: Assign modal**
+  Do: admin UI to select user + optional nextJumpNumber
+  Done when: selecting user POSTs to backend (stubbed action).
+
+- **Task 47: Blink action**
+  Do: admin UI kebab → Blink (stub)
+  Done when: backend logs intent; UI shows toast.
+
+- **Task 48: Unprovision action**
+  Do: admin UI kebab → Unprovision (stub)
+  Done when: device state flips to Unprovisioned in DB.
+
+  (Bluetooth wire-up comes in Phase 8; for now, stub to DB changes so UI is testable.)
+
+---
+
+## Phase 7 — Jump Logs (CRUD + Lists)
+
+Create JumpLog API (internal)
+
+Do: /api/internal/jumps/create (protected to workers via shared token header)
+
+Done when: posting bytes creates JumpLog row with hash.
+
+My Jumps list
+
+Do: /api/jumps/mine returns paginated jump summaries
+
+Done when: right panel shows latest 5.
+
+Jump visibility toggle
+Do: endpoint to set visibleToConnections
+Done when: toggle persists and affects visibility queries.
+
+Jump detail endpoint
+Do: /api/jumps/[id] (owner or authorized viewer) returns analysis fields & note
+Done when: owner can GET; others depend on visibility rules.
+
+Edit jump note
+Do: PATCH notes (markdown) for owner
+Done when: updated note renders on detail card.
+
+Phase 8 — Bluetooth Scanner Worker (ingestion stub → real)
+
+Worker skeleton
+Do: workers/bluetoothScanner.ts loop with sleep interval env DISCOVERY_WINDOW=300
+Done when: logs “scan cycle” on interval.
+
+mcumgr presence check
+Do: on startup, verify mcumgr in PATH; log error if missing
+Done when: prints version on success.
+
+Scan API wrapper (stub)
+Do: bluetooth.listTempoDevices() returns mocked devices for now
+Done when: worker logs found devices.
+
+Update lastSeen
+Do: for each device, upsert in DB + set lastSeen=now(); mark online if seen within window
+Done when: /api/devices/list shows online.
+
+New-file detection (stub)
+Do: maintain per-device uploaded filenames in DB (table DeviceFileIndex)
+Done when: calling ingestion simulates one new file per appearance.
+
+Upload → JumpLog
+Do: write raw bytes (mock), compute SHA-256, set userId from device assignment
+Done when: new JumpLog rows appear with hash.
+
+Replace stubs with mcumgr list
+Do: implement fs ls parse to list files on device
+Done when: real devices list files.
+
+Replace stubs with mcumgr read
+Do: implement fs read to fetch bytes
+Done when: real transfer stores bytes in DB.
+
+Idempotency
+Do: skip re-ingestion by filename or content hash
+Done when: second scan does not duplicate rows.
+
+Device online/offline accuracy
+Do: transition to offline if not seen for > window
+Done when: UI dot flips after timeout.
+
+Phase 9 — Analysis Worker
+
+Worker skeleton
+Do: workers/logProcessor.ts loop every 30s
+Done when: logs cycle start/end.
+
+Queue query
+Do: select JumpLogs where initialAnalysisTimestamp IS NULL ordered newest first
+Done when: logs number pending.
+
+Parser interface
+Do: a function parseLog(raw) returning time series for altitude, vspeed, gps (mock)
+Done when: unit test returns arrays from mock bytes.
+
+Exit detection
+Do: detect first sustained >2000 fpm for ≥1s; store exitOffsetSec
+Done when: unit test with synthetic data passes.
+
+Deployment & activation detection
+Do: 0.25g decel for 0.1s; and first RoD <2000 fpm → offsets
+Done when: unit tests pass.
+
+Landing detection
+Do: RoD <100 fpm for 10s → landingOffsetSec
+Done when: unit test passes.
+
+Exit timestamp & location
+Do: compute exitTimestampUTC + exitLat/Lon if GPS available
+Done when: DB rows updated.
+
+Freefall metrics
+Do: compute freefall time, average fall rate (mph)
+Done when: fields present in GET /api/jumps/[id].
+
+Set analysis complete
+Do: write initialAnalysisTimestamp=now(); initialAnalysisMessage on anomalies
+Done when: job no longer appears in queue.
+
+Formation grouping
+Do: find logs with start times within ±120s; upsert Formation + participants
+Done when: /review/fs/[id] can fetch a formation with ≥2 participants.
+
+Respect per-log visibility
+Do: store participant isVisibleToOthers=true default; update on toggle
+Done when: hidden jumper not shown to others in formation API.
+
+---
+
+## Phase 10 — UI: Home Panels & Jump Details
+
+Right panel: My Jumps
+Do: list last 5 with date, freefall time, avg fall rate
+Done when: renders from API.
+
+Right panel: Formation Jumps
+Do: list recent formations involving user
+Done when: clicking opens /review/fs/[id].
+
+Center: Jump summary
+Do: when a jump selected, show exit time, deploy alt, freefall, avg fall rate
+Done when: selection updates panel.
+
+Jump detail chart (Recharts)
+Do: altitude vs time line, markers for exit/deploy/landing
+Done when: renders sample series.
+
+Visibility toggle UI
+Do: switch in summary card writes visibleToConnections
+Done when: toggle updates DB and affects other viewer access.
+
+Notes editor
+Do: markdown textarea; save via PATCH
+Done when: note persists and renders as markdown.
+
+---
+
+Phase 11 — Formation Review (D3) MVP
+
+Data API
+Do: /api/formations/[id] returns participants with time-series (mock initially)
+Done when: endpoint responds shape for viz.
+
+Projection math
+Do: helper to convert lat/lon/alt to local XY, choose base, compute formation frame (+X along line of flight, +Z up)
+Done when: unit test of transform yields expected vectors.
+
+Canvas render loop
+Do: draw dots for participants at time t; play/pause/seek
+Done when: play button animates points.
+
+Preset views
+Do: god’s-eye and -X side view toggles
+Done when: buttons switch projection.
+
+Base info panel
+Do: show live fall rate (mph), normalized fall rate, AGL
+Done when: values update during playback.
+
+Jumper list panel
+Do: show distance to base (ft), closure rate (fps & mph) per jumper
+Done when: values update during playback.
+
+(You can keep trajectories mocked first, then wire real series in 90–92.)
+
+---
+
+Phase 12 — Lending & Proxy Users
+
+Create proxy API
+Do: /api/lending/proxy creates User{isProxy=true, proxyCreatorId}
+Done when: returns proxy user id and slug.
+
+Lend device API
+Do: /api/lending/lend (owner only) sets device.lentTo + policy
+Done when: DB updates reflect lending status.
+
+Reclaim device API
+Do: /api/lending/reclaim resets lentTo; reassign to owner
+Done when: device state back to owner in DB.
+
+Lend UI
+Do: form to choose device, select existing user or “Create proxy…”, pick duration
+Done when: successful lend shows confirmation.
+
+Auto-return (one-jump)
+Do: in scanner, after successful upload on lent device with one-jump policy, auto-reclaim (DB + assign user on device later in Phase 93)
+Done when: next scan shows device back to owner (DB).
+
+Claim invitation create
+Do: /api/invitations/create for a given proxy; store expiry=30 days
+
+Done when: returns invitation id + claim URL.
+
+Claim QR display
+Do: UI to show QR for claim URL
+Done when: QR scans to correct route.
+
+Accept invitation flow
+Do: /accept-invitation/[id] with form (email, password); flips isProxy=false
+Done when: user can log in; proxy retains jump history.
+
+---
+
+Phase 13 — Bluetooth Device Admin Actions (Real)
+
+Bluetooth service module
+Do: production wrapper for mcumgr (exec, parse, timeout/retry)
+Done when: fs ls and fs read functions work on a device.
+
+Blink command
+Do: implement device blink via shell or custom command
+Done when: device LED blinks on admin action.
+
+Assign to user (on device)
+Do: write uinfo.json (user UUID + nextJumpNumber)
+Done when: device reads back updated info.
+
+Unprovision (on device)
+Do: clear assignment and revert name if needed
+Done when: device advertises unprovisioned state.
+
+Initialize device (unique ID)
+Do: generate/set Bluetooth ID & name “Tempo-BT-xxxx”
+Done when: scanner sees new name; DB updated.
+
+Concurrency lock
+- Do: per-device mutex so scanner and admin actions don’t collide
+- Done when: parallel commands queue instead of error.
+
+---
+
+Phase 14 — Analysis Enhancements
+
+Normalized fall rate
+- Do: implement ISA density correction; produce normalized series
+- Done when: unit test: higher altitude → higher unnormalized speed but similar normalized.
+
+Average jumper band (config)
+- Do: constants 110–130 mph; expose in UI band overlay
+- Done when: chart shows band; values configurable in constants.
+
+Anomaly messages
+- Do: fill initialAnalysisMessage on missing GPS/short log
+- Done when: shows on jump detail when applicable.
+
+Phase 15 — Visibility & Permissions Hardening
+
+Visibility rules (API)
+- Do: enforce visibleToConnections + group/connection checks on all jump reads
+- Done when: unauthorized user cannot GET hidden jumps.
+
+Connections (basic)
+- Do: endpoints to send/accept/decline connection requests; “Pending Actions” list
+- Done when: two users can connect and see each other’s visible jumps.
+
+Phase 16 — Export & Deletion
+
+Export my data
+- Do: /api/export zips user’s jump JSON + raw files; stream download
+- Done when: archive downloads; contains expected files.
+
+Delete jump
+- Do: owner can delete a jump; remove from formations or mark removed
+- Done when: jump no longer appears; formations update.
+
+Delete proxy user
+- Do: creator can delete proxy with cascade rules (or prevent if data exists)
+- Done when: action behaves per policy.
+
+Delete group (admin)
+- Do: prompt for new admin if last admin; otherwise delete
+- Done when: constraints enforced.
+
+Phase 17 — Polling & Performance
+
+Global polling hook
+- Do: reusable usePolling(fetcher, interval) hook
+- Done when: devices & jump lists share the hook.
+
+Indexing
+- Do: DB indexes on JumpLog(userId, createdAt), Device(lastSeen), FormationParticipant(formationId)
+- Done when: slow queries improved (verify via EXPLAIN).
+
+Binary size check
+- Do: reject logs > 16MB with clear message in worker
+- Done when: oversized file logged & skipped gracefully.
+
+Phase 18 — Packaging & Pi Deployment
+
+Env templates
+- Do: .env.example with all keys (DB, JWT_SECRET, WORKER_TOKENS, DISCOVERY_WINDOW)
+- Done when: developer can copy and run locally.
+
+Systemd services
+- Do: unit files for web, worker-bt, worker-analysis
+- Done when: systemctl starts all; restart on failure.
+
+mcumgr install script
+- Do: shell script to install dependencies on Ubuntu 24.04 (BlueZ, mcumgr)
+- Done when: script exits 0 and mcumgr -h works.
+
+Health endpoints
+- Do: /api/health returns OK; workers log heartbeats
+- Done when: simple checks pass.
+
 
 Each phase breaks down into atomic tasks with clear “Done when” checks.  

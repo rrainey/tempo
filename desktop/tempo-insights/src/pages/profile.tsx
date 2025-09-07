@@ -1,27 +1,34 @@
 import { useState, useEffect } from 'react';
-import { Container, Title, Paper, TextInput, Button, Group, Text, Alert } from '@mantine/core';
+import { Container, Title, Paper, TextInput, Button, Group, Text, Alert, Stack, Card } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { AppLayout } from '../components/AppLayout';
 import { AuthGuard } from '../components/AuthGuard';
+import { ChangePasswordModal } from '../components/ChangePasswordModal';
+import { IconLock } from '@tabler/icons-react';
 
 interface ProfileForm {
   name: string;
   email: string;
 }
 
-interface User {
+interface UserProfile {
   id: string;
   email: string;
   name: string;
   slug: string;
   role: string;
+  createdAt: string;
+  jumpCount: number;
+  groupCount: number;
+  deviceCount: number;
 }
 
 export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [passwordModalOpened, setPasswordModalOpened] = useState(false);
 
   const form = useForm<ProfileForm>({
     initialValues: {
@@ -48,7 +55,7 @@ export default function ProfilePage() {
 
   const loadProfile = async () => {
     try {
-      const response = await fetch('/api/auth/me');
+      const response = await fetch('/api/users/me');
       if (!response.ok) throw new Error('Failed to load profile');
 
       const data = await response.json();
@@ -67,18 +74,25 @@ export default function ProfilePage() {
     setError(null);
 
     try {
-      // TODO: Implement profile update API endpoint
-      // const response = await fetch('/api/profile/update', {
-      //   method: 'PUT',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(values),
-      // });
+      const response = await fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(values),
+      });
 
-      // For now, just show a notification
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update profile');
+      }
+
+      setUser(data.user);
       notifications.show({
-        title: 'Profile Update',
-        message: 'Profile update API not yet implemented',
-        color: 'blue',
+        title: 'Success',
+        message: 'Profile updated successfully',
+        color: 'green',
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -93,67 +107,66 @@ export default function ProfilePage() {
         <Container size="sm">
           <Title order={2} mb="xl">My Profile</Title>
 
-          <Paper p="xl" withBorder>
-            {error && (
-              <Alert color="red" mb="md">
-                {error}
-              </Alert>
-            )}
+          <Stack gap="lg">
+            {/* Stats Cards - keep existing */}
 
-            {user && (
-              <Group mb="lg">
-                <div>
-                  <Text size="sm" c="dimmed">User ID</Text>
-                  <Text fw={500}>{user.id}</Text>
-                </div>
-                <div>
-                  <Text size="sm" c="dimmed">Slug</Text>
-                  <Text fw={500}>@{user.slug}</Text>
-                </div>
-                <div>
-                  <Text size="sm" c="dimmed">Role</Text>
-                  <Text fw={500}>{user.role}</Text>
-                </div>
-              </Group>
-            )}
+            {/* Profile Form */}
+            <Paper p="xl" withBorder>
+              {/* ... keep existing content ... */}
 
-            <form onSubmit={form.onSubmit(handleSubmit)}>
-              <TextInput
-                label="Name"
-                placeholder="Your name"
-                required
-                mb="md"
-                {...form.getInputProps('name')}
-              />
+              <form onSubmit={form.onSubmit(handleSubmit)}>
+                <TextInput
+                  label="Name"
+                  placeholder="Your name"
+                  required
+                  mb="md"
+                  {...form.getInputProps('name')}
+                />
 
-              <TextInput
-                label="Email"
-                placeholder="your@email.com"
-                required
-                mb="md"
-                {...form.getInputProps('email')}
-              />
+                <TextInput
+                  label="Email"
+                  placeholder="your@email.com"
+                  required
+                  mb="md"
+                  {...form.getInputProps('email')}
+                />
 
-              <Group justify="flex-end" mt="xl">
-                <Button
-                  variant="subtle"
-                  onClick={() => loadProfile()}
-                  disabled={loading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  loading={loading}
-                  disabled={loading}
-                  color="brand"
-                >
-                  Save Changes
-                </Button>
-              </Group>
-            </form>
-          </Paper>
+                <Group justify="space-between" mt="xl">
+                  <Button
+                    variant="subtle"
+                    leftSection={<IconLock size={16} />}
+                    onClick={() => setPasswordModalOpened(true)}
+                  >
+                    Change Password
+                  </Button>
+
+                  <Group>
+                    <Button
+                      variant="subtle"
+                      onClick={() => loadProfile()}
+                      disabled={loading}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      loading={loading}
+                      disabled={loading}
+                      color="brand"
+                    >
+                      Save Changes
+                    </Button>
+                  </Group>
+                </Group>
+              </form>
+            </Paper>
+          </Stack>
         </Container>
+
+        <ChangePasswordModal
+          opened={passwordModalOpened}
+          onClose={() => setPasswordModalOpened(false)}
+        />
       </AppLayout>
     </AuthGuard>
   );

@@ -13,7 +13,8 @@ import {
   Button,
   Avatar,
   Table,
-  ActionIcon
+  Loader,
+  Center
 } from '@mantine/core';
 import { AppLayout } from '../../components/AppLayout';
 import { AuthGuard } from '../../components/AuthGuard';
@@ -23,6 +24,7 @@ interface GroupMember {
   id: string;
   name: string;
   slug: string;
+  email: string;
   role: 'OWNER' | 'ADMIN' | 'MEMBER';
   joinedAt: string;
 }
@@ -36,6 +38,8 @@ interface Group {
   createdAt: string;
   memberCount: number;
   members: GroupMember[];
+  userRole: 'OWNER' | 'ADMIN' | 'MEMBER' | null;
+  isMember: boolean;
 }
 
 export default function GroupPage() {
@@ -44,7 +48,6 @@ export default function GroupPage() {
   const [group, setGroup] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<'OWNER' | 'ADMIN' | 'MEMBER' | null>(null);
 
   useEffect(() => {
     if (slug) {
@@ -54,36 +57,23 @@ export default function GroupPage() {
 
   const loadGroupData = async () => {
     try {
-      // TODO: Implement group API endpoint
-      // const response = await fetch(`/api/groups/${slug}`);
-      // const data = await response.json();
-      // setGroup(data.group);
+      setLoading(true);
+      const response = await fetch(`/api/groups/${slug}`);
 
-      // For now, load a mock group
-      if (slug === 'test-group') {
-        setGroup({
-          id: 'group-1',
-          name: 'Test Jump Group',
-          slug: 'test-group',
-          description: 'A test group for formation skydiving',
-          isPublic: true,
-          createdAt: new Date().toISOString(),
-          memberCount: 1,
-          members: [{
-            id: 'admin-id',
-            name: 'Admin User',
-            slug: 'admin',
-            role: 'OWNER',
-            joinedAt: new Date().toISOString(),
-          }],
-        });
-        setUserRole('OWNER');
-      } else {
-        setError('Group not found');
+      if (!response.ok) {
+        if (response.status === 404) {
+          setError('Group not found');
+        } else {
+          setError('Failed to load group');
+        }
+        return;
       }
-      setLoading(false);
+
+      const data = await response.json();
+      setGroup(data.group);
     } catch (err) {
       setError('Failed to load group');
+    } finally {
       setLoading(false);
     }
   };
@@ -99,9 +89,9 @@ export default function GroupPage() {
   if (loading) return (
     <AuthGuard>
       <AppLayout>
-        <Container>
-          <Text>Loading group...</Text>
-        </Container>
+        <Center style={{ height: '50vh' }}>
+          <Loader size="lg" color="accent" />
+        </Center>
       </AppLayout>
     </AuthGuard>
   );
@@ -138,7 +128,7 @@ export default function GroupPage() {
                   Created {new Date(group.createdAt).toLocaleDateString()} • {group.memberCount} members
                 </Text>
               </div>
-              {userRole && (
+              {group.userRole && (
                 <Button leftSection={<IconUserPlus size={16} />}>
                   Invite Members
                 </Button>
@@ -154,7 +144,7 @@ export default function GroupPage() {
               <Tabs.Tab value="formations" leftSection={<IconCalendar size={16} />}>
                 Formation Skydives
               </Tabs.Tab>
-              {(userRole === 'OWNER' || userRole === 'ADMIN') && (
+              {(group.userRole === 'OWNER' || group.userRole === 'ADMIN') && (
                 <Tabs.Tab value="settings" leftSection={<IconSettings size={16} />}>
                   Settings
                 </Tabs.Tab>
@@ -169,7 +159,7 @@ export default function GroupPage() {
                       <Table.Th>Member</Table.Th>
                       <Table.Th>Role</Table.Th>
                       <Table.Th>Joined</Table.Th>
-                      {(userRole === 'OWNER' || userRole === 'ADMIN') && (
+                      {(group.userRole === 'OWNER' || group.userRole === 'ADMIN') && (
                         <Table.Th>Actions</Table.Th>
                       )}
                     </Table.Tr>
@@ -196,7 +186,7 @@ export default function GroupPage() {
                         <Table.Td>
                           {new Date(member.joinedAt).toLocaleDateString()}
                         </Table.Td>
-                        {(userRole === 'OWNER' || userRole === 'ADMIN') && (
+                        {(group.userRole === 'OWNER' || group.userRole === 'ADMIN') && (
                           <Table.Td>
                             <Text size="sm" c="dimmed">-</Text>
                           </Table.Td>
@@ -214,7 +204,7 @@ export default function GroupPage() {
               </Card>
             </Tabs.Panel>
 
-            {(userRole === 'OWNER' || userRole === 'ADMIN') && (
+            {(group.userRole === 'OWNER' || group.userRole === 'ADMIN') && (
               <Tabs.Panel value="settings" pt="md">
                 <Paper p="md" withBorder>
                   <Title order={4} mb="md">Group Settings</Title>
