@@ -296,47 +296,47 @@ Done when: UI dot flips after timeout.
 
 ## Phase 9 — Analysis Worker
 
-Worker skeleton
+- **Task 64: Worker skeleton**
 Do: workers/logProcessor.ts loop every 30s
 Done when: logs cycle start/end.
 
-Queue query
+- **Task 65: Queue query**
 Do: select JumpLogs where initialAnalysisTimestamp IS NULL ordered newest first
 Done when: logs number pending.
 
-Parser interface
+- **Task 66: Parser interface**
 Do: a function parseLog(raw) returning time series for altitude, vspeed, gps (mock)
 Done when: unit test returns arrays from mock bytes.
 
-Exit detection
+- **Task 67: Exit detection**
 Do: detect first sustained >2000 fpm for ≥1s; store exitOffsetSec
 Done when: unit test with synthetic data passes.
 
-Deployment & activation detection
+- **Task 68: Deployment & activation detection**
 Do: 0.25g decel for 0.1s; and first RoD <2000 fpm → offsets
 Done when: unit tests pass.
 
-Landing detection
+- **Task 69: Landing detection**
 Do: RoD <100 fpm for 10s → landingOffsetSec
 Done when: unit test passes.
 
-Exit timestamp & location
+- **Task 70: Exit timestamp & location**
 Do: compute exitTimestampUTC + exitLat/Lon if GPS available
 Done when: DB rows updated.
 
-Freefall metrics
+- **Task 71: Freefall metrics**
 Do: compute freefall time, average fall rate (mph)
 Done when: fields present in GET /api/jumps/[id].
 
-Set analysis complete
+- **Task 72: Set analysis complete**
 Do: write initialAnalysisTimestamp=now(); initialAnalysisMessage on anomalies
 Done when: job no longer appears in queue.
 
-Formation grouping
+- **Task 73: Formation grouping**
 Do: find logs with start times within ±120s; upsert Formation + participants
 Done when: /review/fs/[id] can fetch a formation with ≥2 participants.
 
-Respect per-log visibility
+- **Task 74: Respect per-log visibility**
 Do: store participant isVisibleToOthers=true default; update on toggle
 Done when: hidden jumper not shown to others in formation API.
 
@@ -344,55 +344,55 @@ Done when: hidden jumper not shown to others in formation API.
 
 ## Phase 10 — UI: Home Panels & Jump Details
 
-Right panel: My Jumps
+- **Task 75: Right panel: My Jumps**
 Do: list last 5 with date, freefall time, avg fall rate
 Done when: renders from API.
 
-Right panel: Formation Jumps
+- **Task 76: Right panel: Formation Jumps**
 Do: list recent formations involving user
 Done when: clicking opens /review/fs/[id].
 
-Center: Jump summary
+- **Task 77: Center: Jump summary**
 Do: when a jump selected, show exit time, deploy alt, freefall, avg fall rate
 Done when: selection updates panel.
 
-Jump detail chart (Recharts)
+- **Task 78: Jump detail chart (Recharts)**
 Do: altitude vs time line, markers for exit/deploy/landing
 Done when: renders sample series.
 
-Visibility toggle UI
+- **Task 79: Visibility toggle UI**
 Do: switch in summary card writes visibleToConnections
 Done when: toggle updates DB and affects other viewer access.
 
-Notes editor
+- **Task 80: Notes editor**
 Do: markdown textarea; save via PATCH
 Done when: note persists and renders as markdown.
 
 ---
 
-Phase 11 — Formation Review (D3) MVP
+## Phase 11 — Formation Review (D3) MVP
 
-Data API
+- **Task 81: Data API**
 Do: /api/formations/[id] returns participants with time-series (mock initially)
 Done when: endpoint responds shape for viz.
 
-Projection math
+- **Task 82: Projection math**
 Do: helper to convert lat/lon/alt to local XY, choose base, compute formation frame (+X along line of flight, +Z up)
 Done when: unit test of transform yields expected vectors.
 
-Canvas render loop
+- **Task 83: Canvas render loop**
 Do: draw dots for participants at time t; play/pause/seek
 Done when: play button animates points.
 
-Preset views
+- **Task 84: Preset views**
 Do: god’s-eye and -X side view toggles
 Done when: buttons switch projection.
 
-Base info panel
+- **Task 85: Base info panel**
 Do: show live fall rate (mph), normalized fall rate, AGL
 Done when: values update during playback.
 
-Jumper list panel
+- **Task 86: Jumper list panel**
 Do: show distance to base (ft), closure rate (fps & mph) per jumper
 Done when: values update during playback.
 
@@ -400,144 +400,152 @@ Done when: values update during playback.
 
 ---
 
-Phase 12 — Lending & Proxy Users
+## Phase 12 — Lending & Proxy Users
 
-Create proxy API
+- **Task 87: Create proxy API**
 Do: /api/lending/proxy creates User{isProxy=true, proxyCreatorId}
 Done when: returns proxy user id and slug.
 
-Lend device API
+- **Task 88: Lend device API**
 Do: /api/lending/lend (owner only) sets device.lentTo + policy
 Done when: DB updates reflect lending status.
 
-Reclaim device API
+- **Task 89: Reclaim device API**
 Do: /api/lending/reclaim resets lentTo; reassign to owner
 Done when: device state back to owner in DB.
 
-Lend UI
+- **Task 90: Lend UI**
 Do: form to choose device, select existing user or “Create proxy…”, pick duration
 Done when: successful lend shows confirmation.
 
-Auto-return (one-jump)
+- **Task 91: Auto-return (one-jump)**
 Do: in scanner, after successful upload on lent device with one-jump policy, auto-reclaim (DB + assign user on device later in Phase 93)
 Done when: next scan shows device back to owner (DB).
 
-Claim invitation create
+- **Task 92: Claim invitation create**
 Do: /api/invitations/create for a given proxy; store expiry=30 days
-
 Done when: returns invitation id + claim URL.
 
-Claim QR display
+- **Task 93: Claim QR display**
 Do: UI to show QR for claim URL
 Done when: QR scans to correct route.
 
-Accept invitation flow
+- **Task 94: Accept invitation flow**
 Do: /accept-invitation/[id] with form (email, password); flips isProxy=false
 Done when: user can log in; proxy retains jump history.
 
 ---
 
-Phase 13 — Bluetooth Device Admin Actions (Real)
+## Phase 13 — Bluetooth Device Admin Actions (Real)
 
-Bluetooth service module
+- **Task 95: Bluetooth service module**
 Do: production wrapper for mcumgr (exec, parse, timeout/retry)
 Done when: fs ls and fs read functions work on a device.
 
-Blink command
+- **Task 96: Blink command**
 Do: implement device blink via shell or custom command
 Done when: device LED blinks on admin action.
 
-Assign to user (on device)
+- **Task 97: Assign to user (on device)**
 Do: write uinfo.json (user UUID + nextJumpNumber)
 Done when: device reads back updated info.
 
-Unprovision (on device)
+- **Task 98: Unprovision (on device)**
 Do: clear assignment and revert name if needed
 Done when: device advertises unprovisioned state.
 
-Initialize device (unique ID)
+- **Task 99: Initialize device (unique ID)**
 Do: generate/set Bluetooth ID & name “Tempo-BT-xxxx”
 Done when: scanner sees new name; DB updated.
 
-Concurrency lock
+- **Task 100: Concurrency lock**
 - Do: per-device mutex so scanner and admin actions don’t collide
 - Done when: parallel commands queue instead of error.
 
 ---
 
-Phase 14 — Analysis Enhancements
+## Phase 14 — Analysis Enhancements
 
-Normalized fall rate
+- **Task 101: Normalized fall rate**
 - Do: implement ISA density correction; produce normalized series
 - Done when: unit test: higher altitude → higher unnormalized speed but similar normalized.
 
-Average jumper band (config)
+- **Task 102: Average jumper band (config)**
 - Do: constants 110–130 mph; expose in UI band overlay
 - Done when: chart shows band; values configurable in constants.
 
-Anomaly messages
+- **Task 103: Anomaly messages**
 - Do: fill initialAnalysisMessage on missing GPS/short log
 - Done when: shows on jump detail when applicable.
 
-Phase 15 — Visibility & Permissions Hardening
+---
 
-Visibility rules (API)
+## Phase 15 — Visibility & Permissions Hardening
+
+- **Task 104: Visibility rules (API)**
 - Do: enforce visibleToConnections + group/connection checks on all jump reads
 - Done when: unauthorized user cannot GET hidden jumps.
 
-Connections (basic)
+- **Task 105: Connections (basic)**
 - Do: endpoints to send/accept/decline connection requests; “Pending Actions” list
 - Done when: two users can connect and see each other’s visible jumps.
 
-Phase 16 — Export & Deletion
+---
 
-Export my data
+## Phase 16 — Export & Deletion
+
+- **Task 106: Export my data**
 - Do: /api/export zips user’s jump JSON + raw files; stream download
 - Done when: archive downloads; contains expected files.
 
-Delete jump
+- **Task 107: Delete jump**
 - Do: owner can delete a jump; remove from formations or mark removed
 - Done when: jump no longer appears; formations update.
 
-Delete proxy user
+- **Task 108: Delete proxy user**
 - Do: creator can delete proxy with cascade rules (or prevent if data exists)
 - Done when: action behaves per policy.
 
-Delete group (admin)
+- **Task 109: Delete group (admin)**
 - Do: prompt for new admin if last admin; otherwise delete
 - Done when: constraints enforced.
 
-Phase 17 — Polling & Performance
+---
 
-Global polling hook
+## Phase 17 — Polling & Performance
+
+- **Task 110: Global polling hook**
 - Do: reusable usePolling(fetcher, interval) hook
 - Done when: devices & jump lists share the hook.
 
-Indexing
+- **Task 111: Indexing**
 - Do: DB indexes on JumpLog(userId, createdAt), Device(lastSeen), FormationParticipant(formationId)
 - Done when: slow queries improved (verify via EXPLAIN).
 
-Binary size check
+- **Task 112: Binary size check**
 - Do: reject logs > 16MB with clear message in worker
 - Done when: oversized file logged & skipped gracefully.
 
-Phase 18 — Packaging & Pi Deployment
+---
 
-Env templates
+## Phase 18 — Packaging & Pi Deployment
+
+- **Task 113: Env templates**
 - Do: .env.example with all keys (DB, JWT_SECRET, WORKER_TOKENS, DISCOVERY_WINDOW)
 - Done when: developer can copy and run locally.
 
-Systemd services
+- **Task 114: Systemd services**
 - Do: unit files for web, worker-bt, worker-analysis
 - Done when: systemctl starts all; restart on failure.
 
-mcumgr install script
+- **Task 115: mcumgr install script**
 - Do: shell script to install dependencies on Ubuntu 24.04 (BlueZ, mcumgr)
 - Done when: script exits 0 and mcumgr -h works.
 
-Health endpoints
+- **Task 116: Health endpoints**
 - Do: /api/health returns OK; workers log heartbeats
 - Done when: simple checks pass.
 
+---
 
 Each phase breaks down into atomic tasks with clear “Done when” checks.  
