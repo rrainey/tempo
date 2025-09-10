@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { config } from 'dotenv';
-import { BluetoothService } from '../src/lib/bluetooth/bluetooth.service';
+import { BluetoothService } from '../lib/bluetooth/bluetooth.services';
 
 
 // Load environment variables
@@ -77,16 +77,6 @@ class BluetoothScanner {
     }
   }
 
-  private async discoverDevices(): Promise<any[]> {
-    try {
-      const devices = await bluetooth.listTempoDevices();
-      return devices;
-    } catch (error) {
-      console.error('[BLUETOOTH SCANNER] Error discovering devices:', error);
-      return [];
-    }
-  }
-
   private async processDevice(device: any) {
     console.log(`[BLUETOOTH SCANNER] Processing device ${device.name} (${device.bluetoothId})`);
     
@@ -109,6 +99,11 @@ class BluetoothScanner {
           },
         });
       }
+
+      // TODO: Check for new files and upload
+      
+    } catch (error) {
+      console.error(`[BLUETOOTH SCANNER] Error processing device ${device.bluetoothId}:`, error);
     }
   }
 
