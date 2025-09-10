@@ -1,10 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import { config } from 'dotenv';
+import { BluetoothService } from '../src/lib/bluetooth/bluetooth.service';
+
 
 // Load environment variables
 config({ path: '.env' });
 
 const prisma = new PrismaClient();
+const bluetooth = BluetoothService.getInstance();
 
 // Configuration
 const DISCOVERY_WINDOW = parseInt(process.env.DISCOVERY_WINDOW || '300'); // 5 minutes default
@@ -50,24 +53,62 @@ class BluetoothScanner {
   private async performScan() {
     const scanId = Date.now();
     console.log(`[BLUETOOTH SCANNER] Starting scan cycle ${scanId}...`);
-
+    
     try {
-      // TODO: Implement actual Bluetooth scanning
-      // For now, just log the scan cycle
-
       const startTime = Date.now();
-
-      // Simulate scan time
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
+      
+      // Discover devices
+      const devices = await this.discoverDevices();
+      
+      // Process each discovered device
+      for (const device of devices) {
+        await this.processDevice(device);
+      }
+      
       const duration = Date.now() - startTime;
       console.log(`[BLUETOOTH SCANNER] Scan cycle ${scanId} completed in ${duration}ms`);
-
+      console.log(`[BLUETOOTH SCANNER] Processed ${devices.length} devices`);
+      
       // Update device online/offline status based on lastSeen
       await this.updateDeviceStatuses();
-
+      
     } catch (error) {
       console.error(`[BLUETOOTH SCANNER] Error in scan cycle ${scanId}:`, error);
+    }
+  }
+
+  private async discoverDevices(): Promise<any[]> {
+    try {
+      const devices = await bluetooth.listTempoDevices();
+      return devices;
+    } catch (error) {
+      console.error('[BLUETOOTH SCANNER] Error discovering devices:', error);
+      return [];
+    }
+  }
+
+  private async processDevice(device: any) {
+    console.log(`[BLUETOOTH SCANNER] Processing device ${device.name} (${device.bluetoothId})`);
+    
+    try {
+      // Check if device exists in DB
+      const existingDevice = await prisma.device.findUnique({
+        where: { bluetoothId: device.bluetoothId },
+      });
+
+      if (!existingDevice) {
+        console.log(`[BLUETOOTH SCANNER] New device found: ${device.name}`);
+        // TODO: Handle new device discovery
+      } else {
+        // Update lastSeen
+        await prisma.device.update({
+          where: { id: existingDevice.id },
+          data: {
+            lastSeen: new Date(),
+            state: 'ACTIVE',
+          },
+        });
+      }
     }
   }
 
