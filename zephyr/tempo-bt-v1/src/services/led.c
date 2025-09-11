@@ -34,11 +34,19 @@ static struct {
     struct k_timer blink_timer;
     bool led_on;
     struct k_mutex mutex;
+    rgb_color_t override_color;
+    bool override_enabled;
+    rgb_color_t app_color;      
+    bool app_enabled;           
 } led_state = {
     .pwm_dev = NULL,
     .current_color = RGB_BLACK,
     .enabled = false,
-    .led_on = false
+    .led_on = false,
+    .override_color = RGB_BLACK,
+    .override_enabled = false,
+    .app_color = RGB_BLACK,
+    .app_enabled = false
 };
 
 /* Forward declaration */
@@ -171,20 +179,26 @@ int set_color_led_state(rgb_color_t color, bool state)
 {
     k_mutex_lock(&led_state.mutex, K_FOREVER);
     
-    /* Update state */
-    led_state.current_color = color;
-    led_state.enabled = state;
+    /* Store application state */
+    led_state.app_color = color;
+    led_state.app_enabled = state;
     
-    if (state) {
-        /* Start blinking timer */
-        k_timer_start(&led_state.blink_timer, 
-                    K_NO_WAIT,
-                    K_MSEC(BLINK_PERIOD_MS));
-    } else {
-        /* Stop timer and turn off LED */
-        k_timer_stop(&led_state.blink_timer);
-        k_work_cancel_delayable(&led_off_work);
-        led_off();
+    /* Only update actual LED if override is not active */
+    if (!led_state.override_enabled) {
+        led_state.current_color = color;
+        led_state.enabled = state;
+        
+        if (state) {
+            /* Start blinking timer */
+            k_timer_start(&led_state.blink_timer, 
+                        K_NO_WAIT,
+                        K_MSEC(BLINK_PERIOD_MS));
+        } else {
+            /* Stop timer and turn off LED */
+            k_timer_stop(&led_state.blink_timer);
+            k_work_cancel_delayable(&led_off_work);
+            led_off();
+        }
     }
     
     k_mutex_unlock(&led_state.mutex);
@@ -332,4 +346,64 @@ static int set_pwm_channel_debug(uint32_t channel, uint8_t brightness)
     }
     
     return ret;
+}
+
+int led_service_set_override(rgb_color_t color, bool enable)
+{
+    k_mutex_lock(&led_state.mutex, K_FOREVER);
+    
+    led_state.override_color = color;
+    led_state.override_enabled = enable;
+    
+    if (enable) {
+        /* Apply override settings */
+        led_state.current_color = color;
+        led_state.enabled = true;
+        
+        /* Start blinking with override color */
+        k_timer_start(&led_state.blink_timer, 
+                    K_NO_WAIT,
+                    K_MSEC(BLINK_PERIOD_MS));
+                    
+        LOG_INF("LED override enabled: R=%d G=%d B=%d", 
+                color.r, color.g, color.b);
+    } else {
+        /* Return to application control */
+        led_state.current_color = led_state.app_color;
+        led_state.enabled = led_state.app_enabled;
+        
+        if (led_state.app_enabled) {
+            /* Resume app's blinking pattern */
+            k_timer_start(&led_state.blink_timer, 
+                        K_NO_WAIT,
+                        K_MSEC(BLINK_PERIOD_MS));
+        } else {
+            /* App had LED off, so turn it off */
+            k_timer_stop(&led_state.blink_timer);
+            k_work_cancel_delayable(&led_off_work);
+            led_off();
+        }
+        
+        LOG_INF("LED override disabled, returning to app control");
+    }
+    
+    k_mutex_unlock(&led_state.mutex);
+    
+    return 0;
+}
+
+int led_service_get_override(rgb_color_t *color, bool *enabled)
+{
+    if (!color || !enabled) {
+        return -EINVAL;
+    }
+    
+    k_mutex_lock(&led_state.mutex, K_FOREVER);
+    
+    *color = led_state.override_color;
+    *enabled = led_state.override_enabled;
+    
+    k_mutex_unlock(&led_state.mutex);
+    
+    return 0;
 }
