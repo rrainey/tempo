@@ -33,36 +33,31 @@ uint8_t nmea_checksum(const char *payload, size_t n)
 
 int nmea_verify_checksum(const char *sentence, size_t len)
 {
-    const char *star;
-    uint8_t calc_checksum;
-    uint8_t sent_checksum;
-    
-    if (!sentence || len < 8) {  /* Minimum: $X*HH\r\n */
-        return 0;
+    uint8_t calc_checksum = 0;
+
+    if (len < 8 || sentence[0] != '$') {
+        return false;
     }
     
-    /* Find the * character */
-    star = memchr(sentence, '*', len);
-    if (!star || (star - sentence) < 2 || (len - (star - sentence)) < 3) {
-        return 0;
+    const char *p = &sentence[1];
+    for (size_t i = 1; i < len - 3; i++) {
+        if (*p == '*') {
+            break;
+        }
+        calc_checksum ^= (uint8_t)*p;
+        p++;
+    }
+
+    if (*p != '*') {
+        return false;
     }
     
-    /* Calculate checksum of payload between $ and * */
-    size_t payload_len = star - sentence;
-    if (sentence[0] == '$') {
-        payload_len--;
-    }
-    calc_checksum = nmea_checksum(sentence, payload_len);
+    /* Parse provided checksum */
+    char checksum_str[3] = {p[1], p[2], '\0'};
+
+    uint8_t provided_checksum = (uint8_t)strtol(checksum_str, NULL, 16);
     
-    /* Parse the sent checksum */
-    char hex[3] = {star[1], star[2], '\0'};
-    char *endptr;
-    sent_checksum = (uint8_t)strtol(hex, &endptr, 16);
-    if (endptr != &hex[2]) {
-        return 0;  /* Invalid hex digits */
-    }
-    
-    return (calc_checksum == sent_checksum) ? 1 : 0;
+    return calc_checksum == (uint8_t)provided_checksum;
 }
 
 int nmea_append_checksum(char *sentence, size_t buf_size)

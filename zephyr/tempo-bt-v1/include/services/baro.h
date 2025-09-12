@@ -68,7 +68,7 @@ int baro_configure(const baro_config_t *config);
  * 
  * @param callback Function to call when new data is available
  */
-void baro_register_callback(baro_data_callback_t callback);
+int baro_register_callback(baro_data_callback_t callback);
 
 /**
  * @brief Start barometer data collection
@@ -98,5 +98,47 @@ int baro_get_config(baro_config_t *config);
  * @param pressure_pa Sea level pressure in Pascals
  */
 void baro_set_sea_level_pressure(float pressure_pa);
+
+/**
+ * @brief Unregister a barometer data callback
+ * 
+ * @param callback Callback function to unregister
+ * @return 0 on success, negative error code on failure
+ */
+int baro_unregister_callback(baro_data_callback_t callback);
+
+/**
+ * @brief Set ground reference from current pressure reading
+ * 
+ * This should be called when the system is on the ground to establish
+ * a reference for AGL (Above Ground Level) calculations.
+ * 
+ * @return 0 on success, negative error code on failure
+ */
+int baro_set_ground_reference(void);
+
+/**
+ * @brief Get altitude above ground level (AGL) from a sample
+ * 
+ * @param sample Barometer sample with pressure data
+ * @return AGL in meters, or 0 if ground reference not set
+ */
+float baro_get_agl(const baro_sample_t *sample);
+
+/**
+ * @brief Get ground reference values
+ * 
+ * @param pressure_pa Output: Ground pressure in Pascals (can be NULL)
+ * @param altitude_m Output: Ground altitude in meters MSL (can be NULL)
+ * @return 0 on success, -ENODATA if ground reference not set
+ */
+int baro_get_ground_reference(float *pressure_pa, float *altitude_m);
+
+/**
+ * @brief Clear ground reference
+ * 
+ * Resets to standard atmosphere
+ */
+void baro_clear_ground_reference(void);
 
 #endif /* SERVICES_BARO_H */

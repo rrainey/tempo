@@ -44,6 +44,7 @@ target_sources(app PRIVATE
     src/services/timebase.c
     src/services/gnss_m10q.c
     src/services/imu_icm42688.c
+    src/services/orientation.c
     src/services/baro_bmp390.c
     src/services/aggregator.c
     src/services/storage.c

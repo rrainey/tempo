@@ -22,8 +22,8 @@ LOG_MODULE_REGISTER(led_service, LOG_LEVEL_INF);
 #define LED_PWM_CHANNEL_B 2  /* Blue on channel 2 */
 
 /* Timing configuration */
-#define BLINK_PERIOD_MS    1000  /* 1 second period */ 
-#define BLINK_ON_TIME_MS   410   /* 50ms on time */
+#define BLINK_PERIOD_MS    2000  /* 2 second period */ 
+#define BLINK_ON_TIME_MS   50    /* 50ms on time */
 #define PWM_PERIOD_NS      1000000  /* 1ms PWM period for smooth dimming */ 
 
 /* LED state */
@@ -82,7 +82,7 @@ static int set_pwm_channel(uint32_t channel, uint8_t brightness)
     
     pulse_ns = ((uint32_t)inverted_brightness * PWM_PERIOD_NS) / 31;
     
-    LOG_INF("Setting PWM ch%d: brightness=%d (inverted=%d), pulse=%d ns", 
+    LOG_DBG("Setting PWM ch%d: brightness=%d (inverted=%d), pulse=%d ns", 
             channel, brightness, inverted_brightness, pulse_ns);
     
     ret = pwm_set(led_state.pwm_dev, channel, PWM_PERIOD_NS, pulse_ns, 0);
