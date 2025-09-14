@@ -66,6 +66,7 @@ model Device {
   lentToId    String?
   lentTo      User?       @relation("DeviceLentTo", fields: [lentToId], references: [id])
   jumpLogs    JumpLog[]
+  fileIndex   DeviceFileIndex[] 
 
   @@index([bluetoothId])
   @@index([ownerId])
@@ -94,6 +95,17 @@ model JumpLog {
   @@index([deviceId])
   @@index([userId])
   @@index([createdAt])
+}
+
+model DeviceFileIndex {
+  id          String   @id @default(cuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id])
+  fileName    String
+  uploadedAt  DateTime @default(now())
+  
+  @@unique([deviceId, fileName])
+  @@index([deviceId])
 }
 
 model Group {

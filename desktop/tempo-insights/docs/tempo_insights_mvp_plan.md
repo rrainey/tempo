@@ -256,8 +256,8 @@ Done when: updated note renders on detail card.
 Do: workers/bluetoothScanner.ts loop with sleep interval env DISCOVERY_WINDOW=300
 Done when: logs “scan cycle” on interval.
 
-- **Task 55: mcumgr presence check**
-Do: on startup, verify mcumgr in PATH; log error if missing
+- **Task 55: smpmgr presence check**
+Do: on startup, verify smpmgr in PATH; log error if missing
 Done when: prints version on success.
 
 - **Task 56: Scan API wrapper (stub)**
@@ -276,11 +276,11 @@ Done when: calling ingestion simulates one new file per appearance.
 Do: write raw bytes (mock), compute SHA-256, set userId from device assignment
 Done when: new JumpLog rows appear with hash.
 
-- **Task 60: Replace stubs with mcumgr list**
+- **Task 60: Replace stubs with smpmgr list**
 Do: implement fs ls parse to list files on device
 Done when: real devices list files.
 
-- **Task 61: Replace stubs with mcumgr read**
+- **Task 61: Replace stubs with smpmgr read**
 Do: implement fs read to fetch bytes
 Done when: real transfer stores bytes in DB.
 
@@ -439,7 +439,7 @@ Done when: user can log in; proxy retains jump history.
 ## Phase 13 — Bluetooth Device Admin Actions (Real)
 
 - **Task 95: Bluetooth service module**
-Do: production wrapper for mcumgr (exec, parse, timeout/retry)
+Do: production wrapper for smpmgr (exec, parse, timeout/retry)
 Done when: fs ls and fs read functions work on a device.
 
 - **Task 96: Blink command**
@@ -538,9 +538,9 @@ Done when: scanner sees new name; DB updated.
 - Do: unit files for web, worker-bt, worker-analysis
 - Done when: systemctl starts all; restart on failure.
 
-- **Task 115: mcumgr install script**
-- Do: shell script to install dependencies on Ubuntu 24.04 (BlueZ, mcumgr)
-- Done when: script exits 0 and mcumgr -h works.
+- **Task 115: smpmgr install script**
+- Do: shell script to install dependencies on Ubuntu 24.04 (BlueZ, smpmgr)
+- Done when: script exits 0 and smpmgr -h works.
 
 - **Task 116: Health endpoints**
 - Do: /api/health returns OK; workers log heartbeats

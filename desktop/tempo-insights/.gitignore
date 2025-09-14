@@ -75,3 +75,5 @@ temp/
 .env.local
 .env.production.local
 .env.development.local
+
+*.pyc

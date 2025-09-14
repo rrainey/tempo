@@ -183,7 +183,7 @@ Use Next.js, Typescript, Mantine for core UI elements, recharts for charts and g
 
 The application should be designed for deployment on Ubuntu 24.04 on a Raspberry Pi 5.
 
-The application will be deployed at the local dropzone facility to provide for Bluetooth connectivity to the logging devices.  The Bluetooth functions should be provided through the most reliable Bluetooth stack available that can provide all needed interaction functions - I'd prefer to use BluZ directly from Typescript, but using mcumgr via shell callouts might be an option as well.
+The application will be deployed at the local dropzone facility to provide for Bluetooth connectivity to the logging devices.  The Bluetooth functions should be provided through the most reliable Bluetooth stack available that can provide all needed interaction functions - I'd prefer to use BluZ directly from Typescript, but using `smpmgr` might be an option as well.
 
 ## Theming
 
@@ -209,6 +209,7 @@ Use the Mantine default per-platform font choices.
 
 ### 2. **Device Communication**
 
+* Prefer using `smpmgr` - an extensible python script.
 * I am providing a Typescript library class design to interface to Tempo-BT devices via Bluetooth. It requires a functioning copy of the `mcumgr` shell application.
 * File transfer error handling and retry.  Any file transfer
 
