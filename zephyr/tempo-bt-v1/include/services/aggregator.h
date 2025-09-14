@@ -137,4 +137,24 @@ void aggregator_set_session_start_time(uint64_t start_us);
  */
 void aggregator_set_session_id(uint32_t id);
 
+/* Add this declaration to aggregator.h, replacing the old aggregator_write_session_config */
+
+/**
+ * @brief Write surface altitude sentence
+ * 
+ * Outputs a $PSFC sentence with the estimated MSL altitude of the
+ * departure airfield. This value is obtained from barometer readings
+ * taken 10-15 minutes before logging starts.
+ */
+void aggregator_write_surface_altitude(void);
+
+/* Optional: If you need session info elsewhere, add this */
+/**
+ * @brief Write session information sentence (custom)
+ * 
+ * Outputs a custom sentence with session configuration details.
+ * Note: This is not part of the standard log format.
+ */
+void aggregator_write_session_info(void);
+
 #endif /* SERVICES_AGGREGATOR_H */

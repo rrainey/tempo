@@ -68,7 +68,7 @@ int baro_configure(const baro_config_t *config);
  * 
  * @param callback Function to call when new data is available
  */
-void baro_register_callback(baro_data_callback_t callback);
+int baro_register_callback(baro_data_callback_t callback);
 
 /**
  * @brief Start barometer data collection
@@ -98,5 +98,93 @@ int baro_get_config(baro_config_t *config);
  * @param pressure_pa Sea level pressure in Pascals
  */
 void baro_set_sea_level_pressure(float pressure_pa);
+
+/**
+ * @brief Unregister a barometer data callback
+ * 
+ * @param callback Callback function to unregister
+ * @return 0 on success, negative error code on failure
+ */
+int baro_unregister_callback(baro_data_callback_t callback);
+
+/**
+ * @brief Set ground reference from current pressure reading
+ * 
+ * This should be called when the system is on the ground to establish
+ * a reference for AGL (Above Ground Level) calculations.
+ * 
+ * @return 0 on success, negative error code on failure
+ */
+int baro_set_ground_reference(void);
+
+/**
+ * @brief Get altitude above ground level (AGL) from a sample
+ * 
+ * @param sample Barometer sample with pressure data
+ * @return AGL in meters, or 0 if ground reference not set
+ */
+float baro_get_agl(const baro_sample_t *sample);
+
+/**
+ * @brief Get ground reference values
+ * 
+ * @param pressure_pa Output: Ground pressure in Pascals (can be NULL)
+ * @param altitude_m Output: Ground altitude in meters MSL (can be NULL)
+ * @return 0 on success, -ENODATA if ground reference not set
+ */
+int baro_get_ground_reference(float *pressure_pa, float *altitude_m);
+
+/**
+ * @brief Clear ground reference
+ * 
+ * Resets to standard atmosphere
+ */
+void baro_clear_ground_reference(void);
+
+/**
+ * @brief Initialize ground altitude tracking with current altitude
+ * 
+ * Fills the ground altitude history buffer with the provided altitude.
+ * This should be called when first entering IDLE/ARMED state.
+ * 
+ * @param altitude_ft Current altitude in feet MSL
+ */
+void baro_init_ground_altitude(float altitude_ft);
+
+/**
+ * @brief Record a new ground altitude sample
+ * 
+ * Adds the altitude to the circular buffer. Should be called
+ * every 5 minutes when in IDLE/ARMED states.
+ * 
+ * @param altitude_ft Current altitude in feet MSL
+ */
+void baro_record_ground_altitude(float altitude_ft);
+
+/**
+ * @brief Get ground altitude for $PSFC sentence
+ * 
+ * Returns the ground altitude from approximately 15 minutes ago.
+ * This provides a stable reference that's insensitive to recent
+ * pre-flight disturbances.
+ * 
+ * @return Ground altitude in feet MSL
+ */
+float baro_get_ground_altitude_psfc(void);
+
+/**
+ * @brief Check if it's time to record a new ground altitude sample
+ * 
+ * @return true if 5 minutes have elapsed since last sample
+ */
+bool baro_should_sample_ground_altitude(void);
+
+/**
+ * @brief Get the current barometer sample
+ * 
+ * @param sample Output: Current barometer reading
+ * @return 0 on success, negative error code on failure
+ */
+int baro_get_current_sample(baro_sample_t *sample);
 
 #endif /* SERVICES_BARO_H */

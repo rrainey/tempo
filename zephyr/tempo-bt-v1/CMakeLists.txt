@@ -28,7 +28,6 @@ target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/include)
 target_sources(app PRIVATE 
     src/main.c
     src/app_init.c
-    src/app_state.c
     src/events.c
     src/mcumgr_custom.c
     src/ble_mcumgr.c
@@ -44,6 +43,7 @@ target_sources(app PRIVATE
     src/services/timebase.c
     src/services/gnss_m10q.c
     src/services/imu_icm42688.c
+    src/services/orientation.c
     src/services/baro_bmp390.c
     src/services/aggregator.c
     src/services/storage.c

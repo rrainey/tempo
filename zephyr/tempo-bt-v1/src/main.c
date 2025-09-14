@@ -14,7 +14,6 @@
 #include <string.h>
 
 #include "app_init.h"
-#include "app/app_state.h"
 #include "app/events.h"
 #include "config/settings.h"
 
@@ -26,10 +25,17 @@
 #include "services/baro.h"
 #include "services/logger.h"
 #include "services/led.h"
-//#include "services/aggregator.h"
+#include "services/aggregator.h"
 #include "util/nmea_checksum.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+
+ /* Register barometer callback with logger for takeoff detection */
+//extern void logger_register_baro_callback(baro_data_callback_t callback);
+//extern void logger_baro_handler(const baro_sample_t *sample);
+
+/* Also register with aggregator for logging */
+extern void aggregator_register_baro_callback(baro_data_callback_t callback);
 
 /*
  * Button handling for logger control
@@ -271,34 +277,10 @@ static void led_event_handler(const app_event_t *event, void *user_data)
     }
 }
 
-#if 0
+
 /* Event subscriber for LED */
 static event_subscriber_t led_subscriber;
 
-/* In main() after logger_init(): */
-
-    /* Initialize LED service */
-    ret = led_service_init();
-    if (ret < 0) {
-        LOG_ERR("Failed to initialize LED service: %d", ret);
-        /* Non-critical, continue without LED */
-    } else {
-        /* Subscribe to events for LED updates */
-        ret = event_bus_subscribe(&led_subscriber, 
-                                 led_event_handler,
-                                 (1U << EVT_MODE_CHANGE) | 
-                                 (1U << EVT_STORAGE_ERROR) |
-                                 (1U << EVT_SENSOR_ERROR),
-                                 NULL);
-        if (ret < 0) {
-            LOG_ERR("Failed to subscribe LED to events: %d", ret);
-        }
-        
-        /* Set initial state */
-        update_led_for_state(logger_get_state());
-    }
-
-#endif
 
 /* Alternative: Manual state indication without events */
 static void indicate_system_error(const char *error_msg)
@@ -330,7 +312,7 @@ static void button0_work_handler_with_led(struct k_work *work)
         }
     }
 }
-#endif
+
 
 /* Special patterns for specific conditions */
 static void indicate_storage_full(void)
@@ -351,15 +333,14 @@ static void indicate_gnss_lock(void)
 static void test_version_output(const char *line, size_t len)
 {
     /* Print to console for verification */
-    printk("Generated: %.*s", len, line);
+    //printk("Generated: %.*s", len, line);
     
     /* Verify checksum */
-    if (nmea_verify_checksum(line, len)) {
-        printk("Checksum verified!\n");
-    } else {
-        printk("Checksum FAILED!\n");
+    if (!nmea_verify_checksum(line, len)) {
+        printk("Checksum error!\n");
     }
 }
+#endif
 
 int main(void)
 {
@@ -372,17 +353,8 @@ int main(void)
         }
     }
     
-    printk("boot\n");
+    //printk("boot\n");
     LOG_INF("Tempo-BT V1 started successfully");
-    
-    #if 0
-    ret = led_service_init();
-    if (ret < 0) {
-        LOG_ERR("Failed to initialize LED service: %d", ret);
-    }
-    
-    indicate_system_ready();
-    #endif
 
     if (!gpio_is_ready_dt(&led)) {
 		//return 0;
@@ -393,36 +365,11 @@ int main(void)
     if (ret < 0) {
         LOG_ERR("Failed to initialize buttons: %d", ret);
     }   
-    
-    /* Initialize app state first */
-    ret = app_state_init();
-    if (ret < 0) {
-        LOG_ERR("Failed to initialize app state: %d", ret);
-    }
 
     // Initialize storage first
-    ret = app_storage_init();
+    ret = app_storage_init(); 
     if (ret < 0) {
         LOG_ERR("Failed to initialize storage: %d", ret);
-        return ret;
-    }
-
-    // Initialize storage service layer - prefer SD card for flight logs
-    if (storage_fatfs_card_present()) {
-        LOG_INF("SD card detected, using FAT filesystem for flight logs");
-        ret = storage_init(STORAGE_BACKEND_FATFS);
-        if (ret < 0) {
-            LOG_ERR("Failed to initialize FAT storage: %d", ret);
-            LOG_WRN("Falling back to internal littlefs storage");
-            ret = storage_init(STORAGE_BACKEND_LITTLEFS);
-        }
-    } else {
-        LOG_INF("No SD card detected, using internal littlefs storage");
-        ret = storage_init(STORAGE_BACKEND_LITTLEFS);
-    }
-    
-    if (ret < 0) {
-        LOG_ERR("Failed to initialize storage service: %d", ret);
         return ret;
     }
 
@@ -470,7 +417,6 @@ int main(void)
     LOG_INF("Settings test done");
 #endif
     
-    #if 0
     /* Initialize timebase */
     LOG_INF("About to init timebase...");
     ret = timebase_init();
@@ -485,10 +431,22 @@ int main(void)
     }
     LOG_INF("Aggregator init done");    
 
-    aggregator_register_output_callback(test_version_output);
-    aggregator_write_version();
+    //aggregator_register_output_callback(test_version_output);
+    //aggregator_write_version();
 
-    #endif
+    //logger_register_baro_callback(logger_baro_handler);
+    
+    /* Register both callbacks with barometer service */
+    extern void logger_baro_handler(const baro_sample_t *sample);
+    
+    /* Register the logger's barometer callback for takeoff detection */
+    ret = baro_register_callback(logger_baro_handler);
+    if (ret < 0) {
+        LOG_ERR("Failed to register logger baro callback: %d", ret);
+        /* Non-critical - continue without automatic takeoff detection */
+    } else {
+        LOG_INF("Logger barometer callback registered for takeoff detection");
+    }
     
     #if 0
     /* Test monotonic timer */
@@ -506,10 +464,6 @@ int main(void)
         LOG_INF("UTC correlation not available yet: %s", 
                 timebase_utc_string_placeholder());
     }
-    
-    /* Print current mode on boot */
-    LOG_INF("Current mode: %s", 
-            app_state_get_mode() == APP_MODE_IDLE ? "IDLE" : "UNKNOWN");
     
     LOG_INF("About to check QSPI flash...");
     
@@ -539,9 +493,10 @@ int main(void)
                     info.size, (unsigned int)info.start_offset);
         }
     }
-    
+    #endif
+
     /* Initialize GNSS */
-    LOG_INF("About to init GNSS...");
+    LOG_INF("Initializing GNSS...");
     ret = gnss_init();
     if (ret < 0) {
         LOG_ERR("Failed to initialize GNSS: %d", ret);
@@ -549,14 +504,60 @@ int main(void)
     } else {
         LOG_INF("GNSS initialized successfully");
         
-        /* Configure GNSS for flight operations */
-        ret = gnss_set_rate(1);  /* 5Hz update rate as per settings */
+        /* Configure GNSS for skydiving operations */
+        ret = gnss_init_skydiving();
+        if (ret < 0) {
+            LOG_WRN("Failed to configure GNSS for skydiving: %d", ret);
+            /* Try manual configuration as fallback */
+            ret = gnss_set_dynmodel(GNSS_DYNMODEL_AIRBORNE_4G);
+            if (ret < 0) {
+                LOG_ERR("Failed to set airborne 4g model: %d", ret);
+            }
+        }
+        
+        /* Set initial rate to 1Hz (will increase during freefall) */
+        ret = gnss_set_rate(1);
         if (ret < 0) {
             LOG_WRN("Failed to set GNSS rate: %d", ret);
         }
     }
-    #endif
-    
+
+    /* Initialize Barometer */
+    LOG_INF("Initializing BMP390 barometer...");
+    ret = baro_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize barometer: %d", ret);
+        /* Barometer is critical for takeoff detection */
+        indicate_system_error("Barometer init failed");
+        return ret;
+    } else {
+        LOG_INF("Barometer initialized successfully");
+        
+        /* Configure for flight operations - higher rate for better takeoff detection */
+        baro_config_t baro_cfg = {
+            .odr_hz = 8,  /* 8 Hz for good takeoff detection */
+            .pressure_oversampling = 4,
+            .temperature_oversampling = 1,
+            .iir_filter_coeff = 3,
+            .enable_data_ready_int = true
+        };
+        
+        ret = baro_configure(&baro_cfg);
+        if (ret < 0) {
+            LOG_WRN("Failed to configure barometer: %d", ret);
+        }
+        
+        /* Start barometer measurements */
+        ret = baro_start();
+        if (ret < 0) {
+            LOG_ERR("Failed to start barometer: %d", ret);
+            return ret;
+        }
+        
+        LOG_INF("Barometer measurements started at 8 Hz");
+    }
+
+#if 0
     /* Initialize IMU - but skip it for now due to hardware issues */
     LOG_INF("About to init IMU...");
     ret = imu_init();
@@ -566,12 +567,16 @@ int main(void)
         LOG_INF("IMU initialized successfully");
     }
 
+#ifdef CONFIG_SHELL
+
     //orientation_test_init();
     extern int imu_test_init(void);
 
     imu_test_init();
+
+#endif
     
-    #if 0
+
     /* Test Barometer (BMP390) */
     LOG_INF("Testing BMP390 barometer...");
     extern int test_baro(void);
@@ -588,40 +593,64 @@ int main(void)
         LOG_ERR("Failed to initialize file writer: %d", ret);
     }
 
-     logger_config_t logger_cfg = {
+    logger_config_t logger_cfg = {
         .base_path = "/logs",
         .use_date_folders = true,
         .use_uuid_names = true,
-        .imu_rate_hz = 40,
-        .env_rate_hz = 4,
-        .gnss_rate_hz = 1,
-        .enable_quaternion = true,
+        .imu_rate_hz = 40,      /* IMU disabled but keep config */
+        .env_rate_hz = 4,       /* Barometer data at 4 Hz in logs */
+        .gnss_rate_hz = 1,      /* GPS at 1 Hz normally */
+        .enable_quaternion = false,  /* No IMU, so no quaternion */
         .enable_magnetometer = false,
-        .auto_start_on_takeoff = false,
-        .auto_stop_on_landing = false
+        .auto_start_on_takeoff = true,   /* ENABLE THIS for automatic detection */
+        .auto_stop_on_landing = true     /* Also enable automatic stop */
     };
 
     ret = logger_init(&logger_cfg);
     if (ret < 0) {
         LOG_ERR("Failed to initialize logger: %d", ret);
     }
+
+    /* Initialize LED service */
+    ret = led_service_init();
+    if (ret < 0) {
+        LOG_ERR("Failed to initialize LED service: %d", ret);
+        /* Non-critical, continue without LED */
+    } else {
+        /* Subscribe to events for LED updates */
+        ret = event_bus_subscribe(&led_subscriber, 
+                                 led_event_handler,
+                                 (1U << EVT_MODE_CHANGE) | 
+                                 (1U << EVT_STORAGE_ERROR) |
+                                 (1U << EVT_SENSOR_ERROR),
+                                 NULL);
+        if (ret < 0) {
+            LOG_ERR("Failed to subscribe LED to events: %d", ret);
+        }
+        
+        /* Set initial state */
+        update_led_for_state(logger_get_state());
+    }
     
     LOG_INF("System initialization complete");
-    //LOG_INF("Connect via: mcumgr --conntype ble --connstring peer_name='Tempo-BT' echo hello");
+
+    indicate_system_ready();
 
     // Main thread idle loop
     while (1) {
         /* Log health status periodically */
         k_sleep(K_SECONDS(30));
 
-        ret = gpio_pin_toggle_dt(&led);
+        //ret = gpio_pin_toggle_dt(&led);
         
+#if 0
         /* Get storage stats */
         uint64_t free_bytes, total_bytes;
         if (storage_get_free_space(&free_bytes, &total_bytes) == 0) {
             LOG_INF("Storage: %llu MB free of %llu MB", 
                     free_bytes / (1024*1024), total_bytes / (1024*1024));
         }
+#endif
     }
     
     return 0;

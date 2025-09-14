@@ -3,23 +3,35 @@
  * 
  * Tempo-BT V1 - Logger Service Implementation
  */
-
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/random/random.h>
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "services/logger.h"
 #include "services/aggregator.h"
 #include "services/file_writer.h"
 #include "services/storage.h"
 #include "services/timebase.h"
-#include "app/app_state.h"
+#include "services/baro.h"
 #include "app/events.h"
 
 LOG_MODULE_REGISTER(logger, LOG_LEVEL_INF);
+
+/* Takeoff detection parameters */
+#define TAKEOFF_CLIMB_RATE_MPS      2.0f    /* 2 m/s climb rate threshold */
+#define TAKEOFF_ALTITUDE_CHANGE_M    50.0f   /* 50m altitude change to confirm */
+#define TAKEOFF_DETECT_DURATION_S    5       /* Sustained for 5 seconds */
+#define TAKEOFF_MIN_ALTITUDE_M       100.0f  /* Minimum altitude above ground */
+
+/* Landing detection parameters */
+#define LANDING_ALTITUDE_M           200.0f  /* Below 200m AGL */
+#define LANDING_LOW_SPEED_MPS        2.0f    /* Low vertical speed */
+#define LANDING_STABLE_DURATION_S    10      /* Stable for 10 seconds */
 
 /* Session state */
 static struct {
@@ -40,6 +52,58 @@ static struct {
 static void aggregator_output_to_file(const char *line, size_t len);
 static int create_session_directory(void);
 static const char *state_to_string(logger_state_t state);
+
+/* Ground altitude sampling work item */
+static struct k_work_delayable ground_altitude_work;
+static bool ground_altitude_work_initialized = false;
+
+/* Ground altitude sampling handler */
+static void ground_altitude_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    
+    /* Only sample when in IDLE or ARMED states */
+    if (logger_state.state != LOGGER_STATE_IDLE && 
+        logger_state.state != LOGGER_STATE_ARMED) {
+        return;
+    }
+    
+    /* Get current barometer reading */
+    baro_sample_t sample;
+    if (baro_get_current_sample(&sample) == 0 && sample.pressure_valid) {
+        float altitude_ft = sample.altitude_m * 3.28084f;
+        baro_record_ground_altitude(altitude_ft);
+        LOG_DBG("Recorded ground altitude: %.1f ft", altitude_ft);
+    }
+    
+    /* Schedule next sample */
+    k_work_reschedule(&ground_altitude_work, K_SECONDS(300));
+}
+
+/* Initialize ground altitude tracking (call this in logger_init) */
+static void init_ground_altitude_tracking(void)
+{
+    if (!ground_altitude_work_initialized) {
+        k_work_init_delayable(&ground_altitude_work, ground_altitude_work_handler);
+        ground_altitude_work_initialized = true;
+    }
+}
+
+/* Start ground altitude sampling (call when entering IDLE/ARMED) */
+static void start_ground_altitude_sampling(void)
+{
+    /* Take immediate sample */
+    ground_altitude_work_handler(&ground_altitude_work.work);
+    
+    /* Schedule periodic sampling */
+    k_work_reschedule(&ground_altitude_work, K_SECONDS(300));
+}
+
+/* Stop ground altitude sampling (call when starting logging) */
+static void stop_ground_altitude_sampling(void)
+{
+    k_work_cancel_delayable(&ground_altitude_work);
+}
 
 /* Public API */
 int logger_init(const logger_config_t *config)
@@ -71,6 +135,20 @@ int logger_init(const logger_config_t *config)
     if (ret != 0) {
         LOG_ERR("Failed to initialize file writer: %d", ret);
         return ret;
+    }
+
+    /* Initialize ground altitude tracking */
+    init_ground_altitude_tracking();
+    
+    /* If we start in IDLE state, begin sampling immediately */
+    if (logger_state.state == LOGGER_STATE_IDLE) {
+        /* Get initial altitude and start sampling */
+        baro_sample_t sample;
+        if (baro_get_current_sample(&sample) == 0 && sample.pressure_valid) {
+            float altitude_ft = sample.altitude_m * 3.28084f;
+            baro_init_ground_altitude(altitude_ft);
+            start_ground_altitude_sampling();
+        }
     }
     
     LOG_INF("Logger initialized");
@@ -128,6 +206,9 @@ int logger_start(void)
     
     aggregator_configure(&agg_config);
     aggregator_register_output_callback(aggregator_output_to_file);
+
+    /* Stop ground altitude sampling when we start logging */
+    stop_ground_altitude_sampling();
     
     /* Write session header */
     aggregator_write_session_header();
@@ -209,6 +290,10 @@ int logger_stop(void)
         .payload.session.id = logger_state.session_id
     };
     event_bus_publish(&evt);
+
+    if (logger_state.state == LOGGER_STATE_IDLE) {
+        start_ground_altitude_sampling();
+    }
     
     return 0;
 }
@@ -222,6 +307,16 @@ int logger_arm(void)
         k_mutex_unlock(&logger_state.lock);
         return -EINVAL;
     }
+    
+    /* If we haven't initialized ground altitude yet, do it now */
+    baro_sample_t sample;
+    if (baro_get_current_sample(&sample) == 0 && sample.pressure_valid) {
+        float altitude_ft = sample.altitude_m * 3.28084f;
+        baro_init_ground_altitude(altitude_ft);
+    }
+    
+    /* Ensure ground altitude sampling is running */
+    start_ground_altitude_sampling();
     
     logger_state_t old_state = logger_state.state;
     logger_state.state = LOGGER_STATE_ARMED;
@@ -255,6 +350,9 @@ int logger_disarm(void)
     logger_state.state = LOGGER_STATE_IDLE;
     
     k_mutex_unlock(&logger_state.lock);
+
+    /* Continue ground altitude sampling in IDLE state */
+    start_ground_altitude_sampling();
     
     LOG_INF("Logger disarmed");
     
@@ -373,6 +471,64 @@ static int create_session_directory(void)
              "%s/flight.csv", logger_state.session_path);
     
     return 0;
+}
+
+void logger_baro_handler(const baro_sample_t *sample)
+{
+    static float ground_altitude_m = 0.0f;
+    static float last_altitude_m = 0.0f;
+    static uint64_t last_sample_time_us = 0;
+    static int climb_samples = 0;
+    static bool ground_level_set = false;
+    
+    if (!sample || !sample->pressure_valid) {
+        return;
+    }
+    
+    /* Set ground level on first valid reading when armed */
+    if (logger_state.state == LOGGER_STATE_ARMED && !ground_level_set) {
+        ground_altitude_m = sample->altitude_m;
+        ground_level_set = true;
+        LOG_INF("Ground altitude set: %.1f m", ground_altitude_m);
+    }
+    
+    /* Calculate climb rate if we have previous sample */
+    if (last_sample_time_us > 0) {
+        float dt = (sample->timestamp_us - last_sample_time_us) / 1000000.0f;
+        float climb_rate = (sample->altitude_m - last_altitude_m) / dt;
+        float agl = sample->altitude_m - ground_altitude_m;
+        
+        /* Check for takeoff */
+        if (logger_state.state == LOGGER_STATE_ARMED && 
+            logger_state.config.auto_start_on_takeoff) {
+            
+            if (climb_rate > TAKEOFF_CLIMB_RATE_MPS && 
+                agl > TAKEOFF_MIN_ALTITUDE_M) {
+                climb_samples++;
+                
+                if (climb_samples > (TAKEOFF_DETECT_DURATION_S * logger_state.config.env_rate_hz)) {
+                    LOG_INF("Takeoff detected! Climb rate: %.1f m/s, AGL: %.1f m", 
+                            climb_rate, agl);
+                    logger_start();
+                }
+            } else {
+                climb_samples = 0;
+            }
+        }
+        
+        /* Check for landing */
+        if (logger_state.state == LOGGER_STATE_LOGGING && 
+            logger_state.config.auto_stop_on_landing) {
+            
+            if (agl < LANDING_ALTITUDE_M && 
+                fabsf(climb_rate) < LANDING_LOW_SPEED_MPS) {
+                /* Implement landing detection logic */
+            }
+        }
+    }
+    
+    last_altitude_m = sample->altitude_m;
+    last_sample_time_us = sample->timestamp_us;
 }
 
 static const char *state_to_string(logger_state_t state)

@@ -17,6 +17,8 @@
 
 LOG_MODULE_REGISTER(test_imu, LOG_LEVEL_INF);
 
+#ifdef CONFIG_SHELL
+
 /* Test state */
 static struct {
     bool running;
@@ -557,3 +559,5 @@ int imu_test_init(void)
 
 /* Call this from main() after timebase_init() */
 // imu_test_init();
+
+#endif

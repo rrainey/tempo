@@ -58,4 +58,26 @@ int set_color_led_state(rgb_color_t color, bool state);
  */
 int led_service_get_state(rgb_color_t *color, bool *state);
 
+/**
+ * @brief Set LED override state
+ * 
+ * When override is enabled, the LED will use the override color
+ * instead of the application-set color. This is used for remote
+ * control via mcumgr commands.
+ * 
+ * @param color RGB color to display (ignored if enable is false)
+ * @param enable true to enable override, false to return to app control
+ * @return 0 on success, negative error code on failure
+ */
+int led_service_set_override(rgb_color_t color, bool enable);
+
+/**
+ * @brief Get current override state
+ * 
+ * @param color Output: Current override color (if enabled)
+ * @param enabled Output: Whether override is active
+ * @return 0 on success, negative error code on failure
+ */
+int led_service_get_override(rgb_color_t *color, bool *enabled);
+
 #endif /* SERVICES_LED_H */

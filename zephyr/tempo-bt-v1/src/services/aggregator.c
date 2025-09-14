@@ -23,6 +23,9 @@
 
 LOG_MODULE_REGISTER(aggregator, LOG_LEVEL_INF);
 
+/* Track NMEA arrival time for PTH generation */
+static uint32_t last_nmea_arrival_ms = 0;
+
 /* Ring buffer sizes */
 #define IMU_RING_SIZE       128  /* 128 samples @ 400Hz = 320ms buffer */
 #define BARO_RING_SIZE      32   /* 32 samples @ 50Hz = 640ms buffer */
@@ -201,31 +204,54 @@ static void gnss_fix_callback(const gnss_fix_t *fix)
         snprintf(gps_date_string, sizeof(gps_date_string), 
                  "%04d-%02d-%02d", fix->year, fix->month, fix->day);
     }
+
+}
+
+/* NMEA passthrough callback from GNSS service */
+static void nmea_passthrough_callback(const char *sentence, size_t len)
+{
+    if (!output_callback) {
+        return;
+    }
     
-    /* Output GPS fix sentence immediately */
-    if (output_callback && fix->position_valid && fix->time_valid) {
-        char line[LOG_MAX_SENTENCE_LEN];
-        char time_str[32];
+    /* Record arrival time */
+    last_nmea_arrival_ms = log_get_timestamp_ms(config.session_start_us);
+    
+    /* Check if this is a sentence we want to log */
+    if (len > 6) {
+        bool log_sentence = false;
+        bool emit_pth = false;
         
-        /* Format ISO8601 time with milliseconds */
-        snprintf(time_str, sizeof(time_str), 
-                 "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
-                 fix->year, fix->month, fix->day,
-                 fix->hours, fix->minutes, fix->seconds, fix->milliseconds);
+        /* Check for GGA */
+        if (strncmp(sentence + 3, "GGA", 3) == 0) {
+            log_sentence = true;
+            emit_pth = true;
+        }
+        /* Check for GLL */
+        else if (strncmp(sentence + 3, "GLL", 3) == 0) {
+            log_sentence = true;
+            emit_pth = true;
+        }
+        /* Check for VTG */
+        else if (strncmp(sentence + 3, "VTG", 3) == 0) {
+            log_sentence = true;
+            emit_pth = false;  /* No PTH after VTG */
+        }
         
-        /* Output standard NMEA GGA sentence (if needed) */
-        /* ... GGA output code ... */
-        
-        /* Output $PTH sentence immediately after
-         * $PTH contains the millis() timestamp when the GNSS sentence arrived
-         */
-        uint32_t timestamp_ms = log_get_timestamp_ms(config.session_start_us);
-        int len = log_format_sentence(line, sizeof(line),
-                                      "$PTH,%u",
-                                      timestamp_ms);
-        
-        if (len > 0) {
-            output_callback(line, len);
+        if (log_sentence) {
+            /* Output the raw NMEA sentence as-is */
+            output_callback(sentence, len);
+            
+            /* Output PTH if needed */
+            if (emit_pth) {
+                char pth_line[LOG_MAX_SENTENCE_LEN];
+                int pth_len = log_format_sentence(pth_line, sizeof(pth_line),
+                                                  "$PTH,%u",
+                                                  last_nmea_arrival_ms);
+                if (pth_len > 0) {
+                    output_callback(pth_line, pth_len);
+                }
+            }
         }
     }
 }
@@ -401,6 +427,7 @@ int aggregator_init(void)
     imu_register_callback(imu_data_callback);
     baro_register_callback(baro_data_callback);
     gnss_register_fix_callback(gnss_fix_callback);
+    gnss_register_nmea_callback(nmea_passthrough_callback);
     
     /* Reset statistics */
     memset(&stats, 0, sizeof(stats));
@@ -575,6 +602,10 @@ void aggregator_get_stats(uint32_t *imu_count, uint32_t *env_count,
 void aggregator_set_session_start_time(uint64_t start_us)
 {
     config.session_start_us = start_us;
+    
+    /* Inform GNSS service of session start for PTH timing */
+    extern void gnss_set_session_start_time(uint64_t start_us);
+    gnss_set_session_start_time(start_us);
 }
 
 void aggregator_set_session_id(uint32_t id)
@@ -582,11 +613,72 @@ void aggregator_set_session_id(uint32_t id)
     config.session_id = id;
 }
 
+void aggregator_write_surface_altitude(void)
+{
+    if (!output_callback) {
+        return;
+    }
+    
+    char line[LOG_MAX_SENTENCE_LEN];
+    
+    /* Get ground altitude from barometer service */
+    float ground_alt_ft = baro_get_ground_altitude_psfc();
+    
+    /* Format: $PSFC,altitude_ft */
+    int len = log_format_sentence(line, sizeof(line),
+                                  "$PSFC,%d",
+                                  (int)ground_alt_ft);
+    
+    if (len > 0) {
+        output_callback(line, len);
+    }
+}
+
+/* If you need session configuration elsewhere, rename the old function */
+void aggregator_write_session_info(void)
+{
+    if (!output_callback) {
+        return;
+    }
+    
+    char line[LOG_MAX_SENTENCE_LEN];
+    char time_str[32];
+    
+    /* Get current time for session start */
+    uint64_t now_us = time_now_us();
+    uint32_t now_ms = (uint32_t)(now_us / 1000);
+    
+    /* If we have GPS time, use ISO format, otherwise use milliseconds */
+    if (gps_date_string[0] != '\0') {
+        /* We have GPS date but might not have full time yet */
+        snprintf(time_str, sizeof(time_str), "%sT00:00:00Z", gps_date_string);
+    } else {
+        /* No GPS yet, use relative timestamp */
+        snprintf(time_str, sizeof(time_str), "T+%u", now_ms);
+    }
+    
+    /* This could be a custom sentence like $PSES (session info) if needed */
+    /* Format: $PSES,session_id,time,rates,axes */
+    int len = log_format_sentence(line, sizeof(line),
+                                  "$PSES,%u,%s,%d:%d:%d:%d,NED",
+                                  config.session_id,
+                                  time_str,
+                                  config.imu_output_rate,
+                                  config.env_output_rate,
+                                  config.gnss_output_rate,
+                                  config.mag_output_rate);
+    
+    if (len > 0) {
+        output_callback(line, len);
+    }
+}
+
+/* Update the header writer to use the correct function */
 void aggregator_write_session_header(void)
 {
     /* First write version */
     aggregator_write_version();
     
-    /* Then write session file config */
-    aggregator_write_session_config();
+    /* Then write surface altitude (not session config!) */
+    aggregator_write_surface_altitude();
 }

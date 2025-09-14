@@ -15,7 +15,36 @@
 #include "services/baro.h"
 #include "services/timebase.h"
 
-LOG_MODULE_REGISTER(baro, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(baro, LOG_LEVEL_INF);
+
+static baro_sample_t last_baro_sample;
+static bool have_baro_sample = false;
+static struct k_mutex sample_mutex;
+
+/* Maximum number of callbacks */
+#define BARO_MAX_CALLBACKS 4
+
+/* Multi-callback support */
+static struct {
+    baro_data_callback_t callbacks[BARO_MAX_CALLBACKS];
+    int count;
+    struct k_mutex mutex;
+} callback_registry = {
+    .count = 0
+};
+
+/* Ground reference state */
+static struct {
+    float ground_pressure_pa;
+    float ground_altitude_m;
+    bool is_set;
+    uint64_t set_time_us;
+} ground_reference = {
+    .ground_pressure_pa = 101325.0f,  /* Standard atmosphere */
+    .ground_altitude_m = 0.0f,
+    .is_set = false,
+    .set_time_us = 0
+};
 
 /* BMP390 I2C Address */
 #define BMP390_I2C_ADDR         0x76
@@ -122,6 +151,21 @@ K_THREAD_STACK_DEFINE(baro_thread_stack, 2048);
 static struct k_thread baro_thread_data;
 static k_tid_t baro_thread_id = NULL;
 static struct k_sem baro_sem;
+
+/* Ground altitude tracking for $PSFC */
+#define GROUND_ALTITUDE_SAMPLES 4
+#define GROUND_ALTITUDE_SAMPLE_INTERVAL_S 300  /* 5 minutes */
+
+static struct {
+    float altitude_ft[GROUND_ALTITUDE_SAMPLES];
+    uint32_t next_index;
+    bool initialized;
+    uint64_t last_sample_time_us;
+} ground_altitude_tracker = {
+    .next_index = 0,
+    .initialized = false,
+    .last_sample_time_us = 0
+};
 
 /* I2C read register */
 static int bmp390_read_reg(uint8_t reg, uint8_t *data, size_t len)
@@ -360,6 +404,8 @@ static void baro_thread(void *p1, void *p2, void *p3)
     ARG_UNUSED(p3);
     
     baro_sample_t sample;
+    baro_data_callback_t local_callbacks[BARO_MAX_CALLBACKS];
+    int callback_count;
     
     LOG_INF("Barometer thread started");
     
@@ -375,9 +421,24 @@ static void baro_thread(void *p1, void *p2, void *p3)
         
         /* Read sensor data */
         if (read_sensor_data(&sample) == 0) {
-            /* Call the callback if registered */
-            if (data_callback) {
-                data_callback(&sample);
+            /* Copy callbacks under lock to avoid calling under lock */
+            k_mutex_lock(&callback_registry.mutex, K_FOREVER);
+            callback_count = callback_registry.count;
+            memcpy(local_callbacks, callback_registry.callbacks, 
+                   callback_count * sizeof(baro_data_callback_t));
+            k_mutex_unlock(&callback_registry.mutex);
+
+            /* Store latest sample for ground tracking */
+            k_mutex_lock(&sample_mutex, K_FOREVER);
+            last_baro_sample = sample;
+            have_baro_sample = true;
+            k_mutex_unlock(&sample_mutex);
+            
+            /* Call all registered callbacks */
+            for (int i = 0; i < callback_count; i++) {
+                if (local_callbacks[i]) {
+                    local_callbacks[i](&sample);
+                }
             }
         }
     }
@@ -394,6 +455,9 @@ int baro_init(void)
 {
     int ret;
     uint8_t chip_id;
+
+    k_mutex_init(&callback_registry.mutex);
+    k_mutex_init(&sample_mutex);
     
     LOG_INF("Initializing BMP390 barometer...");
     
@@ -596,9 +660,64 @@ int baro_configure(const baro_config_t *config)
     return 0;
 }
 
-void baro_register_callback(baro_data_callback_t callback)
+int baro_register_callback(baro_data_callback_t callback)
 {
-    data_callback = callback;
+    int ret = -ENOMEM;
+    
+    if (!callback) {
+        return -EINVAL;
+    }
+    
+    k_mutex_lock(&callback_registry.mutex, K_FOREVER);
+    
+    /* Check if already registered */
+    for (int i = 0; i < callback_registry.count; i++) {
+        if (callback_registry.callbacks[i] == callback) {
+            LOG_WRN("Barometer callback already registered");
+            k_mutex_unlock(&callback_registry.mutex);
+            return -EALREADY;
+        }
+    }
+    
+    /* Add new callback */
+    if (callback_registry.count < BARO_MAX_CALLBACKS) {
+        callback_registry.callbacks[callback_registry.count++] = callback;
+        LOG_INF("Barometer callback registered (%d total)", callback_registry.count);
+        ret = 0;
+    } else {
+        LOG_ERR("Maximum barometer callbacks reached");
+    }
+    
+    k_mutex_unlock(&callback_registry.mutex);
+    return ret;
+}
+
+/* Add new function to unregister callbacks */
+int baro_unregister_callback(baro_data_callback_t callback)
+{
+    int ret = -ENOENT;
+    
+    if (!callback) {
+        return -EINVAL;
+    }
+    
+    k_mutex_lock(&callback_registry.mutex, K_FOREVER);
+    
+    for (int i = 0; i < callback_registry.count; i++) {
+        if (callback_registry.callbacks[i] == callback) {
+            /* Shift remaining callbacks down */
+            for (int j = i; j < callback_registry.count - 1; j++) {
+                callback_registry.callbacks[j] = callback_registry.callbacks[j + 1];
+            }
+            callback_registry.count--;
+            LOG_INF("Barometer callback unregistered (%d remaining)", callback_registry.count);
+            ret = 0;
+            break;
+        }
+    }
+    
+    k_mutex_unlock(&callback_registry.mutex);
+    return ret;
 }
 
 int baro_start(void)
@@ -656,4 +775,172 @@ void baro_set_sea_level_pressure(float pressure_pa)
 {
     sea_level_pressure_pa = pressure_pa;
     LOG_INF("Sea level pressure set to %.2f Pa", pressure_pa);
+}
+
+/* Set ground reference from current reading */
+int baro_set_ground_reference(void)
+{
+    baro_sample_t sample;
+    int ret;
+    
+    /* Take a fresh reading */
+    data_ready = true;
+    k_sem_give(&baro_sem);
+    
+    /* Wait a bit for the reading to complete */
+    k_msleep(250);  /* Assuming 4-8Hz, this ensures we get a reading */
+    
+    /* Read the latest data directly */
+    ret = read_sensor_data(&sample);
+    if (ret < 0) {
+        LOG_ERR("Failed to read ground reference: %d", ret);
+        return ret;
+    }
+    
+    if (!sample.pressure_valid) {
+        LOG_ERR("Invalid pressure reading for ground reference");
+        return -EINVAL;
+    }
+    
+    /* Store ground reference */
+    ground_reference.ground_pressure_pa = sample.pressure_pa;
+    ground_reference.ground_altitude_m = sample.altitude_m;
+    ground_reference.is_set = true;
+    ground_reference.set_time_us = sample.timestamp_us;
+    
+    /* Update sea level pressure to make current altitude = 0 AGL */
+    sea_level_pressure_pa = sample.pressure_pa;
+    
+    LOG_INF("Ground reference set: %.1f Pa, %.1f m MSL", 
+            ground_reference.ground_pressure_pa, 
+            ground_reference.ground_altitude_m);
+    
+    return 0;
+}
+
+/* Get AGL (Above Ground Level) from a sample */
+float baro_get_agl(const baro_sample_t *sample)
+{
+    if (!sample || !sample->pressure_valid || !ground_reference.is_set) {
+        return 0.0f;
+    }
+    
+    /* Calculate altitude relative to ground pressure */
+    return 44330.0f * (1.0f - powf(sample->pressure_pa / ground_reference.ground_pressure_pa, 0.1903f));
+}
+
+/* Get ground reference info */
+int baro_get_ground_reference(float *pressure_pa, float *altitude_m)
+{
+    if (!ground_reference.is_set) {
+        return -ENODATA;
+    }
+    
+    if (pressure_pa) {
+        *pressure_pa = ground_reference.ground_pressure_pa;
+    }
+    
+    if (altitude_m) {
+        *altitude_m = ground_reference.ground_altitude_m;
+    }
+    
+    return 0;
+}
+
+/* Clear ground reference */
+void baro_clear_ground_reference(void)
+{
+    ground_reference.is_set = false;
+    sea_level_pressure_pa = 101325.0f;  /* Reset to standard */
+    LOG_INF("Ground reference cleared");
+}
+
+/* Initialize ground altitude tracking with current altitude */
+void baro_init_ground_altitude(float altitude_ft)
+{
+    LOG_INF("Initializing ground altitude tracking at %.1f ft", altitude_ft);
+    
+    /* Fill all slots with the initial altitude */
+    for (int i = 0; i < GROUND_ALTITUDE_SAMPLES; i++) {
+        ground_altitude_tracker.altitude_ft[i] = altitude_ft;
+    }
+    
+    ground_altitude_tracker.initialized = true;
+    ground_altitude_tracker.next_index = 0;
+    ground_altitude_tracker.last_sample_time_us = time_now_us();
+}
+
+/* Record a new ground altitude sample */
+void baro_record_ground_altitude(float altitude_ft)
+{
+    if (!ground_altitude_tracker.initialized) {
+        baro_init_ground_altitude(altitude_ft);
+        return;
+    }
+    
+    LOG_DBG("Recording ground altitude: %.1f ft at index %u", 
+            altitude_ft, ground_altitude_tracker.next_index);
+    
+    ground_altitude_tracker.altitude_ft[ground_altitude_tracker.next_index] = altitude_ft;
+    ground_altitude_tracker.next_index++;
+    
+    if (ground_altitude_tracker.next_index >= GROUND_ALTITUDE_SAMPLES) {
+        ground_altitude_tracker.next_index = 0;
+    }
+    
+    ground_altitude_tracker.last_sample_time_us = time_now_us();
+}
+
+/* Get ground altitude for $PSFC (returns altitude from ~15 minutes ago) */
+float baro_get_ground_altitude_psfc(void)
+{
+    if (!ground_altitude_tracker.initialized) {
+        LOG_WRN("Ground altitude not initialized, using default");
+        return 0.0f;  /* Sea level */
+    }
+    
+    /* Look 3 samples back (10-15 minutes ago) */
+    int selected_index = ground_altitude_tracker.next_index - 3;
+    
+    if (selected_index < 0) {
+        selected_index += GROUND_ALTITUDE_SAMPLES;
+    }
+    
+    float altitude = ground_altitude_tracker.altitude_ft[selected_index];
+    
+    LOG_DBG("Returning ground altitude from index %d: %.1f ft", 
+            selected_index, altitude);
+    
+    return altitude;
+}
+
+/* Should we record a new sample? */
+bool baro_should_sample_ground_altitude(void)
+{
+    uint64_t now_us = time_now_us();
+    uint64_t elapsed_us = now_us - ground_altitude_tracker.last_sample_time_us;
+    uint64_t interval_us = GROUND_ALTITUDE_SAMPLE_INTERVAL_S * 1000000ULL;
+    
+    return elapsed_us >= interval_us;
+}
+
+/* Get current altitude sample for ground tracking */
+int baro_get_current_sample(baro_sample_t *sample)
+{
+    if (!sample) {
+        return -EINVAL;
+    }
+    
+    /* Copy latest sample under mutex */
+    k_mutex_lock(&sample_mutex, K_FOREVER);
+    
+    if (!have_baro_sample) {
+        k_mutex_unlock(&sample_mutex);
+        return -ENODATA;
+    }
+    
+    *sample = last_baro_sample;
+    k_mutex_unlock(&sample_mutex);
+    
+    return 0;
 }

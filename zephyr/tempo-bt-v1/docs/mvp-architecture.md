@@ -45,9 +45,9 @@ tempo-bt/
 │
 ├─ src/
 │  ├─ main.c                     # Init order, threads, event loop, health
-│  ├─ app_init.c                 # Boards, drivers, settings, services bring-up
-│  ├─ app_state.c                # State container & atomic transitions
+│  ├─ app_init.c                 # Storage mount, BLE/mcumgr, DFU safety
 │  ├─ events.c                   # Event bus (k_fifo/k_msgq) + subscribers
+│  │  [REMOVED: app_state.c]
 │  │
 │  ├─ services/
 │  │  ├─ timebase.c             # 64-bit mono clock; GNSS time correlation
@@ -183,6 +183,13 @@ CONFIG_PM_DEVICE=y
 
 ### 3.1 Layered view
 
+Note: Current implementation has:
+- ✓ BMP390 (working)
+- ✓ GNSS (working)
+- ✓ QSPI storage (working)
+- ✗ ICM42688 IMU (hardware issues - WHO_AM_I mismatch)
+- ✗ MMC5983MA (not integrated)
+
 ```mermaid
 flowchart TB
   subgraph App["Application"]
@@ -212,9 +219,9 @@ flowchart TB
   GNSS --> Agg
   Tm --> Agg
 
-  Agg --> Writer --> QSPI
+  Agg --> Writer --> SD or QSPI
 
-  App --> Upload --> QSPI
+  App --> Upload --> SD or QSPI
 ```
 
 ### 3.2 Concurrency model (threads & priorities)
@@ -249,14 +256,15 @@ flowchart TB
   * `app/pps_enabled` (V1 = 0; V2 enables)
 * Loader in `config/settings.c`; defaults compiled from Kconfig symbols.
 
-### 4.2 System state (RAM, owned by `app_state`)
+### 4.2 System state (RAM, owned by logger service)
 
-* **Global `system_state_t`** (singleton) with atomics/mutex for:
+* **Logger state** (`logger_state_t`) serves as the primary system state:
+  * States: `IDLE` → `ARMED` → `LOGGING` → `POSTFLIGHT` → `ERROR`
+  * Manages session lifecycle and health metrics
+  * Thread-safe access via mutex
+  
+* **No separate app_state module** - logger service is authoritative for operational state
 
-  * `mode`: `IDLE` → `ARMED` → `LOGGING` → `POSTFLIGHT` → `ERROR`
-  * **health**: storage free %, battery (placeholder on V1), BLE bonded, GNSS fix state
-  * **flags**: pps\_locked (false on V1), upload\_active, dfu\_in\_progress
-* **Per-service caches**:
 
   * **IMU cache**: last calibrated gyro/accel vectors, FIFO watermarks.
   * **BARO cache**: last pressure/temp & altitude estimate.
@@ -326,8 +334,12 @@ flowchart TB
 
 ### 5.7 `logger`
 
-* Orchestrates session lifecycle: **start/stop**, file open/close, header emit.
-* Chooses **rate schedule** per phase (aircraft/climbout/freefall/canopy).
+* Orchestrates session lifecycle: **start/stop**, file open/close, header emit
+* **Ground altitude tracking**: 
+  * Samples barometer every 5 minutes when IDLE/ARMED
+  * Records ground reference for takeoff detection
+  * Automatic takeoff detection based on climb rate and altitude change
+* Chooses **rate schedule** per phase
 * Applies **backpressure policy** (e.g., drop GNSS first if storage stalls).
 * Notifies **Upload** when a session is completed (optional auto-upload).
 
@@ -338,10 +350,8 @@ flowchart TB
 
 ### 5.9 Storage Backends
 
-* **Primary**: SD Card via SPI when available (exFAT support)
-* **Fallback**: Internal QSPI flash with littlefs
-* **Auto-detection**: System checks for SD card at boot
-* **Path abstraction**: `/logs/` maps to active storage
+* **Planned**: SD Card via SPI with fallback to Internal QSPI flash with littlefs only
+* **Path**: Fixed at `/lfs/logs/` for littlefs mount
 
 ### 5.10 `upload_mcumgr`
 
@@ -408,9 +418,12 @@ sequenceDiagram
 
 **Typical events**
 
-* `EVT_SESSION_START/STOP`, `EVT_PHASE_CHANGE`,
-* `EVT_STORAGE_LOW`, `EVT_STORAGE_ERROR`,
-* `EVT_UPLOAD_START/DONE`, `EVT_DFU_START/DONE`.
+**Typical events**
+* `EVT_SESSION_START/STOP`
+* `EVT_STATE_CHANGE` (replaces EVT_PHASE_CHANGE)
+* `EVT_STORAGE_LOW`, `EVT_STORAGE_ERROR`
+* `EVT_SENSOR_ERROR`
+* [removed EVT_MODE_CHANGE - redundant with STATE_CHANGE]
 
 ---
 
@@ -444,13 +457,25 @@ Transitions emit `$PST` records with trigger reasons.
 
 ### 8) Logging Format - Modifications to the original Dropkick format
 
-* **$PFIX** (formerly $PTH): Consolidated GPS fix data
-  * Format: `$PFIX,<timestamp_ms>,<utc_time>,<lat>,<lon>,<alt>,<fix_quality>,<hdop>,<vdop>*HH`
-  * Example: `$PFIX,123456,2025-01-15T12:34:56.789Z,37.7749,-122.4194,10.5,3,1.2,1.5*AB`
+Current implementation uses original **Dropkick / Tempo** format:
+* `$PVER` - Version string with device type
+* `$PSFC` - Surface altitude  
+* `$PIMU` - IMU data (40 Hz) [planned]
+* `$PIM2` - Orientation Quaternion [planned]
+* `$PENV` - Environmental data (4 Hz)
+* `$PTH` - Time correlation after GNSS sentences
+* `$PST` - State changes
+* `$G*GLL` - GNSS fix sentence
+* `$G*GGA` - GNSS fix / precision tracking sentence
+* `$G*VTG` - GNSS Track Made Good sentence
   
 * **$PVER** enhanced: Now includes GPS date
   * Format: `$PVER,<version>,<device>,<firmware>,<date>*HH`
   * Example: `$PVER,1.0,V1,0.1.0,2025-01-15*CD`
+
+* **$PFIX** (considered, but not implemented in this version): Consolidated GPS fix data
+  * Format: `$PFIX,<timestamp_ms>,<utc_time>,<lat>,<lon>,<alt>,<fix_quality>,<hdop>,<vdop>*HH`
+  * Example: `$PFIX,123456,2025-01-15T12:34:56.789Z,37.7749,-122.4194,10.5,3,1.2,1.5*AB`
 
 ---
 
@@ -492,20 +517,23 @@ Button 2: Reserved for future use
 
 ---
 
-## Implementation Status (V1)
+## Implementation Status (V1 board)
 
 Implemented:
-- Core logging to SD/Flash
-- BLE file transfer  
-- IMU, Baro, GNSS integration
+- Core logging to QSPI Flash (littlefs)
+- BLE file transfer via mcumgr
+- Barometer integration with takeoff detection
+- GNSS integration (2-10 Hz dynamic)
 - State machine with auto-detection
-- mcumgr custom commands
+- LED status indicators
+- Button controls
+- SD Card support
 
-Pending/Optional:
+Pending/In Progress:
+- IMU integration (hardware issues)
 - Magnetometer integration
-- PPS time sync (V2 hardware)
-- Advanced flight detection algorithms
-
+- Custom mcumgr commands
+- Advanced flight phase detection
 ---
 
 ### TL;DR (mental model)
@@ -514,6 +542,6 @@ Pending/Optional:
 * Keep **state** in `app_state` (system) + `session_state` (per-logging).
 * Route **data** through ring buffers → **Aggregator** → **File Writer** → **littlefs**.
 * Do **control & health** on the **event bus**.
-* Use **mcumgr** for iOS file pulls + DFU now; swap later only if necessary.
+* Use **smpmgr** for server/iOS file pulls + DFU now; swap later only if necessary (the Linux **mcumgr** app proved inadequate)
 
 This structure lets you compile clean V1 firmware that reproduces your current CSV logs line-for-line while being future-proof for PPS, SD cards, or a custom BLE file service.

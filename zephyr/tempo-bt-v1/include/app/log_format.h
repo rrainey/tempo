@@ -16,14 +16,15 @@
 #define LOG_MAX_SENTENCE_LEN    256
 
 /* Sentence type identifiers */
-#define LOG_SENTENCE_SFC    "$PSFC"   /* Session file config */
+#define LOG_SENTENCE_SFC    "$PSFC"   /* Surface height (msl) */
 #define LOG_SENTENCE_IMU    "$PIMU"   /* IMU data (accel + gyro) */
 #define LOG_SENTENCE_IM2    "$PIM2"   /* IMU quaternion */
 #define LOG_SENTENCE_ENV    "$PENV"   /* Environmental (baro + temp) */
 #define LOG_SENTENCE_ST     "$PST"    /* State change */
 #define LOG_SENTENCE_MAG    "$PMAG"   /* Magnetometer (optional) */
 #define LOG_SENTENCE_VER    "$PVER"   /* Version info with date */
-#define LOG_SENTENCE_FIX    "$PFIX"   /* GPS fix data (renamed from $PTH) */
+#define LOG_SENTENCE_TH     "$PTH"    /* Time Hack */
+#define LOG_SENTENCE_FIX    "$PFIX"   /* GPS fix data (proposed; unused) */
 
 /* Update version sentence to include date:
  * $PVER,<version>,<hw_rev>,<fw_rev>,<date>*HH
@@ -56,8 +57,8 @@ typedef struct {
 
 
 /* Session file config sentence format:
- * $PSFC,<session_id>,<start_time>,<rates>,<axes>*HH
- * Example: $PSFC,12345678,2025-01-15T12:34:56Z,40:4:1:1,NED*CD
+ * $P???,<session_id>,<start_time>,<rates>,<axes>*HH
+ * Example: $P???,12345678,2025-01-15T12:34:56Z,40:4:1:1,NED*CD
  */
 typedef struct {
     uint32_t session_id;      /* Unique session identifier */
