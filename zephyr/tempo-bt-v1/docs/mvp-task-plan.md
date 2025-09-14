@@ -159,7 +159,7 @@ Base all driver code as closely as practical to the Zephyr 42688 drivers and enu
 
 ---
 
-## Phase 8 — Aggregator & `$Pxxx` Lines (CSV)
+## Phase 8 — Aggregator & `$Pxxx` Lines (NMEA)
 
 25. **NMEA checksum helper**
 
@@ -212,13 +212,13 @@ Base all driver code as closely as practical to the Zephyr 42688 drivers and enu
 
 34. **Async writer thread**
 
-* Do: `k_msgq` for CSV lines → coalesce 1–4 KB → `fs_write`.
+* Do: `k_msgq` for NMEA lines → coalesce 1–4 KB → `fs_write`.
 * Done when: Producer can enqueue faster than disk without blocking; writer keeps up.
 
 35. **Flush policy**
 
 * Do: Time-based (e.g., 250 ms) + size-based flush; `fs_sync` on stop.
-* Done when: Power-cycle during logging yields intact CSV up to last flush.
+* Done when: Power-cycle during logging yields intact NMEA up to last flush.
 
 36. **Backpressure counters**
 
@@ -247,16 +247,16 @@ Base all driver code as closely as practical to the Zephyr 42688 drivers and enu
 40. **List files**
 
 * Do: `mcumgr fs list /lfs/logs`.
-* Done when: Directory structure and CSV file show up.
+* Done when: Directory structure and log file show up.
 
 41. **Read file**
 
-* Do: `mcumgr fs read /lfs/logs/.../flight.csv > host.csv`.
+* Do: `mcumgr fs read /lfs/logs/.../flight.txt > host.txt`.
 * Done when: Host file matches device file byte-for-byte.
 
 42. **Delete file**
 
-* Do: `mcumgr fs delete /lfs/logs/.../flight.csv`.
+* Do: `mcumgr fs delete /lfs/logs/.../flight.txt`.
 * Done when: File disappears; device confirms.
 
 43. **DFU smoke**
@@ -280,7 +280,7 @@ Base all driver code as closely as practical to the Zephyr 42688 drivers and enu
 
 46. **Power-fail test**
 
-* Do: Log, yank power, reboot; open CSV and verify last flush intact.
+* Do: Log, yank power, reboot; open NMEA and verify last flush intact.
 * Done when: No filesystem corruption; littlefs mounts cleanly.
 
 47. **Build profiles**
@@ -342,7 +342,7 @@ Base all driver code as closely as practical to the Zephyr 42688 drivers and enu
 
 * **mcumgr (BLE):**
   `mcumgr --conntype ble --connstring peer_name=TempoBT fs list /lfs/logs`
-  `mcumgr ... fs read /lfs/logs/20250817/<uuid>/flight.csv > flight.csv`
+  `mcumgr ... fs read /lfs/logs/20250817/<uuid>/flight.txt > flight.txt`
 
 * **Start/stop via shell:**
   `uart:~$ log start` → check `$PVER/$PSFC` + `$PST`
@@ -350,4 +350,4 @@ Base all driver code as closely as practical to the Zephyr 42688 drivers and enu
 
 ---
 
-This sequence gets you to a **usable MVP**: reliable CSV logs to QSPI, correct `$Pxxx` cadence & checksums, and **iOS-ready** transfers via mcumgr/FS—plus DFU. Every step is bite-sized and verifiable on the bench.
+This sequence gets you to a **usable MVP**: reliable  logs to QSPI, correct `$Pxxx` cadence & checksums, and **iOS-ready** transfers via mcumgr/FS—plus DFU. Every step is bite-sized and verifiable on the bench.

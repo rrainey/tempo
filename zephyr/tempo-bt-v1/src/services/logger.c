@@ -468,7 +468,7 @@ static int create_session_directory(void)
     
     /* Build full file path */
     snprintf(logger_state.log_file_path, sizeof(logger_state.log_file_path),
-             "%s/flight.csv", logger_state.session_path);
+             "%s/flight.txt", logger_state.session_path);
     
     return 0;
 }

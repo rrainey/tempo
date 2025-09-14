@@ -26,7 +26,7 @@ tempo-bt/
 ├─ include/
 │  ├─ app/app_state.h            # System/session state structs & enums
 │  ├─ app/events.h               # Event IDs, payloads, and helper macros
-│  ├─ app/log_format.h           # $Pxxx sentence format & helpers (CSV/NMEA)
+│  ├─ app/log_format.h           # $Pxxx sentence format & helpers (NMEA)
 │  ├─ app/paths.h                # FS paths, naming & partition IDs
 │  │
 │  ├─ services/timebase.h        # Time service API (monotonic, GNSS tie)
@@ -36,7 +36,7 @@ tempo-bt/
 │  ├─ services/gnss.h            # GNSS NMEA/UBX ingest API
 │  ├─ services/aggregator.h      # Merges streams → record/sentence builder
 │  ├─ services/logger.h          # Logging session lifecycle & policies
-│  ├─ services/file_writer.h     # Async writer (CSV line | binary block)
+│  ├─ services/file_writer.h     # Async writer (NMEA sentence | binary block)
 │  ├─ services/storage.h         # ILogSink abstraction (littlefs/FATFS)
 │  ├─ services/upload.h          # mcumgr/SMP file ops facade
 │  ├─ services/dfu.h             # OTA (MCUboot) helpers
@@ -281,7 +281,7 @@ flowchart TB
 
 * **littlefs mount** on QSPI NOR (always V1).
 * Path scheme:
-  `"/lfs/logs/<YYYYMMDD>/<SESSION_UUID>/flight.csv"`
+  `"/lfs/logs/<YYYYMMDD>/<SESSION_UUID>/flight.txt"`
   Optional sidecar: `"index.json"` (seek map) or `"health.json"` (drop counts).
 
 ---
@@ -324,7 +324,7 @@ flowchart TB
 ### 5.6 `aggregator`
 
 * Pulls newest batches from IMU/BARO/MAG/GNSS.
-* Builds **CSV `$Pxxx` sentences** exactly per V1 spec (with `*HH` checksums):
+* Builds **NMEA `$Pxxx` sentences** exactly per V1 spec (with `*HH` checksums):
 
   * `$PVER` (on start), `$PSFC` (session file config),
   * `$PIMU` (40 Hz), `$PIM2` (quaternion after each `$PIMU`),
@@ -406,7 +406,7 @@ sequenceDiagram
   GNSS->>AGG: GGA/VTG & time tie
 
   AGG->>AGG: build $PIMU/$PIM2/$PENV/$PTH...
-  AGG->>WR: enqueue CSV line(s)
+  AGG->>WR: enqueue NMEA sentences
   WR->>FS: append & flush policy
 ```
 
@@ -450,7 +450,7 @@ Transitions emit `$PST` records with trigger reasons.
 
 ## 8) Logging Format Strategy (compatibility first)
 
-* Preserve **existing CSV + NMEA checksum** `$Pxxx` lines & **cadence** to keep tooling stable.
+* Preserve **existing NMEA checksum** `$Pxxx` lines & **cadence** to keep tooling stable.
 * Additions are **optional** sentences (e.g., `$PMAG`) that legacy parsers can ignore.
 * File begins with `$PVER`, `$PSFC`; consider one-shot `$PMETA` for firmware, ODRs, axes.
 * iOS app can parse lines incrementally; integrity checks via per-line checksum and (optionally) a final file hash stored in a tiny sidecar.
@@ -544,4 +544,4 @@ Pending/In Progress:
 * Do **control & health** on the **event bus**.
 * Use **smpmgr** for server/iOS file pulls + DFU now; swap later only if necessary (the Linux **mcumgr** app proved inadequate)
 
-This structure lets you compile clean V1 firmware that reproduces your current CSV logs line-for-line while being future-proof for PPS, SD cards, or a custom BLE file service.
+This structure lets you compile clean V1 firmware that reproduces your current NMEA logs line-for-line while being future-proof for PPS, SD cards, or a custom BLE file service.

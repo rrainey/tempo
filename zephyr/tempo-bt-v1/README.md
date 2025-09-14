@@ -173,15 +173,15 @@ mcumgr --conntype ble --connstring peer_name='Tempo-BT' fs ls /logs
 
 2. **Download a log file**:
 ```bash
-mcumgr --conntype ble --connstring peer_name='Tempo-BT' fs download /logs/20250117/12345678/flight.csv flight.csv
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' fs download /logs/20250117/12345678/flight.txt flight.txt
 ```
 
 3. **Delete a log file**:
 ```bash
-mcumgr --conntype ble --connstring peer_name='Tempo-BT' fs delete /logs/20250117/12345678/flight.csv
+mcumgr --conntype ble --connstring peer_name='Tempo-BT' fs delete /logs/20250117/12345678/flight.txt
 ```
 
-Within this example path, `20250117` corresponds to the calendar date of the jump (`YYYMMDD`). `12345678` is a pseudo-random number assigned to each jump in that directory. The actual flight log will always be named `flight.csv`.
+Within this example path, `20250117` corresponds to the calendar date of the jump (`YYYMMDD`). `12345678` is a pseudo-random number assigned to each jump in that directory. The actual flight log will always be named `flight.txt`.
 
 ### Device Control
 
@@ -273,7 +273,7 @@ The device can also be controlled via the onboard button:
 
 ## Data Format
 
-Log files are in CSV format with NMEA-style checksums. Key sentence types:
+Log files are in extended NMEA sentence format with NMEA-style checksums. Key sentence types:
 
 - `$PVER`: Version and metadata
 - `$PIMU`: IMU data (40 Hz)
@@ -282,6 +282,9 @@ Log files are in CSV format with NMEA-style checksums. Key sentence types:
 - `$PFIX`: GPS fix information
 - `$PST`: State changes
 - `$PMAG`: Magnetometer data (optional)
+- `$GNGGL` : Fix, from u-blox receiver
+- `$GNVTG` : track made good, from u-blox receiver
+- `$GNGGA` : Fix, from u-blox receiver
 
 Example log excerpt:
 ```

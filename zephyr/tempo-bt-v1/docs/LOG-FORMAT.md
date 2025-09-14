@@ -1,6 +1,6 @@
 # Log File Format
 
-A Dropkick log is a CSV text file. It is composed of [NMEA 0183](https://en.wikipedia.org/wiki/NMEA_0183) standard GPS records, or "sentences" using NMEA terminology,
+A Dropkick log is an extended NMEA-sentence text file. It is composed of [NMEA 0183](https://en.wikipedia.org/wiki/NMEA_0183) standard GPS records, or "sentences" using NMEA terminology,
  interspersed with the application-specific sentences described below.
 
  While the dropkick box is turned on, a new log file will be created when the device detects that aircraft carrying the skydiver has taken off.  Logging continues 
