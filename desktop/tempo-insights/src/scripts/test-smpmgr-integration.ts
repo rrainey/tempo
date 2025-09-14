@@ -6,7 +6,7 @@ import { config } from 'dotenv';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
-config({ path: '.env.local' });
+config({ path: '.env' });
 
 const bluetooth = BluetoothService.getInstance();
 

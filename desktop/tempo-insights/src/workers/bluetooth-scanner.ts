@@ -304,14 +304,26 @@ class BluetoothScanner {
       
       if (existingJumpLog) {
         console.log(`[BLUETOOTH SCANNER] Jump log already exists with hash ${hash.substring(0, 16)}... (duplicate file)`);
+        console.log(`[BLUETOOTH SCANNER]   - Existing Jump ID: ${existingJumpLog.id}`);
+        console.log(`[BLUETOOTH SCANNER]   - Created: ${existingJumpLog.createdAt.toISOString()}`);
+        console.log(`[BLUETOOTH SCANNER]   - Device: ${existingJumpLog.deviceId}`);
         
         // Still mark the file as processed to avoid re-downloading
-        await prisma.deviceFileIndex.create({
-          data: {
-            deviceId: dbDevice.id,
-            fileName: fileName,
-          },
-        });
+        try {
+          await prisma.deviceFileIndex.create({
+            data: {
+              deviceId: dbDevice.id,
+              fileName: fileName,
+            },
+          });
+          console.log(`[BLUETOOTH SCANNER]   - Marked ${fileName} as processed for this device`);
+        } catch (indexError: any) {
+          if (indexError.code === 'P2002') {
+            console.log(`[BLUETOOTH SCANNER]   - File already marked as processed for this device`);
+          } else {
+            throw indexError;
+          }
+        }
         
         return true;
       }

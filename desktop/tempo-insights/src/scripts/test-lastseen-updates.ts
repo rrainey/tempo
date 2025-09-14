@@ -4,7 +4,7 @@
 import { PrismaClient, DeviceState } from '@prisma/client';
 import { config } from 'dotenv';
 
-config({ path: '.env.local' });
+config({ path: '.env' });
 
 const prisma = new PrismaClient();
 

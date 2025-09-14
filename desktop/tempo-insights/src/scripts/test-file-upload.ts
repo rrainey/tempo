@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-config({ path: '.env.local' });
+config({ path: '.env' });
 
 const prisma = new PrismaClient();
 const bluetooth = BluetoothService.getInstance();
