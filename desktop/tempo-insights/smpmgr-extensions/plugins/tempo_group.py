@@ -1,10 +1,11 @@
 """tempo_group.py - Tempo-BT Group 64 plugin for smpmgr
 
 Place this file in a plugins directory and use:
-    smpmgr --plugin-path ./plugins ble --name Tempo-BT tempo session-list
-    smpmgr --plugin-path ./plugins ble --name Tempo-BT tempo storage-info
-    smpmgr --plugin-path ./plugins ble --name Tempo-BT tempo led-on red
-    smpmgr --plugin-path ./plugins ble --name Tempo-BT tempo logger-start
+    smpmgr --plugin-path=./plugins --ble Tempo-BT tempo session-list
+    smpmgr --plugin-path=./plugins --ble Tempo-BT tempo session-list  yyymmdd/uniqueid
+    smpmgr --plugin-path=./plugins --ble Tempo-BT tempo storage-info
+    smpmgr --plugin-path=./plugins --ble Tempo-BT tempo led-on red
+    smpmgr --plugin-path-./plugins --ble Tempo-BT tempo logger-start
 """
 
 import asyncio
@@ -34,6 +35,7 @@ TEMPO_MGMT_ID_SESSION_INFO = 1
 TEMPO_MGMT_ID_STORAGE_INFO = 2
 TEMPO_MGMT_ID_LED_CONTROL = 3
 TEMPO_MGMT_ID_LOGGER_CONTROL = 4
+TEMPO_MGMT_ID_SESSION_DELETE = 5
 
 
 @unique
@@ -392,6 +394,39 @@ def logger_control(
                 console.print(f"Session Path: {response.session_path}")
         else:
             console.print(f"Logger action '{action}' failed. State: {response.state}", style="red")
+
+    asyncio.run(f())
+
+@app.command(name="session-delete")
+def session_delete(
+    ctx: typer.Context,
+    session: str = typer.Argument(..., help="Session name (e.g., '20250117/7BF3655C')"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+) -> None:
+    """Delete a logging session and all its files."""
+    options = cast(Options, ctx.obj)
+    smpclient = get_smpclient(options)
+    
+    # Confirm deletion unless --yes flag is provided
+    if not yes:
+        confirm = typer.confirm(f"Are you sure you want to delete session '{session}'?")
+        if not confirm:
+            console.print("Deletion cancelled", style="yellow")
+            raise typer.Exit()
+
+    async def f() -> None:
+        await connect_with_spinner(smpclient, options.timeout)
+        
+        response = await smpclient.request(SessionDelete(session=session))
+        
+        if response.success:
+            console.print(f"Session '{session}' deleted successfully", style="green")
+            if response.files_deleted is not None:
+                console.print(f"Files deleted: {response.files_deleted}")
+        else:
+            console.print(f"Failed to delete session '{session}'", style="red")
+            if response.error:
+                console.print(f"Error: {response.error}", style="red")
 
     asyncio.run(f())
 
