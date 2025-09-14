@@ -84,6 +84,20 @@ model JumpLog {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Analysis fields
+  initialAnalysisTimestamp DateTime? // When the analysis was completed
+  initialAnalysisMessage   String?   // Any error or warning messages from analysis
+  exitOffsetSec           Float?    // Offset in seconds to exit point
+  deploymentOffsetSec     Float?    // Offset in seconds to deployment
+  landingOffsetSec        Float?    // Offset in seconds to landing
+  exitTimestampUTC        DateTime? // Calculated exit time
+  exitLatitude            Float?    // Exit GPS latitude
+  exitLongitude           Float?    // Exit GPS longitude
+  exitAltitudeFt          Int?      // Exit altitude in feet
+  deployAltitudeFt        Int?      // Deployment altitude in feet
+  freefallTimeSec         Float?    // Total freefall time in seconds
+  avgFallRateMph          Float?    // Average fall rate in mph
+
   // Relations
   deviceId    String
   device      Device   @relation(fields: [deviceId], references: [id])
@@ -95,6 +109,7 @@ model JumpLog {
   @@index([deviceId])
   @@index([userId])
   @@index([createdAt])
+  @@index([initialAnalysisTimestamp])
 }
 
 model DeviceFileIndex {

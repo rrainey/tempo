@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "worker:bt": "tsx src/workers/bluetooth-scanner.ts",
-    "worker:analysis": "tsx src/workers/analysis-worker.ts",
+    "worker:analysis": "tsx src/workers/log-processor.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "test": "jest",
