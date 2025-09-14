@@ -49,15 +49,35 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
     const formattedJumps = jumps.map(jump => ({
       id: jump.id,
       hash: jump.hash,
-      device: jump.device,
+      deviceName: jump.device.name,
       createdAt: jump.createdAt,
+      
+      // Analysis status
+      analyzed: jump.initialAnalysisTimestamp !== null,
+      hasIssues: jump.initialAnalysisMessage !== null,
+      message: jump.initialAnalysisMessage,
+      
+      // Analysis data
+      exitTimestamp: jump.exitTimestampUTC,
+      exitAltitude: jump.exitAltitudeFt,
+      deployAltitude: jump.deployAltitudeFt,
+      freefallTime: jump.freefallTimeSec,
+      avgFallRate: jump.avgFallRateMph,
+      
+      // GPS
+      hasGPS: jump.exitLatitude !== null && jump.exitLongitude !== null,
+      exitLocation: jump.exitLatitude && jump.exitLongitude ? {
+        lat: jump.exitLatitude,
+        lng: jump.exitLongitude
+      } : null,
+      
+      // Visibility and notes
+      visible: jump.visibleToConnections,
+      notes: jump.notes,
+      
+      // Keep original fields for compatibility
       flags: jump.flags as any,
       visibleToConnections: jump.visibleToConnections,
-      // Analysis data will be added later
-      exitTime: null,
-      deploymentAltitude: null,
-      freefallTime: null,
-      averageFallRate: null,
     }));
 
     return res.status(200).json({

@@ -1,6 +1,9 @@
 import { Container, Title, Grid, Paper, Text, Stack, Group, Badge, Button, Card, Table } from '@mantine/core';
 import { AppLayout } from '../components/AppLayout';
 import { AuthGuard } from '../components/AuthGuard';
+import { MyJumpsPanel } from '../components/home/MyJumpsPanel';
+import { FormationJumpsPanel } from '../components/home/FormationJumpsPanel';
+import { JumpDetailsPanel } from '../components/home/JumpDetailsPanel';
 import { useEffect, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconX, IconParachute } from '@tabler/icons-react';
@@ -20,33 +23,15 @@ interface Invitation {
   createdAt: string;
 }
 
-interface JumpLog {
-  id: string;
-  hash: string;
-  device: {
-    name: string;
-    bluetoothId: string;
-  };
-  createdAt: string;
-  flags: any;
-  visibleToConnections: boolean;
-  exitTime: string | null;
-  deploymentAltitude: number | null;
-  freefallTime: number | null;
-  averageFallRate: number | null;
-}
-
 export default function HomePage() {
   const router = useRouter();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loadingInvitations, setLoadingInvitations] = useState(true);
   const [processingInvite, setProcessingInvite] = useState<string | null>(null);
-  const [recentJumps, setRecentJumps] = useState<JumpLog[]>([]);
-  const [loadingJumps, setLoadingJumps] = useState(true);
+  const [selectedJumpId, setSelectedJumpId] = useState<string | null>(null);
 
   useEffect(() => {
     loadInvitations();
-    loadRecentJumps();
   }, []);
 
   const loadInvitations = async () => {
@@ -60,20 +45,6 @@ export default function HomePage() {
       console.error('Error loading invitations:', error);
     } finally {
       setLoadingInvitations(false);
-    }
-  };
-
-  const loadRecentJumps = async () => {
-    try {
-      const response = await fetch('/api/jumps/mine?limit=5');
-      if (response.ok) {
-        const data = await response.json();
-        setRecentJumps(data.jumps);
-      }
-    } catch (error) {
-      console.error('Error loading jumps:', error);
-    } finally {
-      setLoadingJumps(false);
     }
   };
 
@@ -113,42 +84,13 @@ export default function HomePage() {
     }
   };
 
-  const handleVisibilityToggle = async (jumpId: string, currentVisibility: boolean) => {
-    try {
-      const response = await fetch(`/api/jumps/${jumpId}/visibility`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          visibleToConnections: !currentVisibility,
-        }),
-      });
+  const handleJumpSelect = (jumpId: string) => {
+    setSelectedJumpId(jumpId);
+    // TODO: Task 77 - Update center panel with jump details
+  };
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update visibility');
-      }
-
-      // Update local state
-      setRecentJumps(prev => prev.map(jump =>
-        jump.id === jumpId
-          ? { ...jump, visibleToConnections: data.visibleToConnections }
-          : jump
-      ));
-
-      notifications.show({
-        message: data.message,
-        color: 'green',
-      });
-    } catch (error) {
-      notifications.show({
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to update visibility',
-        color: 'red',
-      });
-    }
+  const handleFormationSelect = (formationId: string) => {
+    router.push(`/review/fs/${formationId}`);
   };
 
   return (
@@ -157,90 +99,84 @@ export default function HomePage() {
         <Container fluid>
           <Title order={2} mb="xl">Dashboard</Title>
 
-          {/* Pending Invitations - keep existing */}
+          {/* Pending Invitations */}
           {invitations.length > 0 && (
             <Paper p="md" withBorder mb="xl" style={{ backgroundColor: 'var(--mantine-color-dark-8)' }}>
-              {/* ... existing invitation code ... */}
+              <Title order={4} mb="md">Pending Invitations</Title>
+              <Stack gap="sm">
+                {invitations.map((invitation) => (
+                  <Group key={invitation.id} justify="space-between">
+                    <div>
+                      <Text fw={500}>
+                        {invitation.group.name ? (
+                          <>Join group: {invitation.group.name}</>
+                        ) : (
+                          'System invitation'
+                        )}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        From: {invitation.invitedBy} · 
+                        Expires: {new Date(invitation.expiresAt).toLocaleDateString()}
+                      </Text>
+                    </div>
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        leftSection={<IconCheck size={14} />}
+                        loading={processingInvite === invitation.code}
+                        onClick={() => handleInvitation(invitation.code, true)}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        size="xs"
+                        color="red"
+                        variant="subtle"
+                        leftSection={<IconX size={14} />}
+                        loading={processingInvite === invitation.code}
+                        onClick={() => handleInvitation(invitation.code, false)}
+                      >
+                        Decline
+                      </Button>
+                    </Group>
+                  </Group>
+                ))}
+              </Stack>
             </Paper>
           )}
 
           <Grid>
-            <Grid.Col span={{ base: 12, md: 6 }}>
-              <Paper p="md" withBorder h="300px">
-                <Group justify="space-between" mb="md">
-                  <Group>
-                    <IconParachute size={20} />
-                    <Title order={4}>Recent Jumps</Title>
-                  </Group>
-                  {recentJumps.length > 0 && (
-                    <Button size="xs" variant="subtle">
-                      View All
-                    </Button>
-                  )}
-                </Group>
-
-                {loadingJumps ? (
-                  <Text c="dimmed">Loading jumps...</Text>
-                ) : recentJumps.length === 0 ? (
-                  <Text c="dimmed">No jumps recorded yet</Text>
-                ) : (
-                  <Stack gap="xs">
-                    {recentJumps.map(jump => (
-                      <Card key={jump.id} p="xs" withBorder>
-                        <Group justify="space-between">
-                          <div>
-                            <Group gap="xs">
-                              <Text size="sm" fw={500}>
-                                {new Date(jump.createdAt).toLocaleDateString()}
-                              </Text>
-                              <Badge
-                                size="xs"
-                                color={jump.visibleToConnections ? 'green' : 'gray'}
-                                variant="dot"
-                                style={{ cursor: 'pointer' }}
-                                onClick={() => handleVisibilityToggle(jump.id, jump.visibleToConnections)}
-                              >
-                                {jump.visibleToConnections ? 'Visible' : 'Hidden'}
-                              </Badge>
-                            </Group>
-                            <Text size="xs" c="dimmed">
-                              {jump.device.name}
-                            </Text>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            {jump.freefallTime ? (
-                              <>
-                                <Text size="sm">{jump.freefallTime}s</Text>
-                                <Text size="xs" c="dimmed">
-                                  {jump.averageFallRate} mph
-                                </Text>
-                              </>
-                            ) : (
-                              <Badge size="sm" variant="outline">
-                                Pending Analysis
-                              </Badge>
-                            )}
-                          </div>
-                        </Group>
-                      </Card>
-                    ))}
-                  </Stack>
-                )}
-              </Paper>
-            </Grid.Col>
-
-            <Grid.Col span={{ base: 12, md: 6 }}>
-              <Paper p="md" withBorder h="300px">
-                <Title order={4} mb="md">My Devices</Title>
-                <Text c="dimmed">No devices registered</Text>
-              </Paper>
-            </Grid.Col>
-
-            <Grid.Col span={12}>
+            {/* Left Column - Quick Actions */}
+            <Grid.Col span={{ base: 12, md: 3 }}>
               <Paper p="md" withBorder>
-                <Title order={4} mb="md">Formation Skydives</Title>
-                <Text c="dimmed">No formation skydives recorded yet</Text>
+                <Title order={4} mb="md">Quick Actions</Title>
+                <Stack gap="sm">
+                  <Button variant="subtle" onClick={() => router.push('/devices')}>
+                    My Devices
+                  </Button>
+                  <Button variant="subtle" onClick={() => router.push('/groups')}>
+                    Browse Groups
+                  </Button>
+                  <Button variant="subtle" onClick={() => router.push('/profile')}>
+                    Edit Profile
+                  </Button>
+                </Stack>
               </Paper>
+            </Grid.Col>
+
+            {/* Center Column - Jump Details */}
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <Paper p="md" withBorder style={{ minHeight: '400px' }}>
+                <JumpDetailsPanel jumpId={selectedJumpId} />
+              </Paper>
+            </Grid.Col>
+
+            {/* Right Column - Recent Activity */}
+            <Grid.Col span={{ base: 12, md: 3 }}>
+              <Stack gap="md">
+                <MyJumpsPanel onJumpSelect={handleJumpSelect} />
+                <FormationJumpsPanel onFormationSelect={handleFormationSelect} />
+              </Stack>
             </Grid.Col>
           </Grid>
         </Container>
