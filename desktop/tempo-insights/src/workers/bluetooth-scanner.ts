@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 import { BluetoothService } from '../lib/bluetooth/bluetooth.service';
 
 // Load environment variables
-config({ path: '.env.local' });
+config({ path: '.env' });
 
 const prisma = new PrismaClient();
 const bluetooth = BluetoothService.getInstance();
@@ -20,14 +20,16 @@ class BluetoothScanner {
   async start() {
     console.log('[BLUETOOTH SCANNER] Starting worker...');
     
-    // Check for mcumgr
-    const mcumgrAvailable = await this.checkMcumgr();
-    if (!mcumgrAvailable) {
-      console.error('[BLUETOOTH SCANNER] mcumgr is not available in PATH');
-      console.error('[BLUETOOTH SCANNER] Please install mcumgr: https://github.com/apache/mynewt-mcumgr-cli');
+    // Check for smpmgr
+    const smpmgrAvailable = await this.checkSmpmgr();
+    if (!smpmgrAvailable) {
+      console.error('[BLUETOOTH SCANNER] smpmgr is not available in PATH');
+      console.error('[BLUETOOTH SCANNER] Please install smpmgr and ensure it is in your PATH');
+      console.error('[BLUETOOTH SCANNER] Also ensure the plugin path is set correctly (SMPMGR_PLUGIN_PATH env var)');
       process.exit(1);
     }
     
+    console.log('[BLUETOOTH SCANNER] smpmgr is available and ready');
     console.log(`[BLUETOOTH SCANNER] Discovery window: ${DISCOVERY_WINDOW} seconds`);
     
     this.isRunning = true;
@@ -59,8 +61,8 @@ class BluetoothScanner {
     process.exit(0);
   }
 
-  private async checkMcumgr(): Promise<boolean> {
-    return bluetooth.checkMcumgr();
+  private async checkSmpmgr(): Promise<boolean> {
+    return bluetooth.checkSmpmgr();
   }
 
   private async performScan() {

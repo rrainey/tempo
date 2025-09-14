@@ -12,8 +12,12 @@ export interface TempoDevice {
 
 export class BluetoothService {
   private static instance: BluetoothService;
+  private pluginPath: string;
 
-  private constructor() {}
+  private constructor() {
+    // The plugin path should be configurable via environment variable
+    this.pluginPath = process.env.SMPMGR_PLUGIN_PATH || 'smpmgr-extensions/plugins';
+  }
 
   static getInstance(): BluetoothService {
     if (!BluetoothService.instance) {
@@ -24,12 +28,12 @@ export class BluetoothService {
 
   /**
    * List all Tempo devices in range
-   * TODO: Implement actual BLE scanning with mcumgr
+   * TODO: Implement actual BLE scanning with bluetoothctl
    */
   async listTempoDevices(): Promise<TempoDevice[]> {
     console.log('[BLUETOOTH] Scanning for Tempo devices...');
     
-    // TODO: Replace with actual mcumgr device discovery
+    // TODO: Replace with actual bluetoothctl device discovery
     // For now, return mocked devices for development
     const mockDevices: TempoDevice[] = [
       {
@@ -67,20 +71,47 @@ export class BluetoothService {
   }
 
   /**
-   * Check if mcumgr is available
+   * Check if smpmgr is available
    */
-  async checkMcumgr(): Promise<boolean> {
+  async checkSmpmgr(): Promise<boolean> {
     try {
-      const { stdout } = await execAsync('mcumgr version');
-      return !!stdout;
+      // Try to run smpmgr with --help to verify it's installed and working
+      const { stdout } = await execAsync('smpmgr --help');
+      
+      // Verify we got some output (smpmgr should show help text)
+      if (stdout && stdout.length > 0) {
+        console.log('[BLUETOOTH] smpmgr is available');
+        
+        // Also check if the plugin path exists
+        try {
+          await execAsync(`ls ${this.pluginPath}`);
+          console.log(`[BLUETOOTH] Plugin path ${this.pluginPath} exists`);
+        } catch (error) {
+          console.warn(`[BLUETOOTH] Warning: Plugin path ${this.pluginPath} not found. Set SMPMGR_PLUGIN_PATH environment variable if needed.`);
+        }
+        
+        return true;
+      }
+      
+      return false;
     } catch (error) {
+      console.error('[BLUETOOTH] smpmgr check failed:', error);
       return false;
     }
   }
 
   /**
+   * Check if mcumgr is available (deprecated - use checkSmpmgr instead)
+   * @deprecated Use checkSmpmgr() instead
+   */
+  async checkMcumgr(): Promise<boolean> {
+    console.warn('[BLUETOOTH] checkMcumgr() is deprecated, use checkSmpmgr() instead');
+    return this.checkSmpmgr();
+  }
+
+  /**
    * List files on a device
-   * TODO: Implement mcumgr fs ls
+   * TODO: Implement smpmgr fs ls
    */
   async listDeviceFiles(bluetoothId: string): Promise<string[]> {
     console.log(`[BLUETOOTH] Listing files on device ${bluetoothId}...`);
@@ -101,7 +132,7 @@ export class BluetoothService {
 
   /**
    * Download a file from device
-   * TODO: Implement mcumgr fs download
+   * TODO: Implement smpmgr fs download
    */
   async downloadFile(bluetoothId: string, fileName: string): Promise<Buffer> {
     console.log(`[BLUETOOTH] Downloading ${fileName} from ${bluetoothId}...`);
@@ -116,7 +147,7 @@ export class BluetoothService {
 
   /**
    * Send blink command to device
-   * TODO: Implement actual command
+   * TODO: Implement actual command using smpmgr tempo led-on
    */
   async blinkDevice(bluetoothId: string): Promise<void> {
     console.log(`[BLUETOOTH] Sending blink command to ${bluetoothId}...`);
