@@ -257,7 +257,7 @@ Do: workers/bluetoothScanner.ts loop with sleep interval env DISCOVERY_WINDOW=30
 Done when: logs “scan cycle” on interval.
 
 - **Task 55: smpmgr presence check**
-Do: on startup, verify smpmgr in PATH; log error if missing
+Do: on startup, verify `smpmgr` in PATH; log error if missing.  The plugin-path directory is the `smpmgr-extensions/plugins` directory in the source tree.  It will need to be part of the runtime directory structure and be referenced on the smpmgr command line when invoked.
 Done when: prints version on success.
 
 - **Task 56: Scan API wrapper (stub)**

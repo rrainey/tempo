@@ -71,6 +71,19 @@ smpmgr --ble Tempo-BT-0004 --plugin-path=plugins tempo session-list
 
 ⠦ Connecting to Tempo-BT-0004... OK
 No sessions found
+
+# or outpput that will include this JSON object
+
+{
+  "sessions": [
+    {"name": "20250115/ABC12345", "is_dir": true, "size": 0},
+    {"name": "20250115/DEF67890", "is_dir": true, "size": 0},
+    {"name": "20250117/7BF3655C", "is_dir": true, "size": 0}
+  ],
+  "count": 3
+}
+
+
 ```
 
 ## Start logging (will auto-arm if in IDLE state)
