@@ -13,7 +13,7 @@
 #include <stdbool.h>
 
 /* Maximum sentence length including CRLF and null terminator */
-#define LOG_MAX_SENTENCE_LEN    256
+#define LOG_MAX_SENTENCE_LEN    128
 
 /* Sentence type identifiers */
 #define LOG_SENTENCE_SFC    "$PSFC"   /* Surface height (msl) */

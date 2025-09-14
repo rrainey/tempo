@@ -94,7 +94,7 @@ static uint64_t get_session_start_us(void);
 
 /* UART configuration */
 #define GNSS_UART_NODE DT_NODELABEL(uart2)
-#define GNSS_UART_BUFFER_SIZE 256
+#define GNSS_UART_BUFFER_SIZE 128
 #define GNSS_RX_TIMEOUT_US 100000  /* 100ms timeout */
 
 /* UART device and buffers */

@@ -29,6 +29,7 @@ LOG_MODULE_REGISTER(mcumgr_custom, LOG_LEVEL_INF);
 #define TEMPO_MGMT_ID_STORAGE_INFO     2
 #define TEMPO_MGMT_ID_LED_CONTROL      3
 #define TEMPO_MGMT_ID_LOGGER_CONTROL   4
+#define TEMPO_MGMT_ID_SESSION_DELETE   5
 
 /* List callback context */
 struct list_context {
@@ -112,6 +113,146 @@ static int tempo_mgmt_session_list(struct smp_streamer *ctxt)
         return MGMT_ERR_EMSGSIZE;
     }
 
+    return 0;
+}
+
+struct delete_context {
+    int error;
+    int files_deleted;
+};
+
+/* Callback for deleting files in a directory */
+static int delete_files_callback(const char *path, bool is_dir, size_t size, void *ctx)
+{
+    struct delete_context *del_ctx = (struct delete_context *)ctx;
+    
+    if (!is_dir) {
+        /* Delete file */
+        int ret = storage_delete(path);
+        if (ret != 0 && ret != -ENOENT) {
+            LOG_ERR("Failed to delete file %s: %d", path, ret);
+            del_ctx->error = ret;
+            return -1;  /* Stop on error */
+        }
+        del_ctx->files_deleted++;
+        LOG_DBG("Deleted file: %s", path);
+    }
+    return 0;  /* Continue */
+}
+
+/* Delete a logging session */
+static int tempo_mgmt_session_delete(struct smp_streamer *ctxt)
+{
+    zcbor_state_t *zsd = ctxt->reader->zs;  /* Decoder for request */
+    zcbor_state_t *zse = ctxt->writer->zs;  /* Encoder for response */
+    
+    bool ok;
+    struct zcbor_string key;
+    struct zcbor_string session_name;
+    bool has_session = false;
+    
+    /* Start decoding the map */
+    ok = zcbor_map_start_decode(zsd);
+    if (!ok) {
+        LOG_ERR("Failed to start decoding map");
+        return MGMT_ERR_EINVAL;
+    }
+    
+    /* Decode the session parameter */
+    while (zcbor_tstr_decode(zsd, &key)) {
+        if (key.len == 7 && memcmp(key.value, "session", 7) == 0) {
+            ok = zcbor_tstr_decode(zsd, &session_name);
+            if (ok) {
+                has_session = true;
+            }
+        } else {
+            /* Skip unknown keys */
+            ok = zcbor_any_skip(zsd, NULL);
+        }
+        
+        if (!ok) {
+            LOG_ERR("Failed to decode value");
+            return MGMT_ERR_EINVAL;
+        }
+    }
+    
+    ok = zcbor_map_end_decode(zsd);
+    if (!ok) {
+        LOG_ERR("Failed to end decoding map");
+        return MGMT_ERR_EINVAL;
+    }
+    
+    if (!has_session) {
+        LOG_ERR("Missing session parameter");
+        return MGMT_ERR_EINVAL;
+    }
+    
+    /* Build the full path to the session directory */
+    char session_path[256];
+    snprintf(session_path, sizeof(session_path), "/logs/%.*s", 
+             (int)session_name.len, session_name.value);
+    
+    LOG_INF("Deleting session: %s", session_path);
+    
+    /* Check if currently logging to this session */
+    logger_state_t current_state = logger_get_state();
+    if (current_state == LOGGER_STATE_LOGGING) {
+        uint32_t session_id;
+        uint64_t start_time;
+        char current_session_path[256];
+        
+        if (logger_get_session_info(&session_id, &start_time, 
+                                   current_session_path, sizeof(current_session_path)) == 0) {
+            /* Check if trying to delete active session */
+            if (strstr(current_session_path, session_path) != NULL) {
+                LOG_ERR("Cannot delete active logging session");
+                
+                /* Return error response */
+                ok = zcbor_tstr_put_lit(zse, "success") &&
+                     zcbor_bool_put(zse, false) &&
+                     zcbor_tstr_put_lit(zse, "error") &&
+                     zcbor_tstr_put_lit(zse, "Session is currently active");
+                
+                if (!ok) {
+                    return MGMT_ERR_EMSGSIZE;
+                }
+                
+                return 0;  /* Return success with error in response */
+            }
+        }
+    }
+    
+    /* Delete all files in the session directory */
+    struct delete_context del_ctx = {0, 0};
+    
+    /* First pass: delete all files in the directory */
+    storage_list_dir(session_path, delete_files_callback, &del_ctx);
+    
+    if (del_ctx.error != 0) {
+        LOG_ERR("Error deleting session files");
+        return MGMT_ERR_EUNKNOWN;
+    }
+    
+    /* Delete the session directory itself */
+    int ret = storage_delete(session_path);
+    if (ret != 0 && ret != -ENOENT) {
+        LOG_ERR("Failed to delete session directory: %d", ret);
+        /* Continue anyway - we deleted the files */
+    }
+    
+    /* Build success response */
+    ok = zcbor_tstr_put_lit(zse, "success") &&
+         zcbor_bool_put(zse, true) &&
+         zcbor_tstr_put_lit(zse, "files_deleted") &&
+         zcbor_int32_put(zse, del_ctx.files_deleted);
+    
+    if (!ok) {
+        return MGMT_ERR_EMSGSIZE;
+    }
+    
+    LOG_INF("Session deleted successfully: %.*s (%d files)", 
+            (int)session_name.len, session_name.value, del_ctx.files_deleted);
+    
     return 0;
 }
 
@@ -421,6 +562,10 @@ static const struct mgmt_handler tempo_mgmt_handlers[] = {
     [TEMPO_MGMT_ID_LOGGER_CONTROL] = {
         .mh_read = NULL,
         .mh_write = tempo_mgmt_logger_control,  
+    },
+    [TEMPO_MGMT_ID_SESSION_DELETE] = {
+        .mh_read = NULL,
+        .mh_write = tempo_mgmt_session_delete,
     },
 };
 

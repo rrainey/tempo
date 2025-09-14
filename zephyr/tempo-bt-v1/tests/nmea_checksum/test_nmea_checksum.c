@@ -101,7 +101,7 @@ ZTEST(nmea_checksum_tests, test_verify_checksum_invalid)
 
 ZTEST(nmea_checksum_tests, test_append_checksum)
 {
-    char buffer[256];
+    char buffer[128];
     int ret;
     
     /* Test successful append */
