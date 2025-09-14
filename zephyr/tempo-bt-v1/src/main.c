@@ -14,7 +14,6 @@
 #include <string.h>
 
 #include "app_init.h"
-#include "app/app_state.h"
 #include "app/events.h"
 #include "config/settings.h"
 
@@ -26,7 +25,7 @@
 #include "services/baro.h"
 #include "services/logger.h"
 #include "services/led.h"
-//#include "services/aggregator.h"
+#include "services/aggregator.h"
 #include "util/nmea_checksum.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -313,7 +312,7 @@ static void button0_work_handler_with_led(struct k_work *work)
         }
     }
 }
-#endif
+
 
 /* Special patterns for specific conditions */
 static void indicate_storage_full(void)
@@ -334,15 +333,14 @@ static void indicate_gnss_lock(void)
 static void test_version_output(const char *line, size_t len)
 {
     /* Print to console for verification */
-    printk("Generated: %.*s", len, line);
+    //printk("Generated: %.*s", len, line);
     
     /* Verify checksum */
-    if (nmea_verify_checksum(line, len)) {
-        printk("Checksum verified!\n");
-    } else {
-        printk("Checksum FAILED!\n");
+    if (!nmea_verify_checksum(line, len)) {
+        printk("Checksum error!\n");
     }
 }
+#endif
 
 int main(void)
 {
@@ -355,7 +353,7 @@ int main(void)
         }
     }
     
-    printk("boot\n");
+    //printk("boot\n");
     LOG_INF("Tempo-BT V1 started successfully");
 
     if (!gpio_is_ready_dt(&led)) {
@@ -367,15 +365,9 @@ int main(void)
     if (ret < 0) {
         LOG_ERR("Failed to initialize buttons: %d", ret);
     }   
-    
-    /* Initialize app state first */
-    ret = app_state_init();
-    if (ret < 0) {
-        LOG_ERR("Failed to initialize app state: %d", ret);
-    }
 
     // Initialize storage first
-    ret = app_storage_init();
+    ret = app_storage_init(); 
     if (ret < 0) {
         LOG_ERR("Failed to initialize storage: %d", ret);
         return ret;
@@ -439,8 +431,8 @@ int main(void)
     }
     LOG_INF("Aggregator init done");    
 
-    aggregator_register_output_callback(test_version_output);
-    aggregator_write_version();
+    //aggregator_register_output_callback(test_version_output);
+    //aggregator_write_version();
 
     //logger_register_baro_callback(logger_baro_handler);
     
@@ -472,10 +464,6 @@ int main(void)
         LOG_INF("UTC correlation not available yet: %s", 
                 timebase_utc_string_placeholder());
     }
-    
-    /* Print current mode on boot */
-    LOG_INF("Current mode: %s", 
-            app_state_get_mode() == APP_MODE_IDLE ? "IDLE" : "UNKNOWN");
     
     LOG_INF("About to check QSPI flash...");
     
@@ -648,8 +636,6 @@ int main(void)
 
     indicate_system_ready();
 
-    //LOG_INF("Connect via: mcumgr --conntype ble --connstring peer_name='Tempo-BT' echo hello");
-
     // Main thread idle loop
     while (1) {
         /* Log health status periodically */
@@ -657,12 +643,14 @@ int main(void)
 
         //ret = gpio_pin_toggle_dt(&led);
         
+#if 0
         /* Get storage stats */
         uint64_t free_bytes, total_bytes;
         if (storage_get_free_space(&free_bytes, &total_bytes) == 0) {
             LOG_INF("Storage: %llu MB free of %llu MB", 
                     free_bytes / (1024*1024), total_bytes / (1024*1024));
         }
+#endif
     }
     
     return 0;

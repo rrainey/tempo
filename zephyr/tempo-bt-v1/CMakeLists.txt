@@ -28,7 +28,6 @@ target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/include)
 target_sources(app PRIVATE 
     src/main.c
     src/app_init.c
-    src/app_state.c
     src/events.c
     src/mcumgr_custom.c
     src/ble_mcumgr.c

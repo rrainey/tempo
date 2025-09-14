@@ -131,6 +131,37 @@ int storage_deinit(void)
     return ret;
 }
 
+int storage_translate_path(const char *logical_path, char *physical_path, size_t path_size)
+{
+    if (!logical_path || !physical_path || path_size == 0) {
+        return -EINVAL;
+    }
+
+    /* For littlefs backend, prepend /lfs if not already there */
+    if (storage_state.backend == STORAGE_BACKEND_LITTLEFS) {
+        if (strncmp(logical_path, "/lfs/", 5) != 0) {
+            snprintf(physical_path, path_size, "/lfs%s", logical_path);
+        } else {
+            strncpy(physical_path, logical_path, path_size - 1);
+            physical_path[path_size - 1] = '\0';
+        }
+    }
+    /* For FAT backend, use /SD: prefix */
+    else if (storage_state.backend == STORAGE_BACKEND_FATFS) {
+        if (strncmp(logical_path, "/SD:", 4) != 0) {
+            snprintf(physical_path, path_size, "/SD:%s", logical_path);
+        } else {
+            strncpy(physical_path, logical_path, path_size - 1);
+            physical_path[path_size - 1] = '\0';
+        }
+    }
+    else {
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
 storage_backend_t storage_get_backend(void)
 {
     return storage_state.backend;
@@ -139,6 +170,7 @@ storage_backend_t storage_get_backend(void)
 int storage_open(const char *path, storage_file_t *file)
 {
     int ret;
+    char physical_path[256];
 
     if (!path || !file) {
         return -EINVAL;
@@ -151,8 +183,15 @@ int storage_open(const char *path, storage_file_t *file)
         return -EINVAL;
     }
 
+    /* Translate logical to physical path */
+    ret = storage_translate_path(path, physical_path, sizeof(physical_path));
+    if (ret != 0) {
+        k_mutex_unlock(&storage_state.lock);
+        return ret;
+    }
+
     memset(file, 0, sizeof(*file));
-    ret = storage_state.interface->open(storage_state.backend_ctx, path, file);
+    ret = storage_state.interface->open(storage_state.backend_ctx, physical_path, file);
 
     k_mutex_unlock(&storage_state.lock);
 

@@ -90,6 +90,7 @@ struct ubx_cfg_nav5 {
 
 // forward declaration
 static void update_system_time_from_fix(void);
+static uint64_t get_session_start_us(void);
 
 /* UART configuration */
 #define GNSS_UART_NODE DT_NODELABEL(uart2)
@@ -106,6 +107,12 @@ static size_t nmea_line_pos = 0;
 /* Ring buffer for UART RX */
 static uint8_t ring_buffer_mem[1024];
 static struct ring_buf rx_ring_buf;
+
+/* Add session start tracking */
+static uint64_t gnss_session_start_us = 0;
+
+/* Add timing tracking for $PTH generation */
+static uint64_t nmea_arrival_time_us = 0;
 
 /* Callbacks */
 static gnss_fix_callback_t fix_callback = NULL;
@@ -235,6 +242,9 @@ static bool parse_nmea_time(const char *time_str, gnss_fix_t *fix)
         ms_buf[2] = '0';  /* Assume trailing zero if only 2 digits */
         fix->milliseconds = (uint16_t)strtol(ms_buf, NULL, 10);
     }
+
+    LOG_DBG("Parsed time: %02d:%02d:%02d.%03d", 
+            fix->hours, fix->minutes, fix->seconds, fix->milliseconds); 
     
     return true;
 }
@@ -564,7 +574,7 @@ static void parse_rmc(const char *sentence)
             /* Year (YY format) */
             buf[0] = tokens[9][4];
             buf[1] = tokens[9][5];
-            uint8_t year_yy = (uint8_t)strtol(buf, NULL, 10);
+            long year_yy = strtol(buf, NULL, 10);
             current_fix.year = 2000 + year_yy;
             
             current_fix.date_valid = true;
@@ -614,6 +624,11 @@ static void process_uart_data(void)
     uint8_t byte;
     
     while (ring_buf_get(&rx_ring_buf, &byte, 1) == 1) {
+        /* Capture arrival time at start of NMEA sentence */
+        if (byte == '$' && nmea_line_pos == 0) {
+            nmea_arrival_time_us = time_now_us();
+        }
+        
         /* Check for line termination (CR or LF) */
         if (byte == '\r' || byte == '\n') {
             if (nmea_line_pos > 0) {
@@ -627,9 +642,16 @@ static void process_uart_data(void)
                     /* Process specific sentence types */
                     process_nmea_sentence((char *)nmea_line_buf, nmea_line_pos);
                     
-                    /* Call NMEA callback if registered */
+                    /* Call NMEA callback if registered - pass full sentence with CRLF */
                     if (nmea_callback) {
-                        nmea_callback((char *)nmea_line_buf, nmea_line_pos);
+                        /* Restore CRLF for logging */
+                        nmea_line_buf[nmea_line_pos] = '\r';
+                        nmea_line_buf[nmea_line_pos + 1] = '\n';
+                        nmea_line_buf[nmea_line_pos + 2] = '\0';
+                        
+                        /* Pass arrival time in milliseconds relative to session start */
+                        uint32_t arrival_ms = (uint32_t)((nmea_arrival_time_us - get_session_start_us()) / 1000);
+                        nmea_callback((char *)nmea_line_buf, nmea_line_pos + 2);
                     }
                 } else {
                     LOG_WRN("NMEA checksum failed: %s", nmea_line_buf);
@@ -638,7 +660,7 @@ static void process_uart_data(void)
                 /* Reset line buffer */
                 nmea_line_pos = 0;
             }
-        } else if (nmea_line_pos < sizeof(nmea_line_buf) - 1) {
+        } else if (nmea_line_pos < sizeof(nmea_line_buf) - 3) {  /* Leave room for CRLF and null */
             /* Add byte to line buffer */
             nmea_line_buf[nmea_line_pos++] = byte;
         } else {
@@ -833,15 +855,19 @@ static void update_system_time_from_fix(void)
     struct timespec ts;
     time_t unix_time;
     struct tm time_tm;
+
+    //LOG_INF("Attempting to update system time from GNSS fix: %d %d", current_fix.date_valid, current_fix.time_valid);
     
     /* Check if we have valid date AND time */
-    if (!current_fix.date_valid || !current_fix.time_valid) {
+    if (current_fix.date_valid && current_fix.time_valid) {
         return;
     }
     
     /* Check if we've already set the time this session */
     static bool time_set = false;
     if (time_set) {
+        current_fix.date_valid = false; 
+        current_fix.time_valid = false;
         return;  /* Only set once per boot */
     }
     
@@ -859,6 +885,8 @@ static void update_system_time_from_fix(void)
     unix_time = mktime(&time_tm);
     if (unix_time == (time_t)-1) {
         LOG_ERR("Failed to convert GNSS time to Unix timestamp");
+        current_fix.date_valid = false; 
+        current_fix.time_valid = false;
         return;
     }
     
@@ -885,6 +913,8 @@ static void update_system_time_from_fix(void)
                  "%04d-%02d-%02d", current_fix.year, current_fix.month, current_fix.day);
     } else {
         LOG_ERR("Failed to set system time: %d", ret);
+        current_fix.date_valid = false; 
+        current_fix.time_valid = false;
     }
 }
 
@@ -1257,6 +1287,19 @@ int gnss_init_skydiving(void)
     LOG_INF("GNSS configured for skydiving");
     
     return 0;
+}
+
+/* Add helper function to get session start time */
+static uint64_t get_session_start_us(void)
+{
+    /* This would need to be set from aggregator when session starts */
+    extern uint64_t gnss_session_start_us;
+    return gnss_session_start_us;
+}
+
+void gnss_set_session_start_time(uint64_t start_us)
+{
+    gnss_session_start_us = start_us;
 }
 
 #ifdef CONFIG_RTC

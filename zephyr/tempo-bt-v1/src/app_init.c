@@ -24,6 +24,7 @@ LOG_MODULE_REGISTER(app_init, LOG_LEVEL_INF);
 
 #include "ble_mcumgr.h"
 #include "services/logger.h"
+#include "services/storage.h"
 
 extern void tempo_mgmt_register(void);
 
@@ -63,6 +64,7 @@ void dfu_safety_init(void)
 /* LittleFS work buffer and cache configuration */
 FS_LITTLEFS_DECLARE_DEFAULT_CONFIG(littlefs_storage);
 
+#if 0
 /* Mount point - renamed to avoid conflict with lfs_mount function */
 static struct fs_mount_t storage_mount_point = {
     .type = FS_LITTLEFS,
@@ -70,36 +72,32 @@ static struct fs_mount_t storage_mount_point = {
     .storage_dev = (void *)STORAGE_PARTITION_ID,
     .mnt_point = "/lfs",
 };
+#endif
 
 int app_storage_init(void)
 {
     int ret;
-    struct fs_statvfs stats;
 
-    /* Mount the filesystem */
-    ret = fs_mount(&storage_mount_point);
-    if (ret < 0) {
-        LOG_ERR("Error mounting littlefs: %d", ret);
+    /* Try to initialize with auto-detection */
+    ret = storage_auto_init();
+    if (ret != 0) {
+        LOG_ERR("Failed to initialize storage: %d", ret);
         return ret;
+    }
+
+    /* Get backend info */
+    storage_backend_t backend = storage_get_backend();
+    const char *backend_name = (backend == STORAGE_BACKEND_FATFS) ? "SD card" : "internal flash";
+    
+    LOG_INF("Storage initialized using %s", backend_name);
+
+    /* Create logs directory based on backend */
+    if (backend == STORAGE_BACKEND_LITTLEFS) {
+        ret = fs_mkdir("/lfs/logs");
+    } else {
+        ret = fs_mkdir("/SD:/logs");
     }
     
-    LOG_INF("LittleFS mounted at %s", storage_mount_point.mnt_point);
-
-    /* Get filesystem statistics */
-    ret = fs_statvfs(storage_mount_point.mnt_point, &stats);
-    if (ret < 0) {
-        LOG_ERR("Error getting filesystem stats: %d", ret);
-        return ret;
-    }
-
-    LOG_INF("FS: %lu blocks of %lu bytes", 
-            stats.f_blocks, stats.f_frsize);
-    LOG_INF("FS: %lu free blocks (%lu%% free)",
-            stats.f_bfree, 
-            (stats.f_bfree * 100) / stats.f_blocks);
-
-    /* Create logs directory if it doesn't exist */
-    ret = fs_mkdir("/lfs/logs");
     if (ret < 0 && ret != -EEXIST) {
         LOG_ERR("Error creating logs directory: %d", ret);
         return ret;
@@ -107,6 +105,15 @@ int app_storage_init(void)
         LOG_INF("Logs directory already exists");
     } else {
         LOG_INF("Created logs directory");
+    }
+
+    /* Get filesystem statistics */
+    uint64_t free_bytes, total_bytes;
+    ret = storage_get_free_space(&free_bytes, &total_bytes);
+    if (ret == 0) {
+        LOG_INF("Storage: %llu MB free of %llu MB total",
+                free_bytes / (1024*1024), 
+                total_bytes / (1024*1024));
     }
 
     return 0;

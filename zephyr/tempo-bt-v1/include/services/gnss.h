@@ -27,9 +27,9 @@ typedef struct {
     float hdop;             /* Horizontal dilution of precision */
     float vdop;             /* Vertical dilution of precision */
 
-    uint8_t year;          /* UTC year (4 digits, 2000 = 0) */
-    uint8_t month;        /* UTC month (1-12) */    
-    uint8_t day;          /* UTC day (1-31) */
+    uint16_t year;          /* UTC year (4 digits, 2000 = 0) */
+    uint8_t month;          /* UTC month (1-12) */    
+    uint8_t day;             /* UTC day (1-31) */
     
     /* Time */
     uint8_t hours;          /* UTC hours (0-23) */

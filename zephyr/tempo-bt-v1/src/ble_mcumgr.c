@@ -20,10 +20,11 @@
 #include <zephyr/mgmt/mcumgr/grp/stat_mgmt/stat_mgmt.h>
 #include <zephyr/mgmt/mcumgr/grp/shell_mgmt/shell_mgmt.h>
 
-#include "app/app_state.h"
 #include "app/events.h"
 
 LOG_MODULE_REGISTER(ble_mcumgr, LOG_LEVEL_INF);
+
+static struct k_work advertising_work;
 
 /* BLE advertising data */
 static const struct bt_data ad[] = {
@@ -73,14 +74,21 @@ static void connected(struct bt_conn *conn, uint8_t err)
     event_bus_publish(&evt);
 }
 
+static void advertising_work_handler(struct k_work *work)
+{
+    int ret = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, 
+                              ad, ARRAY_SIZE(ad), 
+                              sd, ARRAY_SIZE(sd));
+    if (ret) {
+        LOG_ERR("Failed to restart advertising: %d", ret);
+    }
+}
+
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
     ARG_UNUSED(conn);
 
     LOG_INF("Disconnected (reason 0x%02x)", reason);
-
-    /* Stop advertising first */
-    bt_le_adv_stop();
 
     if (current_conn) {
         bt_conn_unref(current_conn);
@@ -93,12 +101,12 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
     };
     event_bus_publish(&evt);
 
-    /* Restart advertising */
-    int ret = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad),
-                               sd, ARRAY_SIZE(sd));
-    if (ret) {
-        LOG_ERR("Failed to restart advertising: %d", ret);
-    }
+}
+
+static void recycled_cb(void)
+{
+    LOG_INF("Connection recycled - safe to restart\n");
+    k_work_submit(&advertising_work);
 }
 
 
@@ -115,6 +123,7 @@ static struct bt_conn_cb conn_callbacks = {
     .connected = connected,
     .disconnected = disconnected,
     .le_param_updated = param_updated,
+    .recycled = recycled_cb,
 };
 
 /* File system access hooks for mcumgr */
@@ -174,6 +183,8 @@ int ble_mcumgr_init(void)
     }
 
     LOG_INF("Bluetooth initialized");
+
+    k_work_init(&advertising_work, advertising_work_handler);
 
     /* Register connection callbacks */
     bt_conn_cb_register(&conn_callbacks);

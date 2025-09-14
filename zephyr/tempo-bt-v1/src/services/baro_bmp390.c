@@ -17,6 +17,10 @@
 
 LOG_MODULE_REGISTER(baro, LOG_LEVEL_INF);
 
+static baro_sample_t last_baro_sample;
+static bool have_baro_sample = false;
+static struct k_mutex sample_mutex;
+
 /* Maximum number of callbacks */
 #define BARO_MAX_CALLBACKS 4
 
@@ -147,6 +151,21 @@ K_THREAD_STACK_DEFINE(baro_thread_stack, 2048);
 static struct k_thread baro_thread_data;
 static k_tid_t baro_thread_id = NULL;
 static struct k_sem baro_sem;
+
+/* Ground altitude tracking for $PSFC */
+#define GROUND_ALTITUDE_SAMPLES 4
+#define GROUND_ALTITUDE_SAMPLE_INTERVAL_S 300  /* 5 minutes */
+
+static struct {
+    float altitude_ft[GROUND_ALTITUDE_SAMPLES];
+    uint32_t next_index;
+    bool initialized;
+    uint64_t last_sample_time_us;
+} ground_altitude_tracker = {
+    .next_index = 0,
+    .initialized = false,
+    .last_sample_time_us = 0
+};
 
 /* I2C read register */
 static int bmp390_read_reg(uint8_t reg, uint8_t *data, size_t len)
@@ -408,6 +427,12 @@ static void baro_thread(void *p1, void *p2, void *p3)
             memcpy(local_callbacks, callback_registry.callbacks, 
                    callback_count * sizeof(baro_data_callback_t));
             k_mutex_unlock(&callback_registry.mutex);
+
+            /* Store latest sample for ground tracking */
+            k_mutex_lock(&sample_mutex, K_FOREVER);
+            last_baro_sample = sample;
+            have_baro_sample = true;
+            k_mutex_unlock(&sample_mutex);
             
             /* Call all registered callbacks */
             for (int i = 0; i < callback_count; i++) {
@@ -432,6 +457,7 @@ int baro_init(void)
     uint8_t chip_id;
 
     k_mutex_init(&callback_registry.mutex);
+    k_mutex_init(&sample_mutex);
     
     LOG_INF("Initializing BMP390 barometer...");
     
@@ -827,4 +853,94 @@ void baro_clear_ground_reference(void)
     ground_reference.is_set = false;
     sea_level_pressure_pa = 101325.0f;  /* Reset to standard */
     LOG_INF("Ground reference cleared");
+}
+
+/* Initialize ground altitude tracking with current altitude */
+void baro_init_ground_altitude(float altitude_ft)
+{
+    LOG_INF("Initializing ground altitude tracking at %.1f ft", altitude_ft);
+    
+    /* Fill all slots with the initial altitude */
+    for (int i = 0; i < GROUND_ALTITUDE_SAMPLES; i++) {
+        ground_altitude_tracker.altitude_ft[i] = altitude_ft;
+    }
+    
+    ground_altitude_tracker.initialized = true;
+    ground_altitude_tracker.next_index = 0;
+    ground_altitude_tracker.last_sample_time_us = time_now_us();
+}
+
+/* Record a new ground altitude sample */
+void baro_record_ground_altitude(float altitude_ft)
+{
+    if (!ground_altitude_tracker.initialized) {
+        baro_init_ground_altitude(altitude_ft);
+        return;
+    }
+    
+    LOG_DBG("Recording ground altitude: %.1f ft at index %u", 
+            altitude_ft, ground_altitude_tracker.next_index);
+    
+    ground_altitude_tracker.altitude_ft[ground_altitude_tracker.next_index] = altitude_ft;
+    ground_altitude_tracker.next_index++;
+    
+    if (ground_altitude_tracker.next_index >= GROUND_ALTITUDE_SAMPLES) {
+        ground_altitude_tracker.next_index = 0;
+    }
+    
+    ground_altitude_tracker.last_sample_time_us = time_now_us();
+}
+
+/* Get ground altitude for $PSFC (returns altitude from ~15 minutes ago) */
+float baro_get_ground_altitude_psfc(void)
+{
+    if (!ground_altitude_tracker.initialized) {
+        LOG_WRN("Ground altitude not initialized, using default");
+        return 0.0f;  /* Sea level */
+    }
+    
+    /* Look 3 samples back (10-15 minutes ago) */
+    int selected_index = ground_altitude_tracker.next_index - 3;
+    
+    if (selected_index < 0) {
+        selected_index += GROUND_ALTITUDE_SAMPLES;
+    }
+    
+    float altitude = ground_altitude_tracker.altitude_ft[selected_index];
+    
+    LOG_DBG("Returning ground altitude from index %d: %.1f ft", 
+            selected_index, altitude);
+    
+    return altitude;
+}
+
+/* Should we record a new sample? */
+bool baro_should_sample_ground_altitude(void)
+{
+    uint64_t now_us = time_now_us();
+    uint64_t elapsed_us = now_us - ground_altitude_tracker.last_sample_time_us;
+    uint64_t interval_us = GROUND_ALTITUDE_SAMPLE_INTERVAL_S * 1000000ULL;
+    
+    return elapsed_us >= interval_us;
+}
+
+/* Get current altitude sample for ground tracking */
+int baro_get_current_sample(baro_sample_t *sample)
+{
+    if (!sample) {
+        return -EINVAL;
+    }
+    
+    /* Copy latest sample under mutex */
+    k_mutex_lock(&sample_mutex, K_FOREVER);
+    
+    if (!have_baro_sample) {
+        k_mutex_unlock(&sample_mutex);
+        return -ENODATA;
+    }
+    
+    *sample = last_baro_sample;
+    k_mutex_unlock(&sample_mutex);
+    
+    return 0;
 }

@@ -171,4 +171,15 @@ int storage_fatfs_deinit(void);
 const storage_interface_t *storage_fatfs_get_interface(void);
 bool storage_fatfs_card_present(void);
 
+/**
+ * @brief Translate logical path to physical path based on backend
+ * 
+ * @param logical_path Logical path (e.g., "/logs/file.csv")
+ * @param physical_path Buffer for physical path
+ * @param path_size Size of physical_path buffer
+ * @return 0 on success, negative error code on failure
+ */
+int storage_translate_path(const char *logical_path, char *physical_path, size_t path_size);
+
+
 #endif /* SERVICES_STORAGE_H */

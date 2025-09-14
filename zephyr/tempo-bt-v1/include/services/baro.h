@@ -141,4 +141,50 @@ int baro_get_ground_reference(float *pressure_pa, float *altitude_m);
  */
 void baro_clear_ground_reference(void);
 
+/**
+ * @brief Initialize ground altitude tracking with current altitude
+ * 
+ * Fills the ground altitude history buffer with the provided altitude.
+ * This should be called when first entering IDLE/ARMED state.
+ * 
+ * @param altitude_ft Current altitude in feet MSL
+ */
+void baro_init_ground_altitude(float altitude_ft);
+
+/**
+ * @brief Record a new ground altitude sample
+ * 
+ * Adds the altitude to the circular buffer. Should be called
+ * every 5 minutes when in IDLE/ARMED states.
+ * 
+ * @param altitude_ft Current altitude in feet MSL
+ */
+void baro_record_ground_altitude(float altitude_ft);
+
+/**
+ * @brief Get ground altitude for $PSFC sentence
+ * 
+ * Returns the ground altitude from approximately 15 minutes ago.
+ * This provides a stable reference that's insensitive to recent
+ * pre-flight disturbances.
+ * 
+ * @return Ground altitude in feet MSL
+ */
+float baro_get_ground_altitude_psfc(void);
+
+/**
+ * @brief Check if it's time to record a new ground altitude sample
+ * 
+ * @return true if 5 minutes have elapsed since last sample
+ */
+bool baro_should_sample_ground_altitude(void);
+
+/**
+ * @brief Get the current barometer sample
+ * 
+ * @param sample Output: Current barometer reading
+ * @return 0 on success, negative error code on failure
+ */
+int baro_get_current_sample(baro_sample_t *sample);
+
 #endif /* SERVICES_BARO_H */

@@ -16,6 +16,7 @@
 
 #include "services/storage.h"
 #include "services/logger.h"
+#include "services/led.h"
 
 LOG_MODULE_REGISTER(mcumgr_custom, LOG_LEVEL_INF);
 
@@ -27,6 +28,7 @@ LOG_MODULE_REGISTER(mcumgr_custom, LOG_LEVEL_INF);
 #define TEMPO_MGMT_ID_SESSION_INFO     1
 #define TEMPO_MGMT_ID_STORAGE_INFO     2
 #define TEMPO_MGMT_ID_LED_CONTROL      3
+#define TEMPO_MGMT_ID_LOGGER_CONTROL   4
 
 /* List callback context */
 struct list_context {
@@ -45,16 +47,18 @@ static int list_callback(const char *path, bool is_dir, size_t size, void *ctx)
     }
 
     if (is_dir) {
-        /* Extract relative path */
+        /* Extract relative path - handle both /lfs/logs/ and /logs/ */
         const char *rel_path = path;
         if (strncmp(path, "/lfs/logs/", 10) == 0) {
             rel_path = path + 10;
+        } else if (strncmp(path, "/logs/", 6) == 0) {
+            rel_path = path + 6;
         }
 
         /* Start session object */
         bool ok = zcbor_map_start_encode(context->zse, 3) &&
                   zcbor_tstr_put_lit(context->zse, "name") &&
-                  zcbor_tstr_put_term(context->zse, rel_path, 10) &&
+                  zcbor_tstr_put_term(context->zse, rel_path, 256) &&  /* Increased size */
                   zcbor_tstr_put_lit(context->zse, "is_dir") &&
                   zcbor_bool_put(context->zse, true) &&
                   zcbor_tstr_put_lit(context->zse, "size") &&
@@ -92,8 +96,8 @@ static int tempo_mgmt_session_list(struct smp_streamer *ctxt)
     list_ctx.count = 0;
     list_ctx.error = false;
 
-    /* List sessions from storage */
-    storage_list_dir("/lfs/logs", list_callback, &list_ctx);
+    /* List sessions from storage - use generic path */
+    storage_list_dir("/logs", list_callback, &list_ctx);
 
     if (list_ctx.error) {
         return MGMT_ERR_EMSGSIZE;
@@ -124,8 +128,14 @@ static int tempo_mgmt_storage_info(struct smp_streamer *ctxt)
     }
 
     uint32_t used_percent = (uint32_t)(100 - (free_bytes * 100 / total_bytes));
+    
+    /* Get backend type */
+    storage_backend_t backend = storage_get_backend();
+    const char *backend_str = (backend == STORAGE_BACKEND_FATFS) ? "sdcard" : "internal";
 
-    bool ok = zcbor_tstr_put_lit(zse, "free_bytes") &&
+    bool ok = zcbor_tstr_put_lit(zse, "backend") &&
+              zcbor_tstr_put_term(zse, backend_str, 10) &&
+              zcbor_tstr_put_lit(zse, "free_bytes") &&
               zcbor_uint64_put(zse, free_bytes) &&
               zcbor_tstr_put_lit(zse, "total_bytes") &&
               zcbor_uint64_put(zse, total_bytes) &&
@@ -139,12 +149,158 @@ static int tempo_mgmt_storage_info(struct smp_streamer *ctxt)
     return 0;
 }
 
-/* Add these to your existing mcumgr_custom.c file */
-
-#include "services/led.h"
-
-/* Add new command ID after the existing ones */
-#define TEMPO_MGMT_ID_LED_CONTROL      3
+/* Logger control command handler */
+static int tempo_mgmt_logger_control(struct smp_streamer *ctxt)
+{
+    zcbor_state_t *zsd = ctxt->reader->zs;  /* Decoder for request */
+    zcbor_state_t *zse = ctxt->writer->zs;  /* Encoder for response */
+    
+    bool ok;
+    struct zcbor_string key;
+    struct zcbor_string action_str;
+    bool has_action = false;
+    
+    /* Start decoding the map */
+    ok = zcbor_map_start_decode(zsd);
+    if (!ok) {
+        LOG_ERR("Failed to start decoding map");
+        return MGMT_ERR_EINVAL;
+    }
+    
+    /* Decode the action parameter */
+    while (zcbor_tstr_decode(zsd, &key)) {
+        if (key.len == 6 && memcmp(key.value, "action", 6) == 0) {
+            ok = zcbor_tstr_decode(zsd, &action_str);
+            if (ok) {
+                has_action = true;
+            }
+        } else {
+            /* Skip unknown keys */
+            ok = zcbor_any_skip(zsd, NULL);
+        }
+        
+        if (!ok) {
+            LOG_ERR("Failed to decode value");
+            return MGMT_ERR_EINVAL;
+        }
+    }
+    
+    ok = zcbor_map_end_decode(zsd);
+    if (!ok) {
+        LOG_ERR("Failed to end decoding map");
+        return MGMT_ERR_EINVAL;
+    }
+    
+    if (!has_action) {
+        LOG_ERR("Missing action parameter");
+        return MGMT_ERR_EINVAL;
+    }
+    
+    /* Process the action */
+    int ret = 0;
+    logger_state_t current_state = logger_get_state();
+    logger_state_t new_state = current_state;
+    
+    if (action_str.len == 5 && memcmp(action_str.value, "start", 5) == 0) {
+        /* Start logging */
+        if (current_state == LOGGER_STATE_ARMED) {
+            ret = logger_start();
+            if (ret == 0) {
+                new_state = LOGGER_STATE_LOGGING;
+            }
+        } else if (current_state == LOGGER_STATE_IDLE) {
+            /* Auto-arm then start */
+            ret = logger_arm();
+            if (ret == 0) {
+                ret = logger_start();
+                if (ret == 0) {
+                    new_state = LOGGER_STATE_LOGGING;
+                }
+            }
+        } else {
+            LOG_WRN("Cannot start logging from state %d", current_state);
+            ret = -EINVAL;
+        }
+    } else if (action_str.len == 4 && memcmp(action_str.value, "stop", 4) == 0) {
+        /* Stop logging */
+        if (current_state == LOGGER_STATE_LOGGING) {
+            ret = logger_stop();
+            if (ret == 0) {
+                new_state = LOGGER_STATE_IDLE;
+            }
+        } else {
+            LOG_WRN("Not logging, cannot stop");
+            ret = -EINVAL;
+        }
+    } else if (action_str.len == 3 && memcmp(action_str.value, "arm", 3) == 0) {
+        /* Arm logger */
+        if (current_state == LOGGER_STATE_IDLE) {
+            ret = logger_arm();
+            if (ret == 0) {
+                new_state = LOGGER_STATE_ARMED;
+            }
+        } else {
+            LOG_WRN("Cannot arm from state %d", current_state);
+            ret = -EINVAL;
+        }
+    } else if (action_str.len == 6 && memcmp(action_str.value, "disarm", 6) == 0) {
+        /* Disarm logger */
+        if (current_state == LOGGER_STATE_ARMED) {
+            ret = logger_disarm();
+            if (ret == 0) {
+                new_state = LOGGER_STATE_IDLE;
+            }
+        } else {
+            LOG_WRN("Cannot disarm from state %d", current_state);
+            ret = -EINVAL;
+        }
+    } else {
+        LOG_ERR("Unknown action: %.*s", action_str.len, action_str.value);
+        return MGMT_ERR_EINVAL;
+    }
+    
+    if (ret != 0) {
+        return MGMT_ERR_EUNKNOWN;
+    }
+    
+    /* Build response with current state and session info */
+    const char *state_str = "unknown";
+    switch (new_state) {
+        case LOGGER_STATE_IDLE:       state_str = "idle"; break;
+        case LOGGER_STATE_ARMED:      state_str = "armed"; break;
+        case LOGGER_STATE_LOGGING:    state_str = "logging"; break;
+        case LOGGER_STATE_POSTFLIGHT: state_str = "postflight"; break;
+        case LOGGER_STATE_ERROR:      state_str = "error"; break;
+    }
+    
+    ok = zcbor_tstr_put_lit(zse, "state") &&
+         zcbor_tstr_put_term(zse, state_str, 10) &&
+         zcbor_tstr_put_lit(zse, "success") &&
+         zcbor_bool_put(zse, true);
+    
+    /* If logging, add session info */
+    if (new_state == LOGGER_STATE_LOGGING) {
+        uint32_t session_id;
+        uint64_t start_time;
+        char path[256];
+        
+        if (logger_get_session_info(&session_id, &start_time, path, sizeof(path)) == 0) {
+            ok = ok && zcbor_tstr_put_lit(zse, "session_id") &&
+                 zcbor_uint32_put(zse, session_id) &&
+                 zcbor_tstr_put_lit(zse, "session_path") &&
+                 zcbor_tstr_put_term(zse, path, sizeof(path));
+        }
+    }
+    
+    if (!ok) {
+        return MGMT_ERR_EMSGSIZE;
+    }
+    
+    LOG_INF("Logger control: action=%.*s, new_state=%s", 
+            action_str.len, action_str.value, state_str);
+    
+    return 0;
+}
 
 /* LED control command handler */
 static int tempo_mgmt_led_control(struct smp_streamer *ctxt)
@@ -260,7 +416,11 @@ static const struct mgmt_handler tempo_mgmt_handlers[] = {
     },
     [TEMPO_MGMT_ID_LED_CONTROL] = {
         .mh_read = NULL,
-        .mh_write = tempo_mgmt_led_control,  /* Write handler for control */
+        .mh_write = tempo_mgmt_led_control,  
+    },
+    [TEMPO_MGMT_ID_LOGGER_CONTROL] = {
+        .mh_read = NULL,
+        .mh_write = tempo_mgmt_logger_control,  
     },
 };
 
