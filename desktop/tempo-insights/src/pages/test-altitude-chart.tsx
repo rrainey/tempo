@@ -1,4 +1,4 @@
-// Save as: src/scripts/test-altitude-chart.tsx
+// Save as: src/pages/test-altitude-chart.tsx
 // This is a visual test - create as a temporary page to view the chart
 
 import { Container, Title, Stack, SimpleGrid, Text } from '@mantine/core';
