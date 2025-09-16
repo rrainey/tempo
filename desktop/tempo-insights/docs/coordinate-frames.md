@@ -73,24 +73,24 @@ Back of napkin calculations show that a jumper whose terminal velocity was 120 m
 
 Why is that calibration interesting?  If we can analyze fall rate over the course of a jump and factor out velocity differences caused by changing air density, we can reliably know how the jumper's inputs were contributing to fall rate changes.
 
-| Altitude (ft, MSL) | Air density ρ (kg/m³) | Expected fall rate (mph) | Expected fall rate (m/s) |
-|---------------|------------------------|--------------------------|--------------------------|
-| 20000         | 0.6529                 | 152.3                   | 68.07                   |
-| 18000         | 0.7175                 | 146.0                   | 65.28                   |
-| 16000         | 0.7899                 | 139.6                   | 62.38                   |
-| 14000         | 0.8704                 | 133.4                   | 59.59                   |
-| 12000         | 0.9595                 | 127.1                   | 56.82                   |
-| 10000         | 1.0577                 | 121.0                   | 54.06                   |
-| 9000          | 1.1103                 | 118.0                   | 52.74                   |
-| 8000          | 1.1654                 | 115.0                   | 51.40                   |
-| 7000          | 1.2229                 | 120.0 (reference)       | 53.64                   |
-| 6000          | 1.2829                 | 111.0                   | 49.60                   |
-| 5000          | 1.3456                 | 108.0                   | 48.22                   |
-| 4000          | 1.4110                 | 105.2                   | 47.03                   |
-| 3000          | 1.4791                 | 102.4                   | 45.75                   |
-| 2000          | 1.5500                 |  99.6                   | 44.55                   |
-| 1000          | 1.6238                 |  96.8                   | 43.28                   |
-| 0             | 1.2250                 |  94.0                   | 42.00                   |
+| Altitude (ft) | Air density ρ (kg/m³) | Expected fall rate (mph) | Fall Rate Calibration Factor |
+|---------------|------------------------|--------------------------|------------------------------|
+| 20000         | 0.6527                 | 148.0                   | 0.8107                       |
+| 18000         | 0.6982                 | 143.1                   | 0.8385                       |
+| 16000         | 0.7460                 | 138.5                   | 0.8667                       |
+| 14000         | 0.7963                 | 134.0                   | 0.8955                       |
+| 12000         | 0.8491                 | 129.8                   | 0.9247                       |
+| 10000         | 0.9046                 | 125.7                   | 0.9545                       |
+| 9000          | 0.9334                 | 123.8                   | 0.9695                       |
+| 8000          | 0.9629                 | 121.9                   | 0.9847                       |
+| 7000          | 0.9930                 | 120.0   (reference)     | 1.0000                       |
+| 6000          | 1.0239                 | 118.2                   | 1.0154                       |
+| 5000          | 1.0555                 | 116.4                   | 1.0310                       |
+| 4000          | 1.0879                 | 114.6                   | 1.0467                       |
+| 3000          | 1.1210                 | 112.9                   | 1.0625                       |
+| 2000          | 1.1549                 | 111.3                   | 1.0784                       |
+| 1000          | 1.1896                 | 109.6                   | 1.0945                       |
+| 0             | 1.2250                 | 108.0                   | 1.1107          
 
 All of the vertical velocity plots previously mentioned shall include the ability to switch between plotting calibrated and absolute (uncalibrated) velocities. Calibrated velocity shall be the default.
 
