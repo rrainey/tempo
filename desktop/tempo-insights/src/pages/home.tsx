@@ -1,4 +1,5 @@
-import { Container, Title, Grid, Paper, Text, Stack, Group, Badge, Button, Card, Table } from '@mantine/core';
+// pages/home.tsx
+import { Container, Title, Grid, Paper, Text, Stack, Group, Badge, Button } from '@mantine/core';
 import { AppLayout } from '../components/AppLayout';
 import { AuthGuard } from '../components/AuthGuard';
 import { MyJumpsPanel } from '../components/home/MyJumpsPanel';
@@ -6,7 +7,7 @@ import { FormationJumpsPanel } from '../components/home/FormationJumpsPanel';
 import { JumpDetailsPanel } from '../components/home/JumpDetailsPanel';
 import { useEffect, useState } from 'react';
 import { notifications } from '@mantine/notifications';
-import { IconCheck, IconX, IconParachute } from '@tabler/icons-react';
+import { IconCheck, IconX } from '@tabler/icons-react';
 import { useRouter } from 'next/router';
 
 interface Invitation {
@@ -86,7 +87,6 @@ export default function HomePage() {
 
   const handleJumpSelect = (jumpId: string) => {
     setSelectedJumpId(jumpId);
-    // TODO: Task 77 - Update center panel with jump details
   };
 
   const handleFormationSelect = (formationId: string) => {
@@ -146,33 +146,15 @@ export default function HomePage() {
           )}
 
           <Grid>
-            {/* Left Column - Quick Actions */}
-            <Grid.Col span={{ base: 12, md: 3 }}>
-              <Paper p="md" withBorder>
-                <Title order={4} mb="md">Quick Actions</Title>
-                <Stack gap="sm">
-                  <Button variant="subtle" onClick={() => router.push('/devices')}>
-                    My Devices
-                  </Button>
-                  <Button variant="subtle" onClick={() => router.push('/groups')}>
-                    Browse Groups
-                  </Button>
-                  <Button variant="subtle" onClick={() => router.push('/profile')}>
-                    Edit Profile
-                  </Button>
-                </Stack>
-              </Paper>
-            </Grid.Col>
-
             {/* Center Column - Jump Details */}
-            <Grid.Col span={{ base: 12, md: 6 }}>
+            <Grid.Col span={{ base: 12, md: 8 }}>
               <Paper p="md" withBorder style={{ minHeight: '400px' }}>
                 <JumpDetailsPanel jumpId={selectedJumpId} />
               </Paper>
             </Grid.Col>
 
             {/* Right Column - Recent Activity */}
-            <Grid.Col span={{ base: 12, md: 3 }}>
+            <Grid.Col span={{ base: 12, md: 4 }}>
               <Stack gap="md">
                 <MyJumpsPanel onJumpSelect={handleJumpSelect} />
                 <FormationJumpsPanel onFormationSelect={handleFormationSelect} />
