@@ -36,6 +36,7 @@ interface FormationViewerProps {
   formation: FormationData;
   dzCenter: GeodeticCoordinates;
   onBaseChange?: (newBaseId: string) => void;
+  onTimeChange?: (time: number) => void;
 }
 
 const createAxisLabels = (scene: THREE.Scene, viewConfig: ViewConfiguration) => {
@@ -88,7 +89,8 @@ const createAxisLabels = (scene: THREE.Scene, viewConfig: ViewConfiguration) => 
 export const FormationViewer: React.FC<FormationViewerProps> = ({ 
   formation, 
   dzCenter,
-  onBaseChange 
+  onBaseChange,
+  onTimeChange
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene>(null);
@@ -466,8 +468,10 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
       setState(prev => {
         const newTime = prev.currentTime + (deltaTime * prev.playbackSpeed);
         if (newTime >= getMaxTime()) {
+          onTimeChange?.(getMaxTime());
           return { ...prev, currentTime: getMaxTime(), isPlaying: false };
         }
+        onTimeChange?.(newTime);
         return { ...prev, currentTime: newTime };
       });
 
@@ -477,7 +481,7 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
 
     animationId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationId);
-  }, [state.isPlaying, state.playbackSpeed, getMaxTime]);
+  }, [state.isPlaying, state.playbackSpeed, getMaxTime, onTimeChange]);
 
   // Playback controls
   const togglePlayback = () => {
@@ -486,6 +490,7 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
 
   const handleTimeChange = (value: number) => {
     setState(prev => ({ ...prev, currentTime: value, isPlaying: false }));
+    onTimeChange?.(value); // Call the prop if provided
   };
 
   const handleSpeedChange = (value: string | null) => {
