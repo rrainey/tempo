@@ -28,6 +28,26 @@ enum GroupRole {
   OWNER
 }
 
+model Dropzone {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  icaoCode    String?  // Airport identifier (e.g., "KSDM")
+  latitude    Float    // Decimal degrees (North positive)
+  longitude   Float    // Decimal degrees (East positive) 
+  elevation   Float    // Meters MSL
+  timezone    String   // e.g., "America/Los_Angeles"
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  formations  FormationSkydive[]
+
+  @@index([slug])
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -168,6 +188,8 @@ model FormationSkydive {
 
   // Relations
   participants    FormationParticipant[]
+  dropzoneId  String?
+  dropzone    Dropzone? @relation(fields: [dropzoneId], references: [id])
 
   @@index([jumpTime])
 }

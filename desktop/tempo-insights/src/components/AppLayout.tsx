@@ -1,14 +1,16 @@
+// /components/AppLayout.tsx
 import { AppShell, Burger, Group, Text, NavLink, Stack } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import {
   IconHome,
   IconUser,
   IconUsers,
   IconCpu,
-  IconLogout
+  IconLogout,
+  IconMapPin
 } from '@tabler/icons-react';
 import { logout } from '../lib/auth/logout';
 
@@ -19,10 +21,29 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [opened, { toggle }] = useDisclosure();
   const router = useRouter();
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Get user role from localStorage or API
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          const data = await response.json();
+          setUserRole(data.user.role);
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      }
+    };
+    fetchUserRole();
+  }, []);
 
   const handleLogout = async () => {
     await logout();
   };
+
+  const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
 
   return (
     <AppShell
@@ -52,7 +73,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       </AppShell.Header>
 
       <AppShell.Navbar p="md">
-        <Stack gap="xs">
+        <Stack gap="xs" style={{ flex: 1 }}>
           <NavLink
             component={Link}
             href="/home"
@@ -74,21 +95,31 @@ export function AppLayout({ children }: AppLayoutProps) {
             leftSection={<IconUsers size={16} />}
             active={router.pathname === '/groups'}
           />
+          {isAdmin && (
+            <>
+              <NavLink
+                component={Link}
+                href="/devices"
+                label="Devices (Admin)"
+                leftSection={<IconCpu size={16} />}
+                active={router.pathname === '/devices'}
+              />
+              <NavLink
+                component={Link}
+                href="/dropzones"
+                label="Dropzones (Admin)"
+                leftSection={<IconMapPin size={16} />}
+                active={router.pathname === '/dropzones'}
+              />
+            </>
+          )}
+          <div style={{ flex: 1 }} />
           <NavLink
-            component={Link}
-            href="/devices"
-            label="Devices (Admin)"
-            leftSection={<IconCpu size={16} />}
-            active={router.pathname === '/devices'}
+            label="Logout"
+            leftSection={<IconLogout size={16} />}
+            onClick={handleLogout}
           />
         </Stack>
-        <NavLink
-          label="Logout"
-          leftSection={<IconLogout size={16} />}
-          onClick={handleLogout}
-          mt="auto"
-          style={{ position: 'absolute', bottom: 20 }}
-        />
       </AppShell.Navbar>
 
       <AppShell.Main>

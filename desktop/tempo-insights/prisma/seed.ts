@@ -62,7 +62,52 @@ async function main() {
     },
   });
 
-  console.log({ device1, device2, device3 });
+  const dropzone1 = await prisma.dropzone.upsert({
+    where: { slug: 'skydive-elsinore' },
+    update: {},
+    create: {
+      name: "Skydive Elsinore",
+      slug: "skydive-elsinore", 
+      icaoCode: "F14",
+      latitude: 33.6320,
+      longitude: -117.2510,
+      elevation: 436.5, // meters MSL
+      timezone: "America/Los_Angeles",
+      notes: "Lake Elsinore, CA"
+    },
+  });
+
+  const dropzone2 = await prisma.dropzone.upsert({
+    where: { slug: 'ssd-d-area' },
+    update: {},
+    create: {
+      name: "Spaceland Dallas",
+      slug: "ssd-d-area",
+      icaoCode: "48TX",
+      latitude: 33.450034, 
+      longitude: -96.378904,
+      elevation: 241, // meters MSL
+      timezone: "America/Chicago",
+      notes: "Whitewright, TX"
+    },
+  });
+
+  const dropzone3 = await prisma.dropzone.upsert({
+    where: { slug: 'ssd-c-area' },
+    update: {},
+    create: {
+      name: "Spaceland Dallas",
+      slug: "ssd-c-area",
+      icaoCode: "48TX",
+      latitude: 33.451155, 
+      longitude: -96.378161, 
+      elevation: 241, // meters MSL
+      timezone: "America/Chicago",
+      notes: "Whitewright, TX"
+    },
+  });
+
+  console.log({ device1, device2, device3, dropzone1, dropzone2, dropzone3 });
 }
 
 main()

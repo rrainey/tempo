@@ -4,6 +4,12 @@ Analysis of different elements of a skydive will require us to plat 3D positions
 
 The systems described here start with several coordinate frames commonly used in aerospace modeling and simulation.  These are formally defined in ANSI/AIAA R-004-1992, "Atmospheric and Space Flight Coordinate Systems".  We also define several more here which will be convenient for analysis of skydiving performance.  Because of its strong connection to GPS satellite use, we will also rely on the World Geodetic System, WGS-84 standard for expressing latitude, longitude and altitude coordinates.
 
+## Definitions
+
+**Fall Rate** and **Vertical Velocity** are synonymous terms.  Where stored, it should be expressed as **meters per second**. When printed, these are expressed as **miles per hour**.
+
+**Ground Track** the compass angle of a path inscribed along the ground, relative to True North.  It should be stored as radians, and printed as degrees.
+
 ## Earth Centered Inertial (ECI, meters)
 
 Earth-centered inertial (ECI) coordinate frames having their origin at the center of mass of Earth and the axes fixed with respect to the stars. Z-North pole, X-axis towards the Vernal Equinox.
@@ -69,12 +75,16 @@ Solo Jump analysis would also include several other standard time series plots: 
 
 Air density decreases with altitude. The ICAO Standard Atmosphere [citation needed] defines this expected decrease in density for "Standard Day" conditions.  This density lapse rate is also affected by temperature and humidity, although we will neglect those in this first pass analysis algorithms.  A difference in density will affect the terminal velocity of a skydiver.  In short, they will fall gradually more slowly at lower altitudes. This change will affect a group of skydivers who are close together in the same way, so they don't really notice it - but it will affect any numerical analysis of a jump, so we should be taking it into account.
 
-Back of napkin calculations show that a jumper whose terminal velocity was 120 mph at 7,000 feet MSL, would fall closer to 130 mph at 14,000 feet and 110mph near deployment altitude.  This is a significant variation - it should be accounted for our comparisons.  We propose to design a standard fall rate calibration factor function. The function will be based on the Standard Day altitude, MSL of the jumper. This factor will chosen be 1.0 at 7,000 feet MSL. Based on our back-of-napkin math, it will then vary below 1 above that altitude and < 1 below it.  It can then be "looked up" for any any altitude in the jump. It can then be multiplied by the current vertical velocity.  The net result will be that we could then say, "your vertical velocity reads X, but that really means you would have been falling at Y at 7,000 feet.
+Back of napkin calculations show that a jumper whose terminal velocity is 120 mph at 7,000 feet MSL, would fall at closer to 135 mph at 14,000 feet and 110mph near deployment altitude.  This is a significant variation - it should be accounted for our comparisons.  We propose to design a standard fall rate calibration factor function. The function will be based on the Standard Day altitude, MSL of the jumper. This factor will chosen be 1.0 at 7,000 feet MSL. Based on our back-of-napkin math, it will then vary below 1 above that altitude and > 1.0 below it.  This calibration factor can then be looked up for any any altitude in the jump. It can then be multiplied by the current vertical velocity.
 
-Why is that calibration interesting?  If we can analyze fall rate over the course of a jump and factor out velocity differences caused by changing air density, we can reliably know how the jumper's inputs were contributing to fall rate changes.
+Why is that calibration interesting?  If we can analyze fall rate over the course of a jump and factor out velocity differences caused by changing air density, we can reliably know how the jumper's inputs were contributing to fall rate results.
 
-| Altitude (ft) | Air density ρ (kg/m³) | Expected fall rate (mph) | Fall Rate Calibration Factor |
-|---------------|------------------------|--------------------------|------------------------------|
+Standard Day Conditions
+
+This table shows the Standard Day variation of air density by altitude.  It also shows the effect of air density variation on fall rate of a hypothetical skydiver whose weight and drag would have them falling at 120 mph at 7,000 feet.
+
+| Altitude (ft, MSL) | Air density ρ (kg/m³) | Notional fall rate (mph) | Fall Rate Calibration Factor |
+|---------------|------------------------|-------------------------|------------------------------|
 | 20000         | 0.6527                 | 148.0                   | 0.8107                       |
 | 18000         | 0.6982                 | 143.1                   | 0.8385                       |
 | 16000         | 0.7460                 | 138.5                   | 0.8667                       |
@@ -92,13 +102,26 @@ Why is that calibration interesting?  If we can analyze fall rate over the cours
 | 1000          | 1.1896                 | 109.6                   | 1.0945                       |
 | 0             | 1.2250                 | 108.0                   | 1.1107          
 
-All of the vertical velocity plots previously mentioned shall include the ability to switch between plotting calibrated and absolute (uncalibrated) velocities. Calibrated velocity shall be the default.
+All of the vertical velocity plots previously mentioned shall include the ability to switch between plotting calibrated and absolute (uncalibrated) vertical velocities/fall rates. Calibrated velocity shall be the default.
 
 ## Analysis Scenario 2: Formation Skydiving Jump Analysis
 
 The analyst will interactively designate one jumper from the group of collected logs as the "Base".  GNSS (and barometric) position for all jumpers can be transformed into individual NED,DZ frame coordinate sets.  Once the Base is designated, the individual NED,DZ sets for each jumper can be converted to the Base Exit frame.  This can then be rendered as a moving plot, interactively depicting the position of each skydiver in their position relative to the base skydiver.
 
 ## Implementation
+
+### Reference Locations (Dropzones)
+
+Several of these coordinate frames will be based on a static reference point: the center of the drop zone or center of a desired landing area.  It follows that we should maintain a table of these locations by name.  In the user's profile, a user shall be able to select the default reference location for their jumps, and also be able to override that for each jump.  Likewise, Formation Skydives should have an associated reference location that can be selected by the analyst. This FS value overrides any user setting for the scope of group analysis.
+
+- DZ / Target Name - "Spaceland Dallas, D Landing Area"
+- Latitude (WGS-84; double-precision, stored as radians, printed as decimal degrees)
+- Longitude (WGS-84; double-precision, stored as radians, printed as decimal degrees)
+- Altitude (stored as meters,MSL - printed as feet,MSL)
+
+Reference Locations are defined and maintained the System Administrators.  In the Home Page UI for administrators, it will appear as a "Dropzones" item on the left-hand navigation bar just below "Devices".
+
+### Existing code re-use
 
 Tempo-insights application will use these modules for coordinate and unit conversion wherever practical:
 
