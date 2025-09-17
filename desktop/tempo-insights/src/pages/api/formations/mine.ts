@@ -1,3 +1,4 @@
+// pages/api/formations/mine.ts
 import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';
 import { NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
