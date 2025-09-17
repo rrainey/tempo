@@ -1,14 +1,17 @@
 // components/formation/FormationViewer.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { ViewControls, VIEW_CONFIGURATIONS, ViewConfiguration } from './ViewControls';
 import { Stack, Select, Button, Group, Badge, Slider, Text } from '@mantine/core';
 import { IconPlayerPlay, IconPlayerPause, IconPlayerSkipForward } from '@tabler/icons-react';
 import { projectFormationAtTime } from '../../lib/formation/coordinates';
 import type { ParticipantData, ProjectedPosition } from '../../lib/formation/coordinates';
 import type { GeodeticCoordinates } from '../../lib/formation/types';
+import { Vector3 } from '../../lib/formation/types';
 
-interface FormationData {
+export interface FormationData {
   id: string;
   startTime: Date;
   baseJumperId: string;
@@ -21,10 +24,12 @@ interface FormationViewerState {
   currentTime: number;
   isPlaying: boolean;
   playbackSpeed: number;
-  viewMode: 'godsEye' | 'side';
+  viewMode: keyof typeof VIEW_CONFIGURATIONS;
   showTrails: boolean;
   trailLength: number;
   baseJumperId: string;
+  showGrid: boolean;
+  showAxes: boolean;
 }
 
 interface FormationViewerProps {
@@ -33,19 +38,66 @@ interface FormationViewerProps {
   onBaseChange?: (newBaseId: string) => void;
 }
 
+const createAxisLabels = (scene: THREE.Scene, viewConfig: ViewConfiguration) => {
+  const loader = new FontLoader();
+  
+  // Create text sprites for axis labels
+  const createLabel = (text: string, color: string, position: THREE.Vector3) => {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 128;
+    canvas.height = 64;
+    
+    if (context) {
+      context.font = 'Bold 20px Arial';
+      context.fillStyle = color;
+      context.textAlign = 'center';
+      context.fillText(text, 64, 40);
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true
+    });
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.position.copy(position);
+    sprite.scale.set(10, 5, 1);
+    return sprite;
+  };
+  
+  // Remove old labels
+  scene.children
+    .filter(child => child.userData.isAxisLabel)
+    .forEach(child => scene.remove(child));
+  
+  // Add new labels based on view
+  const xLabel = createLabel(viewConfig.labels.x, '#ff0000', new THREE.Vector3(60, 0, 0));
+  xLabel.userData.isAxisLabel = true;
+  scene.add(xLabel);
+  
+  const yLabel = createLabel(viewConfig.labels.y, '#00ff00', new THREE.Vector3(0, 60, 0));
+  yLabel.userData.isAxisLabel = true;
+  scene.add(yLabel);
+  
+  const zLabel = createLabel(viewConfig.labels.z, '#0000ff', new THREE.Vector3(0, 0, 60));
+  zLabel.userData.isAxisLabel = true;
+  scene.add(zLabel);
+};
+
 export const FormationViewer: React.FC<FormationViewerProps> = ({ 
   formation, 
   dzCenter,
   onBaseChange 
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene>();
-  const rendererRef = useRef<THREE.WebGLRenderer>();
-  const cameraRef = useRef<THREE.PerspectiveCamera>();
-  const controlsRef = useRef<OrbitControls>();
+  const sceneRef = useRef<THREE.Scene>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+  const controlsRef = useRef<OrbitControls>(null);
   const jumperMeshes = useRef<Map<string, THREE.Mesh>>(new Map());
   const trailLines = useRef<Map<string, THREE.Line>>(new Map());
-  const frameRef = useRef<number>();
+  const frameRef = useRef<number | null>(null);
 
   const [state, setState] = useState<FormationViewerState>({
     currentTime: 0,
@@ -54,8 +106,78 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
     viewMode: 'godsEye',
     showTrails: true,
     trailLength: 3,
-    baseJumperId: formation.baseJumperId
+    baseJumperId: formation.baseJumperId,
+    showGrid: true,
+    showAxes: true
   });
+
+  // Grid helper ref for updates
+  const gridRef = useRef<THREE.GridHelper>(null);
+  const axesRef = useRef<THREE.AxesHelper>(null);
+
+  // Apply view configuration
+  const applyViewConfiguration = useCallback((viewKey: string) => {
+    const config = VIEW_CONFIGURATIONS[viewKey];
+    if (!config || !cameraRef.current || !controlsRef.current || !sceneRef.current) return;
+
+    // Update camera position and target
+    cameraRef.current.position.set(
+      config.cameraPosition.x,
+      config.cameraPosition.y,
+      config.cameraPosition.z
+    );
+    controlsRef.current.target.set(
+      config.cameraTarget.x,
+      config.cameraTarget.y,
+      config.cameraTarget.z
+    );
+    controlsRef.current.update();
+
+    // Update grid rotation
+    if (gridRef.current) {
+      gridRef.current.rotation.set(
+        config.gridRotation.x,
+        config.gridRotation.y,
+        config.gridRotation.z
+      );
+    }
+
+    // Update axis labels
+    if (state.showAxes) {
+      createAxisLabels(sceneRef.current, config);
+    }
+  }, [state.showAxes]);
+
+  // Update view when mode changes
+  useEffect(() => {
+    applyViewConfiguration(state.viewMode);
+  }, [state.viewMode, applyViewConfiguration]);
+
+  const transformPositionForView = useCallback((
+    position: Vector3,
+    viewMode: string
+  ): THREE.Vector3 => {
+    const config = VIEW_CONFIGURATIONS[viewMode];
+    if (!config) return new THREE.Vector3(position.x, position.y, position.z);
+
+    // Map Base Exit Frame coordinates to display coordinates based on view
+    switch (viewMode) {
+      case 'godsEye':
+        // XY plane, Z=0
+        return new THREE.Vector3(position.x, position.y, 0);
+      
+      case 'side':
+        // XZ plane (X forward, Z up), Y=0
+        return new THREE.Vector3(position.x, -position.z, 0);
+      
+      case 'trailing':
+        // YZ plane (Y right, Z up), X=0
+        return new THREE.Vector3(0, position.y, -position.z);
+      
+      default:
+        return new THREE.Vector3(position.x, position.y, position.z);
+    }
+  }, []);
 
   // Calculate max time from formation data
   const getMaxTime = useCallback(() => {
@@ -111,6 +233,9 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
     const axisHelper = new THREE.AxesHelper(50);
     scene.add(axisHelper);
 
+    gridRef.current = gridHelper;
+    axesRef.current = axisHelper;
+
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
@@ -160,7 +285,6 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
     };
   }, []);
 
-  // Update jumper positions
   useEffect(() => {
     if (!sceneRef.current) return;
 
@@ -172,7 +296,6 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
         dzCenter
       );
 
-      // Update jumper spheres
       positions.forEach(pos => {
         let mesh = jumperMeshes.current.get(pos.userId);
 
@@ -189,7 +312,9 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
           mesh = new THREE.Mesh(geometry, material);
           mesh.castShadow = true;
           mesh.receiveShadow = true;
-          sceneRef.current.add(mesh);
+          if (sceneRef.current) {
+            sceneRef.current.add(mesh);
+          }
           jumperMeshes.current.set(pos.userId, mesh);
 
           // Add name label (using sprite)
@@ -214,29 +339,54 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
           mesh.add(sprite);
         }
 
-        // Update position based on view mode
-        const displayPos = state.viewMode === 'godsEye' 
-          ? { x: pos.position.x, y: pos.position.y, z: 0 }
-          : { x: pos.position.x, y: -pos.position.z, z: pos.position.y };
+        // Transform position based on current view
+        const displayPos = transformPositionForView(pos.position, state.viewMode);
+        if (mesh) {
+          mesh.position.copy(displayPos);
 
-        mesh.position.set(displayPos.x, displayPos.y, displayPos.z);
-
-        // Update opacity for data gaps
-        const material = mesh.material as THREE.MeshPhongMaterial;
-        material.opacity = pos.isDataGap ? 0.5 : 0.9;
+          // Update opacity for data gaps
+          const material = mesh.material as THREE.MeshPhongMaterial;
+          material.opacity = pos.isDataGap ? 0.5 : 0.9;
+        }
       });
-
-      // Update camera view for view mode changes
-      if (state.viewMode === 'side' && controlsRef.current) {
-        controlsRef.current.target.set(0, 0, 0);
-        cameraRef.current?.position.set(0, 0, 150);
-      }
 
     } catch (error) {
       console.error('Error projecting formation:', error);
     }
-  }, [formation, state.currentTime, state.viewMode, state.baseJumperId, dzCenter]);
+  }, [formation, state.currentTime, state.viewMode, state.baseJumperId, dzCenter, transformPositionForView]);
 
+  // Update trail rendering for view modes
+  const getTrailPoint = useCallback((position: Vector3, viewMode: string): THREE.Vector3 => {
+    return transformPositionForView(position, viewMode);
+  }, [transformPositionForView]);
+
+  // Handle view mode change
+  const handleViewModeChange = (viewKey: string) => {
+    if (viewKey in VIEW_CONFIGURATIONS) {
+      setState(prev => ({ ...prev, viewMode: viewKey as keyof typeof VIEW_CONFIGURATIONS }));
+    }
+  };
+
+  // Toggle grid and axes
+  const toggleGrid = () => {
+    setState(prev => ({ ...prev, showGrid: !prev.showGrid }));
+    if (gridRef.current) {
+      gridRef.current.visible = !state.showGrid;
+    }
+  };
+
+  const toggleAxes = () => {
+    setState(prev => ({ ...prev, showAxes: !prev.showAxes }));
+    if (axesRef.current) {
+      axesRef.current.visible = !state.showAxes;
+    }
+    // Update labels
+    if (sceneRef.current && !state.showAxes) {
+      sceneRef.current.children
+        .filter(child => child.userData.isAxisLabel)
+        .forEach(child => sceneRef.current!.remove(child));
+    }
+  };
   // Update trails
   useEffect(() => {
     if (!sceneRef.current || !state.showTrails) {
@@ -270,9 +420,7 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
           
           const pos = projected.find(p => p.userId === participant.userId);
           if (pos) {
-            const point = state.viewMode === 'godsEye'
-              ? new THREE.Vector3(pos.position.x, pos.position.y, 0)
-              : new THREE.Vector3(pos.position.x, -pos.position.z, pos.position.y);
+            const point = transformPositionForView(pos.position, state.viewMode);
             points.push(point);
           }
         } catch (e) {
@@ -291,7 +439,9 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
             transparent: true
           });
           line = new THREE.Line(geometry, material);
-          sceneRef.current.add(line);
+          if (sceneRef.current) {
+            sceneRef.current.add(line);
+          }
           trailLines.current.set(participant.userId, line);
         }
 
@@ -344,12 +494,6 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
     }
   };
 
-  const handleViewModeChange = (value: string | null) => {
-    if (value === 'godsEye' || value === 'side') {
-      setState(prev => ({ ...prev, viewMode: value }));
-    }
-  };
-
   const handleBaseChange = (value: string | null) => {
     if (value) {
       setState(prev => ({ ...prev, baseJumperId: value }));
@@ -358,7 +502,7 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
   };
 
   return (
-    <Stack spacing="md" style={{ width: '100%', height: '100%' }}>
+    <Stack gap="md" style={{ width: '100%', height: '100%' }}>
       {/* 3D Viewport */}
       <div 
         ref={mountRef} 
@@ -372,14 +516,38 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
         }} 
       />
 
+      {/* View Controls */}
+      <ViewControls 
+        currentView={state.viewMode} 
+        onViewChange={handleViewModeChange} 
+      />
+
+      {/* Display Options */}
+      <Group>
+        <Button
+          variant={state.showGrid ? 'filled' : 'outline'}
+          size="sm"
+          onClick={toggleGrid}
+        >
+          Grid
+        </Button>
+        <Button
+          variant={state.showAxes ? 'filled' : 'outline'}
+          size="sm"
+          onClick={toggleAxes}
+        >
+          Axes
+        </Button>
+      </Group>
+
       {/* Playback Controls */}
-      <Group position="apart">
+      <Group>
         <Group>
           <Button
             onClick={togglePlayback}
-            leftIcon={state.isPlaying ? <IconPlayerPause /> : <IconPlayerPlay />}
             variant="filled"
           >
+            {state.isPlaying ? <IconPlayerPause style={{ marginRight: 8 }} /> : <IconPlayerPlay style={{ marginRight: 8 }} />}
             {state.isPlaying ? 'Pause' : 'Play'}
           </Button>
           
@@ -398,7 +566,9 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
 
           <Select
             value={state.viewMode}
-            onChange={handleViewModeChange}
+            onChange={(value) => {
+              if (value) handleViewModeChange(value);
+            }}
             data={[
               { value: 'godsEye', label: "God's Eye View" },
               { value: 'side', label: 'Side View' }
