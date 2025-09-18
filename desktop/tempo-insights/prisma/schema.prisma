@@ -57,6 +57,8 @@ model User {
   role      UserRole @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  isProxy   Boolean  @default(false)
+  proxyCreatorId String?
 
   // Relations
   ownedDevices Device[] @relation("DeviceOwner")
@@ -66,9 +68,12 @@ model User {
   formationParticipations FormationParticipant[]
   invitationsSent UserInvitation[] @relation("InvitationsSent")
   invitationUsed UserInvitation? @relation("InvitationsUsed")
+  proxyCreator User? @relation("ProxyCreator", fields: [proxyCreatorId], references: [id])
+  createdProxies User[] @relation("ProxyCreator")
 
   @@index([email])
   @@index([slug])
+  @@index([proxyCreatorId])
 }
 
 model Device {
@@ -79,6 +84,8 @@ model Device {
   lastSeen    DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  lendingDuration    String?
+  lendingStartedAt   DateTime?
 
   // Relations
   ownerId     String

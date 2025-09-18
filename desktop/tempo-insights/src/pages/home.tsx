@@ -5,9 +5,10 @@ import { AuthGuard } from '../components/AuthGuard';
 import { MyJumpsPanel } from '../components/home/MyJumpsPanel';
 import { FormationJumpsPanel } from '../components/home/FormationJumpsPanel';
 import { JumpDetailsPanel } from '../components/home/JumpDetailsPanel';
+import { LendDeviceForm } from '../components/LendDeviceForm';
 import { useEffect, useState } from 'react';
 import { notifications } from '@mantine/notifications';
-import { IconCheck, IconX } from '@tabler/icons-react';
+import { IconCheck, IconX, IconHandStop  } from '@tabler/icons-react';
 import { useRouter } from 'next/router';
 
 interface Invitation {
@@ -30,6 +31,7 @@ export default function HomePage() {
   const [loadingInvitations, setLoadingInvitations] = useState(true);
   const [processingInvite, setProcessingInvite] = useState<string | null>(null);
   const [selectedJumpId, setSelectedJumpId] = useState<string | null>(null);
+  const [lendDeviceOpened, setLendDeviceOpened] = useState(false);
 
   useEffect(() => {
     loadInvitations();
@@ -97,7 +99,15 @@ export default function HomePage() {
     <AuthGuard>
       <AppLayout>
         <Container fluid>
+          <Group justify="space-between" mb="xl">
           <Title order={2} mb="xl">Dashboard</Title>
+            <Button 
+              leftSection={<IconHandStop size={16} />}
+              onClick={() => setLendDeviceOpened(true)}
+            >
+              Lend My Device
+            </Button>
+          </Group>
 
           {/* Pending Invitations */}
           {invitations.length > 0 && (
@@ -162,6 +172,13 @@ export default function HomePage() {
             </Grid.Col>
           </Grid>
         </Container>
+        <LendDeviceForm 
+          opened={lendDeviceOpened}
+          onClose={() => setLendDeviceOpened(false)}
+          onSuccess={() => {
+            // Optionally refresh data
+          }}
+        />
       </AppLayout>
     </AuthGuard>
   );
