@@ -12,9 +12,14 @@ import {
   Alert,
   Autocomplete,
   Loader,
+  Paper,
+  CopyButton,
+  Box,
+  Center,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { IconAlertCircle, IconCheck, IconCopy } from '@tabler/icons-react';
+import QRCode from 'qrcode';
 
 interface Device {
   id: string;
@@ -48,6 +53,14 @@ export function LendDeviceForm({ opened, onClose, onSuccess }: LendDeviceFormPro
   const [duration, setDuration] = useState<string>('ONE_JUMP');
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  
+  // New state for showing invitation after lending
+  const [showInvitation, setShowInvitation] = useState(false);
+  const [invitationData, setInvitationData] = useState<{
+    proxyUser: { name: string; id: string };
+    claimUrl: string;
+    qrCodeDataUrl: string;
+  } | null>(null);
 
   useEffect(() => {
     if (opened) {
@@ -134,14 +147,62 @@ export function LendDeviceForm({ opened, onClose, onSuccess }: LendDeviceFormPro
         color: 'green',
       });
 
-      onSuccess?.();
-      handleClose();
+      // If a new proxy user was created, generate invitation
+      if (lendToType === 'new' && data.device.lentTo?.isProxy) {
+        await generateInvitation(data.device.lentTo);
+      } else {
+        onSuccess?.();
+        handleClose();
+      }
     } catch (error) {
       notifications.show({
         title: 'Error',
         message: error instanceof Error ? error.message : 'Failed to lend device',
         color: 'red',
       });
+      setLoading(false);
+    }
+  };
+
+  const generateInvitation = async (proxyUser: { id: string; name: string }) => {
+    try {
+      const response = await fetch('/api/invitations/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          proxyUserId: proxyUser.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create invitation');
+      }
+
+      // Generate QR code
+      const qrDataUrl = await QRCode.toDataURL(data.claimUrl, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: '#002233',
+          light: '#ffffff',
+        },
+      });
+
+      setInvitationData({
+        proxyUser,
+        claimUrl: data.claimUrl,
+        qrCodeDataUrl: qrDataUrl,
+      });
+      setShowInvitation(true);
+    } catch (error) {
+      console.error('Failed to generate invitation:', error);
+      // Even if invitation fails, the lending was successful
+      onSuccess?.();
+      handleClose();
     } finally {
       setLoading(false);
     }
@@ -153,6 +214,8 @@ export function LendDeviceForm({ opened, onClose, onSuccess }: LendDeviceFormPro
     setSelectedUser('');
     setNewUserName('');
     setDuration('ONE_JUMP');
+    setShowInvitation(false);
+    setInvitationData(null);
     onClose();
   };
 
@@ -160,6 +223,77 @@ export function LendDeviceForm({ opened, onClose, onSuccess }: LendDeviceFormPro
     value: user.id,
     label: `${user.name} (${user.email})`,
   }));
+
+  // Show invitation screen if we have invitation data
+  if (showInvitation && invitationData) {
+    return (
+      <Modal
+        opened={opened}
+        onClose={handleClose}
+        title="Device Lent Successfully!"
+        size="md"
+      >
+        <Stack gap="md">
+          <Alert icon={<IconAlertCircle size={16} />} color="green">
+            Device lent to {invitationData.proxyUser.name}. Share this QR code or link so they can create their account.
+          </Alert>
+
+          <Paper p="md" withBorder>
+            <Stack align="center">
+              <Text size="sm" fw={500}>Scan to Create Account</Text>
+              <Box>
+                <img
+                  src={invitationData.qrCodeDataUrl}
+                  alt="QR Code"
+                  style={{ width: '256px', height: '256px' }}
+                />
+              </Box>
+            </Stack>
+          </Paper>
+
+          <Paper p="sm" withBorder>
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>Or share this link:</Text>
+              <Group gap="xs">
+                <Text
+                  size="xs"
+                  style={{
+                    flex: 1,
+                    wordBreak: 'break-all',
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  {invitationData.claimUrl}
+                </Text>
+                <CopyButton value={invitationData.claimUrl}>
+                  {({ copied, copy }) => (
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      onClick={copy}
+                      leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                    >
+                      {copied ? 'Copied' : 'Copy'}
+                    </Button>
+                  )}
+                </CopyButton>
+              </Group>
+            </Stack>
+          </Paper>
+
+          <Button 
+            fullWidth 
+            onClick={() => {
+              onSuccess?.();
+              handleClose();
+            }}
+          >
+            Dismiss
+          </Button>
+        </Stack>
+      </Modal>
+    );
+  }
 
   return (
     <Modal

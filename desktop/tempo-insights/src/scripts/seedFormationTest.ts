@@ -67,7 +67,7 @@ async function main() {
 
   try {
     // Read the sample flight data
-    const sampleFlightPath = path.join(__dirname, '../docs/sample-flight.txt');
+    const sampleFlightPath = path.join(__dirname, '../../docs/sample-flight.txt');
     let originalLogData: Buffer;
     
     try {

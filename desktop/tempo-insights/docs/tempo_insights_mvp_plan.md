@@ -440,22 +440,22 @@ Done when: user can log in; proxy retains jump history.
 
 - **Task 95: Bluetooth service module**
 Do: production wrapper for smpmgr (exec, parse, timeout/retry)
-Done when: fs ls and fs read functions work on a device.
+Done when: file upload ('/lfs/logs/20250901/100/flight.txt'), tempo session-list (verifying that log is on the session list), file download work with device.
 
 - **Task 96: Blink command**
 Do: implement device blink via shell or custom command
-Done when: device LED blinks on admin action.
+Done when: device LED blinks on admin action (tempo led-on red, tempo led-off)
 
 - **Task 97: Assign to user (on device)**
-Do: write uinfo.json (user UUID + nextJumpNumber)
+Do: write `/uinfo.json` (user UUID + nextJumpNumber)
 Done when: device reads back updated info.
 
 - **Task 98: Unprovision (on device)**
-Do: clear assignment and revert name if needed
+Do: clear assignment by removing '/uinfo.json' file
 Done when: device advertises unprovisioned state.
 
 - **Task 99: Initialize device (unique ID)**
-Do: generate/set Bluetooth ID & name “Tempo-BT-xxxx”
+Do: (candidates for initialization will advertise their name as "Tempo-BT-OPEN"; there may be multiple such devices on line, each with a pseudo-random BT address); generate/set Bluetooth ID & name “Tempo-BT-xxxx” (last assigned 4-digit id should be maintained in Postgres "app configuration settings" table, seed value "0010"); to configure the device, these values should be written to flash memory - this device functionality hasn't been implemented yet.
 Done when: scanner sees new name; DB updated.
 
 - **Task 100: Concurrency lock**
