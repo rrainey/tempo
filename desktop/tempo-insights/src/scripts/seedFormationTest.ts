@@ -4,8 +4,17 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
+
+// Load environment variables
+config({ path: '.env' });
 
 const prisma = new PrismaClient();
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
 // Simple log parser to modify GNSS timestamps
 function offsetLogTimestamps(logData: Buffer, offsetSeconds: number): Buffer {
@@ -40,19 +49,6 @@ function offsetLogTimestamps(logData: Buffer, offsetSeconds: number): Buffer {
                    String(newSeconds.toFixed(2)).padStart(5, '0');
         
         return parts.join(',');
-      }
-    }
-    
-    // Look for PENV timestamps (different format)
-    // NOTE: PENV stamps do not require correction, as they are relative timestamps.
-    if (false && line.startsWith('$PENV,')) {
-      const parts = line.split(',');
-      if (parts.length > 1 && parts[1]) {
-        const timestamp = parseInt(parts[1]);
-        if (!isNaN(timestamp)) {
-          parts[1] = String(timestamp + Math.floor(offsetSeconds * 1000));
-          return parts.join(',');
-        }
       }
     }
     
@@ -151,11 +147,31 @@ async function main() {
     let adminJump, johnJump;
 
     if (!existingAdminJump) {
-      // Create jump log for admin user (original data)
+      // Upload admin's log to Supabase Storage
+      const adminStoragePath = `${adminUser.id}/${adminDevice.id}/${originalHash}.log`;
+      console.log(`Uploading admin's log to: ${adminStoragePath}`);
+      
+      const { data: adminUpload, error: adminUploadError } = await supabase.storage
+        .from('jump-logs')
+        .upload(adminStoragePath, originalLogData, {
+          contentType: 'application/octet-stream',
+          upsert: true
+        });
+      
+      if (adminUploadError) {
+        throw new Error(`Failed to upload admin's log: ${adminUploadError.message}`);
+      }
+
+      const adminStorageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/jump-logs/${adminStoragePath}`;
+
+      // Create jump log for admin user
       adminJump = await prisma.jumpLog.create({
         data: {
           hash: originalHash,
-          rawLog: originalLogData,
+          storageUrl: adminStorageUrl,
+          storagePath: adminStoragePath,
+          fileSize: originalLogData.length,
+          mimeType: 'application/octet-stream',
           offsets: {},
           flags: { 
             source: 'test-seed',
@@ -174,11 +190,31 @@ async function main() {
     }
 
     if (!existingJohnJump) {
-      // Create jump log for John Smith (modified data with 1 second offset)
+      // Upload John's log to Supabase Storage
+      const johnStoragePath = `${johnSmith.id}/${device5.id}/${modifiedHash}.log`;
+      console.log(`Uploading John's log to: ${johnStoragePath}`);
+      
+      const { data: johnUpload, error: johnUploadError } = await supabase.storage
+        .from('jump-logs')
+        .upload(johnStoragePath, modifiedLogData, {
+          contentType: 'application/octet-stream',
+          upsert: true
+        });
+      
+      if (johnUploadError) {
+        throw new Error(`Failed to upload John's log: ${johnUploadError.message}`);
+      }
+
+      const johnStorageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/jump-logs/${johnStoragePath}`;
+
+      // Create jump log for John Smith
       johnJump = await prisma.jumpLog.create({
         data: {
           hash: modifiedHash,
-          rawLog: modifiedLogData,
+          storageUrl: johnStorageUrl,
+          storagePath: johnStoragePath,
+          fileSize: modifiedLogData.length,
+          mimeType: 'application/octet-stream',
           offsets: {},
           flags: { 
             source: 'test-seed',

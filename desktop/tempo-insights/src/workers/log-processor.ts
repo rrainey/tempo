@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import { LogParser } from '../lib/analysis/log-parser';
 import { EventDetector } from '../lib/analysis/event-detector';
@@ -7,6 +8,11 @@ import { EventDetector } from '../lib/analysis/event-detector';
 config({ path: '.env' });
 
 const prisma = new PrismaClient();
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
 // Configuration
 const PROCESS_INTERVAL = 30000; // 30 seconds between processing cycles
@@ -118,17 +124,33 @@ class LogProcessor {
     console.log(`[LOG PROCESSOR]   - Created: ${jumpLog.createdAt.toISOString()}`);
     console.log(`[LOG PROCESSOR]   - User: ${jumpLog.user.name || jumpLog.user.email}`);
     console.log(`[LOG PROCESSOR]   - Device: ${jumpLog.device.name}`);
-    console.log(`[LOG PROCESSOR]   - Size: ${jumpLog.rawLog.length} bytes`);
-    console.log('[LOG PROCESSOR]   - ' + jumpLog.rawLog.slice(0, 500).toString('utf-8'));
+    console.log(`[LOG PROCESSOR]   - Size: ${jumpLog.fileSize} bytes`);
     
     try {
-      // Task 66: Parse the log
-      const validation = LogParser.validateLog(jumpLog.rawLog);
+
+      // Download the log file from Supabase Storage
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('jump-logs')
+        .download(jumpLog.storagePath);
+      
+      if (downloadError) {
+        throw new Error(`Failed to download log: ${downloadError.message}`);
+      }
+      
+      // Convert blob to buffer
+      const logBuffer = Buffer.from(await fileData.arrayBuffer());
+      
+      // Verify size matches
+      if (logBuffer.length !== jumpLog.fileSize) {
+        throw new Error(`File size mismatch: expected ${jumpLog.fileSize}, got ${logBuffer.length}`);
+      }
+
+      const validation = LogParser.validateLog(logBuffer);
       if (!validation.isValid) {
         throw new Error(`Invalid log: ${validation.message}`);
       }
       
-      const parsedData = LogParser.parseLog(jumpLog.rawLog);
+      const parsedData = LogParser.parseLog(logBuffer);
       console.log(`[LOG PROCESSOR]   - Parsed: ${parsedData.altitude.length} altitude points`);
       console.log(`[LOG PROCESSOR]   - Duration: ${parsedData.duration}s`);
       console.log(`[LOG PROCESSOR]   - GPS: ${parsedData.hasGPS ? 'Yes' : 'No'}`);

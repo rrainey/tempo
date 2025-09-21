@@ -2,10 +2,17 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
+import { createClient } from '@supabase/supabase-js';
 import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';
 import { LogParser } from '../../../lib/analysis/log-parser';
 
 const prisma = new PrismaClient();
+
+// env vars are loaded during app initialization
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
 async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -87,26 +94,33 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
 
     // Parse the log to get time series data if available
     let timeSeries = null;
-    if (jump.rawLog) {
+    if (jump.storagePath) {
       try {
-        // Convert Uint8Array to Buffer
-        const buffer = Buffer.from(jump.rawLog);
-        const parsedData = LogParser.parseLog(buffer);
-        
-        // Extract time series for the chart
-        timeSeries = {
-          altitude: parsedData.altitude,
-          vspeed: parsedData.vspeed,
-          gps: parsedData.gps,
-          duration: parsedData.duration,
-          sampleRate: parsedData.sampleRate,
-          hasGPS: parsedData.hasGPS,
+        // For API parsing, download and parse
+        const { data: fileData, error } = await supabase.storage
+          .from('jump-logs')
+          .download(jump.storagePath);
+
+        if (!error && fileData) {
           
-          // Include event times from analysis
-          exitOffsetSec: jump.exitOffsetSec || undefined,
-          deploymentOffsetSec: jump.deploymentOffsetSec || undefined,
-          landingOffsetSec: jump.landingOffsetSec || undefined,
-        };
+          const buffer = Buffer.from(await fileData.arrayBuffer());
+          const parsedData = LogParser.parseLog(buffer);
+          
+          // Extract time series for the chart
+          timeSeries = {
+            altitude: parsedData.altitude,
+            vspeed: parsedData.vspeed,
+            gps: parsedData.gps,
+            duration: parsedData.duration,
+            sampleRate: parsedData.sampleRate,
+            hasGPS: parsedData.hasGPS,
+            
+            // Include event times from analysis
+            exitOffsetSec: jump.exitOffsetSec || undefined,
+            deploymentOffsetSec: jump.deploymentOffsetSec || undefined,
+            landingOffsetSec: jump.landingOffsetSec || undefined,
+          };
+        }
       } catch (error) {
         console.error('Failed to parse log for time series:', error);
       }
@@ -117,8 +131,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
       id: jump.id,
       hash: jump.hash,
       device: {
-        name: jump.device.name,
-        bluetoothId: jump.device.bluetoothId
+        name: jump.device.name
       },
       user: jump.user,
       createdAt: jump.createdAt.toISOString(),
@@ -150,6 +163,15 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+async function getLogDownloadUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('jump-logs')
+    .createSignedUrl(storagePath, 3600); // 1 hour expiry
+  
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 export default withAuth(handler);

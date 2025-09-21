@@ -103,11 +103,14 @@ model Device {
 model JumpLog {
   id          String   @id @default(cuid())
   hash        String   @unique
-  rawLog      Bytes
-  offsets     Json     // Store byte offsets for quick access to log sections
-  flags       Json     // Store extracted flags/metadata
+  storageUrl  String?  // Full URL to access the file
+  storagePath String?  // Path in Supabase Storage bucket
+  fileSize    Int      // Size in bytes
+  mimeType    String   @default("application/octet-stream")
+  offsets     Json
+  flags       Json
   visibleToConnections Boolean @default(true)
-  notes       String?  // Jumper's own notes
+  notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
