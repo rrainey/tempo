@@ -4,6 +4,12 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';
 import { LogParser } from '../../../lib/analysis/log-parser';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
 const prisma = new PrismaClient();
 
@@ -88,36 +94,44 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
         
         // Only include time series if user can see it
         if (isOwnData || (isParticipant && isJumpVisible)) {
-          if (participant.jumpLog.rawLog) {
+
+          if (participant.jumpLog.storagePath) {
             try {
-              // Convert Uint8Array to Buffer
-              const buffer = Buffer.from(participant.jumpLog.rawLog);
-              const parsedData = LogParser.parseLog(buffer);
+              // For API parsing, download and parse
+              const { data: fileData, error } = await supabase.storage
+                .from('jump-logs')
+                .download(participant.jumpLog.storagePath);
+      
+              if (!error && fileData) {
+                
+                const buffer = Buffer.from(await fileData.arrayBuffer());
+                const parsedData = LogParser.parseLog(buffer);
+                
+                // Convert KMLDataV1 entries to formation time series format
+                timeSeries = parsedData.logEntries.map(entry => ({
+                  timeOffset: entry.timeOffset,
+                  location: entry.location ? {
+                    lat_deg: entry.location.lat_deg,
+                    lon_deg: entry.location.lon_deg,
+                    alt_m: entry.location.alt_m
+                  } : null,
+                  baroAlt_m: entry.baroAlt_ft ? entry.baroAlt_ft / 3.28084 : null,
+                  groundtrack_degTrue: entry.groundtrack_degT !== null && entry.groundtrack_degT !== undefined ? entry.groundtrack_degT : undefined,
+                  groundspeed_mps: entry.groundspeed_kmph ? entry.groundspeed_kmph / 3.6 : null,
+                  rateOfDescent_mps: entry.rateOfDescent_fpm ? entry.rateOfDescent_fpm / 196.85 : null
+                }));
               
-              // Convert KMLDataV1 entries to formation time series format
-              timeSeries = parsedData.logEntries.map(entry => ({
-                timeOffset: entry.timeOffset,
-                location: entry.location ? {
-                  lat_deg: entry.location.lat_deg,
-                  lon_deg: entry.location.lon_deg,
-                  alt_m: entry.location.alt_m
-                } : null,
-                baroAlt_m: entry.baroAlt_ft ? entry.baroAlt_ft / 3.28084 : null,
-                groundtrack_degTrue: entry.groundtrack_degT !== null && entry.groundtrack_degT !== undefined ? entry.groundtrack_degT : undefined,
-                groundspeed_mps: entry.groundspeed_kmph ? entry.groundspeed_kmph / 3.6 : null,
-                rateOfDescent_mps: entry.rateOfDescent_fpm ? entry.rateOfDescent_fpm / 196.85 : null
-              }));
-              
-              jumpData = {
-                exitOffsetSec: participant.jumpLog.exitOffsetSec,
-                exitAltitudeFt: participant.jumpLog.exitAltitudeFt,
-                deploymentOffsetSec: participant.jumpLog.deploymentOffsetSec,
-                deployAltitudeFt: participant.jumpLog.deployAltitudeFt,
-                freefallTimeSec: participant.jumpLog.freefallTimeSec,
-                avgFallRateMph: participant.jumpLog.avgFallRateMph
-              };
+                jumpData = {
+                  exitOffsetSec: participant.jumpLog.exitOffsetSec,
+                  exitAltitudeFt: participant.jumpLog.exitAltitudeFt,
+                  deploymentOffsetSec: participant.jumpLog.deploymentOffsetSec,
+                  deployAltitudeFt: participant.jumpLog.deployAltitudeFt,
+                  freefallTimeSec: participant.jumpLog.freefallTimeSec,
+                  avgFallRateMph: participant.jumpLog.avgFallRateMph
+                };
+              }
             } catch (error) {
-              console.error(`Failed to parse log for participant ${participant.userId}:`, error);
+              console.error('Failed to parse log for time series:', error);
             }
           }
         }
