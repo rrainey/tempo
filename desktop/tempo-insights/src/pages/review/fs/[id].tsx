@@ -59,7 +59,7 @@ export default function FormationReviewPage() {
     try {
       const response = await fetch(`/api/formations/${id}`);
       const data = await response.json();
-      setFormation(data.formation);
+      setFormation(data);
 
       // Mock data for now
       if (id === 'test-formation') {

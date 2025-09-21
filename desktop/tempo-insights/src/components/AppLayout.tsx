@@ -126,12 +126,6 @@ export function AppLayout({ children }: AppLayoutProps) {
         {children}
       </AppShell.Main>
 
-      <AppShell.Aside p="md">
-        <Text fw={600} mb="md">Recent Activity</Text>
-        <Stack gap="xs">
-          <Text size="sm" c="dimmed">No recent activity</Text>
-        </Stack>
-      </AppShell.Aside>
     </AppShell>
   );
 }
