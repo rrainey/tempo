@@ -1,5 +1,7 @@
 // lib/analysis/log-parser.ts
 
+import { DropkickReader, KMLDataV1, GeodeticCoordinates } from './dropkick-reader';
+
 export interface TimeSeriesPoint {
   timestamp: number; // Seconds from log start
   value: number;
@@ -9,7 +11,7 @@ export interface GPSPoint {
   timestamp: number; // Seconds from log start
   latitude: number;
   longitude: number;
-  altitude: number; // Feet
+  altitude: number; // Feet (barometric preferred)
 }
 
 export interface ParsedLogData {
@@ -19,111 +21,162 @@ export interface ParsedLogData {
   sampleRate: number; // Hz
   
   // Time series data
-  altitude: TimeSeriesPoint[]; // Altitude in feet
+  altitude: TimeSeriesPoint[]; // Altitude in feet (barometric)
   vspeed: TimeSeriesPoint[]; // Vertical speed in fpm (feet per minute)
-  gps: GPSPoint[]; // GPS positions if available
+  gps: GPSPoint[]; // GPS positions with barometric altitude
+  
+  // Raw parsed entries from DropkickReader
+  logEntries: KMLDataV1[];
   
   // Flags
   hasGPS: boolean;
   hasValidData: boolean;
   errorMessage?: string;
+  
+  // Additional metadata from DropkickReader
+  logVersion?: number;
+  logString?: string;
+  dzSurfacePressureAltitude_m?: number;
+  dzSurfaceGPSAltitude_m?: number;
 }
 
 export class LogParser {
   /**
-   * Parse a raw jump log and extract time series data
+   * Parse a raw jump log using DropkickReader
    * @param rawLog - Raw log data as Buffer
    * @returns Parsed time series data
    */
   static parseLog(rawLog: Buffer): ParsedLogData {
-    // Mock implementation for now
-    // Real implementation would parse the actual log format
+    const reader = new DropkickReader();
     
-    const logString = rawLog.toString('utf-8');
-    const logSize = rawLog.length;
-    
-    console.log(`[PARSER] Parsing log of ${logSize} bytes`);
-    
-    // Generate mock data for testing
-    const startTime = new Date();
-    const duration = 180; // 3 minute jump
-    const sampleRate = 4; // 4 Hz
-    
-    // Generate altitude series (typical jump profile)
-    const altitude: TimeSeriesPoint[] = [];
-    const vspeed: TimeSeriesPoint[] = [];
-    
-    for (let t = 0; t <= duration; t += 1/sampleRate) {
-      let alt: number;
-      let vs: number;
+    try {
+      // Convert buffer to string and split into lines
+      const logString = rawLog.toString('utf-8');
+      const lines = logString.split(/\r?\n/);
       
-      if (t < 10) {
-        // Climb phase (in aircraft)
-        alt = 3000 + t * 100;
-        vs = 600; // 600 fpm climb
-      } else if (t < 20) {
-        // Level flight at altitude
-        alt = 14000;
-        vs = 0;
-      } else if (t < 25) {
-        // Exit and initial freefall
-        alt = 14000 - (t - 20) * 200 * 60; // Accelerating from 0
-        vs = -(t - 20) * 2000; // Building up speed
-      } else if (t < 80) {
-        // Stable freefall at ~120 mph (10,560 fpm)
-        alt = Math.max(3500, 14000 - (t - 20) * 176); // 176 fps = ~120 mph
-        vs = -10560; // 120 mph = 176 fps = 10,560 fpm
-      } else if (t < 85) {
-        // Deployment (deceleration)
-        alt = 3500 - (t - 80) * 50;
-        vs = -3000 + (t - 80) * 400; // Slowing down
-      } else {
-        // Canopy flight
-        alt = Math.max(0, 3000 - (t - 85) * 15); // ~900 fpm descent
-        vs = alt > 0 ? -900 : 0;
+      console.log(`[PARSER] Parsing log of ${rawLog.length} bytes (${lines.length} lines)`);
+      
+      // Feed each line to the reader
+      for (const line of lines) {
+        if (line.trim()) {
+          reader.onData(line);
+        }
       }
       
-      altitude.push({ timestamp: t, value: Math.round(alt) });
-      vspeed.push({ timestamp: t, value: Math.round(vs) });
-    }
-    
-    // Generate GPS data (if available)
-    const hasGPS = Math.random() > 0.3; // 70% chance of GPS
-    const gps: GPSPoint[] = [];
-    
-    if (hasGPS) {
-      // Mock GPS track around a drop zone
-      const baseLat = 28.1234; // Example: Florida DZ
-      const baseLon = -81.5678;
+      // Signal end of data
+      reader.onClose();
       
-      for (let t = 0; t <= duration; t += 1) { // GPS at 1 Hz
-        const altPoint = altitude.find(p => Math.abs(p.timestamp - t) < 0.1);
-        if (!altPoint) continue;
-        
-        // Simple circular pattern for jump run and landing pattern
-        const angle = (t / duration) * Math.PI * 2;
-        const radius = 0.01; // About 1km radius
-        
-        gps.push({
-          timestamp: t,
-          latitude: baseLat + Math.sin(angle) * radius,
-          longitude: baseLon + Math.cos(angle) * radius,
-          altitude: altPoint.value
-        });
+      // Extract data from reader
+      const logEntries = reader.logEntries;
+      
+      if (logEntries.length === 0) {
+        return {
+          startTime: new Date(),
+          duration: 0,
+          sampleRate: 0,
+          altitude: [],
+          vspeed: [],
+          gps: [],
+          logEntries: [],
+          hasGPS: false,
+          hasValidData: false,
+          errorMessage: 'No valid entries found in log'
+        };
       }
+      
+      // Determine start time and duration
+      const startTime = reader.startDate || logEntries[0]?.timestamp || new Date();
+      const endTime = reader.endDate || logEntries[logEntries.length - 1]?.timestamp || startTime;
+      const duration = (endTime.getTime() - startTime.getTime()) / 1000;
+      
+      // Calculate approximate sample rate
+      const sampleRate = logEntries.length > 1 ? logEntries.length / duration : 1;
+      
+      // Extract time series data
+      const altitude: TimeSeriesPoint[] = [];
+      const vspeed: TimeSeriesPoint[] = [];
+      const gps: GPSPoint[] = [];
+      
+      let hasGPS = false;
+      
+      for (const entry of logEntries) {
+        // Use barometric altitude for altitude time series
+        if (entry.baroAlt_ft !== null) {
+          altitude.push({
+            timestamp: entry.timeOffset,
+            value: entry.baroAlt_ft
+          });
+        }
+        
+        // Use rate of descent (converted to vertical speed)
+        if (entry.rateOfDescent_fpm !== null) {
+          vspeed.push({
+            timestamp: entry.timeOffset,
+            value: -entry.rateOfDescent_fpm // Convert RoD to vspeed (positive up)
+          });
+        }
+        
+        // GPS data - use GPS for lat/lon but barometric for altitude
+        if (entry.location !== null) {
+          hasGPS = true;
+          gps.push({
+            timestamp: entry.timeOffset,
+            latitude: entry.location.lat_deg,
+            longitude: entry.location.lon_deg,
+            altitude: entry.baroAlt_ft !== null ? entry.baroAlt_ft : 
+                     this.metersToFeet(entry.location.alt_m) // Fallback to GPS altitude if no baro
+          });
+        }
+      }
+      
+      console.log(`[PARSER] Parsed successfully:`);
+      console.log(`  - Start: ${startTime.toISOString()}`);
+      console.log(`  - Duration: ${duration.toFixed(1)}s`);
+      console.log(`  - Entries: ${logEntries.length}`);
+      console.log(`  - Sample rate: ${sampleRate.toFixed(2)} Hz`);
+      console.log(`  - Altitude points: ${altitude.length}`);
+      console.log(`  - Vspeed points: ${vspeed.length}`);
+      console.log(`  - GPS points: ${gps.length}`);
+      console.log(`  - Log version: ${reader.logVersion} (${reader.logString})`);
+      
+      return {
+        startTime,
+        duration,
+        sampleRate,
+        altitude,
+        vspeed,
+        gps,
+        logEntries,
+        hasGPS,
+        hasValidData: true,
+        logVersion: reader.logVersion,
+        logString: reader.logString,
+        dzSurfacePressureAltitude_m: reader.dzSurfacePressureAltitude_m,
+        dzSurfaceGPSAltitude_m: reader.dzSurfaceGPSAltitude_m
+      };
+      
+    } catch (error) {
+      console.error('[PARSER] Error parsing log:', error);
+      return {
+        startTime: new Date(),
+        duration: 0,
+        sampleRate: 0,
+        altitude: [],
+        vspeed: [],
+        gps: [],
+        logEntries: [],
+        hasGPS: false,
+        hasValidData: false,
+        errorMessage: `Parse error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
     }
-    
-    return {
-      startTime,
-      duration,
-      sampleRate,
-      altitude,
-      vspeed,
-      gps,
-      hasGPS,
-      hasValidData: true,
-      errorMessage: undefined
-    };
+  }
+  
+  /**
+   * Convert meters to feet
+   */
+  private static metersToFeet(meters: number): number {
+    return meters * 3.28084;
   }
   
   /**
@@ -142,14 +195,73 @@ export class LogParser {
       return { isValid: false, message: 'Log file too large (>16MB)' };
     }
     
-    // Check for common log format markers (mock for now)
-    const header = rawLog.toString('utf-8', 0, Math.min(100, rawLog.length));
-    if (header.includes('MOCK_JUMP_DATA')) {
-      return { isValid: true };
+    // Check for NMEA-like content
+    const header = rawLog.toString('utf-8', 0, Math.min(1000, rawLog.length));
+    
+    // Look for common NMEA sentence markers that DropkickReader expects
+    const hasNMEA = header.includes('$') && (
+      header.includes('RMC') ||
+      header.includes('GGA') ||
+      header.includes('VTG') ||
+      header.includes('$P') // Proprietary sentences
+    );
+    
+    // Look for version info
+    const hasVersion = header.includes('$PVER') || header.includes('$P_VER');
+    
+    if (!hasNMEA) {
+      return { isValid: false, message: 'No NMEA sentences found' };
     }
     
-    // For real logs, we would check for specific format headers
-    // For now, accept anything that's not obviously wrong
     return { isValid: true };
+  }
+  
+  /**
+   * Extract key information from parsed data for analysis
+   */
+  static extractAnalysisData(parsedData: ParsedLogData): {
+    hasBarometricData: boolean;
+    hasGPSData: boolean;
+    maxAltitude?: number;
+    minAltitude?: number;
+    maxVSpeed?: number;
+    minVSpeed?: number;
+    exitLocation?: GeodeticCoordinates;
+    landingLocation?: GeodeticCoordinates;
+  } {
+    const result: any = {
+      hasBarometricData: parsedData.altitude.length > 0,
+      hasGPSData: parsedData.hasGPS
+    };
+    
+    // Find altitude extremes
+    if (parsedData.altitude.length > 0) {
+      const altitudes = parsedData.altitude.map(p => p.value);
+      result.maxAltitude = Math.max(...altitudes);
+      result.minAltitude = Math.min(...altitudes);
+    }
+    
+    // Find vspeed extremes
+    if (parsedData.vspeed.length > 0) {
+      const speeds = parsedData.vspeed.map(p => p.value);
+      result.maxVSpeed = Math.max(...speeds);
+      result.minVSpeed = Math.min(...speeds);
+    }
+    
+    // Extract exit and landing locations from raw entries
+    if (parsedData.logEntries.length > 0) {
+      const firstEntry = parsedData.logEntries[0];
+      const lastEntry = parsedData.logEntries[parsedData.logEntries.length - 1];
+      
+      if (firstEntry.location) {
+        result.exitLocation = firstEntry.location;
+      }
+      
+      if (lastEntry.location) {
+        result.landingLocation = lastEntry.location;
+      }
+    }
+    
+    return result;
   }
 }

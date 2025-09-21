@@ -1,110 +1,155 @@
-import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';
-import { NextApiResponse } from 'next';
+// pages/api/jumps/[id].ts
+
+import { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
+import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';
+import { LogParser } from '../../../lib/analysis/log-parser';
 
 const prisma = new PrismaClient();
 
-export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) => {
+async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { id } = req.query;
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
+  const { id } = req.query;
   if (typeof id !== 'string') {
     return res.status(400).json({ error: 'Invalid jump ID' });
   }
 
   try {
-    // Get the jump with all relations
+    // First, get the jump
     const jump = await prisma.jumpLog.findUnique({
       where: { id },
       include: {
         device: {
           select: {
-            name: true,
-            bluetoothId: true,
+            name: true
           },
-        },
-        user: {
+        },        user: {
           select: {
             id: true,
             name: true,
-            slug: true,
-          },
-        },
-      },
+            email: true,
+            slug: true
+          }
+        }
+      }
     });
 
     if (!jump) {
       return res.status(404).json({ error: 'Jump not found' });
     }
 
-    // Check if user is authorized to view this jump
-    const isOwner = jump.userId === req.user!.id;
-
-    if (!isOwner) {
-      // Check if jumps are visible to connections
-      if (!jump.visibleToConnections) {
-        return res.status(403).json({ error: 'This jump is private' });
-      }
-
-      // TODO: In Phase 15, we'll add connection checks here
-      // For now, allow viewing if visibleToConnections is true
-
-      // Check if they're in the same group
-      const sharedGroup = await prisma.group.findFirst({
+    const isOwner = jump.userId === req.user.id;
+    
+    // Check visibility permissions
+    if (!isOwner && !jump.visibleToConnections) {
+      return res.status(403).json({ error: 'This jump is private' });
+    }
+    
+    // If not owner but jump is visible to connections, check if they share a formation
+    if (!isOwner && jump.visibleToConnections) {
+      // Check if they've been in any formation together
+      const sharedFormation = await prisma.formationParticipant.findFirst({
         where: {
-          members: {
-            some: { userId: jump.userId },
-          },
-          AND: {
-            members: {
-              some: { userId: req.user!.id },
+          AND: [
+            {
+              formation: {
+                participants: {
+                  some: {
+                    userId: req.user.id
+                  }
+                }
+              }
             },
-          },
-        },
+            {
+              formation: {
+                participants: {
+                  some: {
+                    userId: jump.userId
+                  }
+                }
+              }
+            }
+          ]
+        }
       });
 
-      if (!sharedGroup) {
-        return res.status(403).json({ error: 'You must be connected to view this jump' });
+      if (!sharedFormation) {
+        return res.status(403).json({ error: 'You must have jumped together to view this jump' });
       }
     }
 
-    // Parse analysis data from offsets if available
-    const analysisData = jump.offsets as any || {};
+    // Parse the log to get time series data if available
+    let timeSeries = null;
+    if (jump.rawLog) {
+      try {
+        // Convert Uint8Array to Buffer
+        const buffer = Buffer.from(jump.rawLog);
+        const parsedData = LogParser.parseLog(buffer);
+        
+        // Extract time series for the chart
+        timeSeries = {
+          altitude: parsedData.altitude,
+          vspeed: parsedData.vspeed,
+          gps: parsedData.gps,
+          duration: parsedData.duration,
+          sampleRate: parsedData.sampleRate,
+          hasGPS: parsedData.hasGPS,
+          
+          // Include event times from analysis
+          exitOffsetSec: jump.exitOffsetSec || undefined,
+          deploymentOffsetSec: jump.deploymentOffsetSec || undefined,
+          landingOffsetSec: jump.landingOffsetSec || undefined,
+        };
+      } catch (error) {
+        console.error('Failed to parse log for time series:', error);
+      }
+    }
 
-    // Format response
-    const jumpDetails = {
+    // Construct response with analysis data
+    const jumpData = {
       id: jump.id,
       hash: jump.hash,
-      device: jump.device,
-      user: {
-        id: jump.user.id,
-        name: jump.user.name,
-        slug: jump.user.slug,
+      device: {
+        name: jump.device.name,
+        bluetoothId: jump.device.bluetoothId
       },
-      createdAt: jump.createdAt,
-      updatedAt: jump.updatedAt,
-      flags: jump.flags as any,
+      user: jump.user,
+      createdAt: jump.createdAt.toISOString(),
+      updatedAt: jump.updatedAt.toISOString(),
+      flags: jump.flags,
       visibleToConnections: jump.visibleToConnections,
       isOwner,
-      // Analysis fields (will be populated by analysis worker)
-      exitTimestamp: analysisData.exitTimestamp || null,
-      exitAltitude: analysisData.exitAltitude || null,
-      deploymentAltitude: analysisData.deploymentAltitude || null,
-      landingTimestamp: analysisData.landingTimestamp || null,
-      freefallTime: analysisData.freefallTime || null,
-      averageFallRate: analysisData.averageFallRate || null,
-      maxSpeed: analysisData.maxSpeed || null,
-      notes: jump.notes || null,
+      notes: jump.notes,
+      
+      // Analysis results
+      exitTimestamp: jump.exitTimestampUTC?.toISOString() || null,
+      exitAltitude: jump.exitAltitudeFt || null,
+      deploymentAltitude: jump.deployAltitudeFt || null,
+      landingTimestamp: jump.landingOffsetSec && jump.exitTimestampUTC 
+        ? new Date(jump.exitTimestampUTC.getTime() + (jump.landingOffsetSec * 1000)).toISOString()
+        : null,
+      freefallTime: jump.freefallTimeSec || null,
+      averageFallRate: jump.avgFallRateMph || null,
+      maxSpeed: null, // Could be calculated from time series
+      
+      // Include time series data
+      timeSeries
     };
 
-    return res.status(200).json({
-      jump: jumpDetails,
-    });
+    res.status(200).json({ jump: jumpData });
   } catch (error) {
-    console.error('Get jump detail error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('Error fetching jump:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    await prisma.$disconnect();
   }
-});
+}
+
+export default withAuth(handler);

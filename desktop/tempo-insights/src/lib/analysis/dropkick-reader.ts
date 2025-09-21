@@ -68,7 +68,6 @@ export interface KMLDisplayV1 extends KMLDataV1 {
 	H_B_ftAGL:  number | null
 
 	accelMag_mps2: number | null
-
 }
 
 const timeHackSentenceId: "_TH" = "_TH";
@@ -127,6 +126,29 @@ interface UBloxTextPacket extends PacketStub<typeof txtSentenceId> {
 	message: string;
 }
 
+const fixSentenceId: "_FIX" = "_FIX";
+
+interface FixPacket extends PacketStub<typeof fixSentenceId> {
+	timestamp_ms: number;
+	tod_utc: string;
+	lat_str: string;
+	lon_str: string;
+	altitude_m: number;
+	fixQuality_str: string;
+	hdop: number;
+	vdop: number;
+	x_str: string;
+	y_str: string;
+}
+
+const stateSentenceId: "_ST" = "_ST";
+
+interface StatePacket extends PacketStub<typeof stateSentenceId> {
+	timestamp_ms: number;
+	newState: string;
+}
+
+
 enum ReaderState {
 	START,			// Initial state, process version information
 	SEEKING_RMC,	// version info processed, look for first RMC record to establish date
@@ -136,7 +158,7 @@ enum ReaderState {
 }
 
 type CustomPackets = TimeHackPacket | EnvironmentPacket | IMUPacket | 
-	LogVersionPacket | UBloxTextPacket | IM2Packet | EnvironmentSurfacePacket;
+	LogVersionPacket | UBloxTextPacket | IM2Packet | EnvironmentSurfacePacket |	FixPacket | StatePacket;
 
 class CustomPacketFactory extends DefaultPacketFactory<CustomPackets> {
 
@@ -190,6 +212,28 @@ class CustomPacketFactory extends DefaultPacketFactory<CustomPackets> {
 					...initStubFields(stub, verSentenceId),
 					versionString: fields[1],
 					versionNumber: parseInt(fields[2], 10)
+				};
+			}
+			else if (stub.sentenceId === fixSentenceId) {
+				return {
+					...initStubFields(stub, fixSentenceId),
+					timestamp_ms: parseInt(fields[1], 10),
+					tod_utc: fields[2],
+					lat_str: fields[3],
+					lon_str: fields[4],
+					altitude_m: parseFloat(fields[5]),
+					fixQuality_str: fields[6],
+					hdop: parseFloat(fields[7]),
+					vdop: parseFloat(fields[8]),
+					x_str: fields[9],
+					y_str: fields[10]
+				};
+			}
+			else if (stub.sentenceId === stateSentenceId) {
+				return {
+					...initStubFields(stub, stateSentenceId),
+					timestamp_ms: parseInt(fields[1], 10),
+					newState: fields[2],
 				};
 			}
 		}
@@ -313,6 +357,12 @@ export class DropkickReader {
 
 	generateKML(name: string): string {
 		const kml = new KMLWriter();
+		if (!this.startDate) {
+			this.startDate = new Date();
+		}
+		if (!this.endDate) {
+			this.endDate = new Date();
+		}
 		return kml.generate(name, name, this.startDate, this.endDate, this.logEntries);
 	}
 
@@ -325,6 +375,8 @@ export class DropkickReader {
 		res = res.replace("$PIM2", "$P_IM2");
 		res = res.replace("$PVER", "$P_VER");
 		res = res.replace("$PSFC", "$P_SFC");
+		res = res.replace("$PFIX", "$P_FIX");
+		res = res.replace("$PST", "$P_ST");
 		// recalculate checksums; really we should be manually validating the existing checksum prior to doing the
 		// "replace" statements above ...
 		var lineEnd = res.lastIndexOf("*");
@@ -433,8 +485,12 @@ export class DropkickReader {
 						// use GGA to get GNSS (WGS-84) altitude; convert to MSL
 						var fullDateTime_ms: number = packet.time.getTime();
 						var timePortion_ms = fullDateTime_ms % (86400000);
-						const correctedTimestamp = new Date( this.currentCalendarDate.getTime() + timePortion_ms);
-						this.curEntry.timeOffset = (correctedTimestamp.getTime() - this.startDate.getTime()) / 1000.0;
+						let correctedTimestamp = new Date(fullDateTime_ms);
+						// TODO handle first entry more gracefully
+						if (this.currentCalendarDate !== undefined && this.startDate !== null && this.startDate !== undefined) {
+							correctedTimestamp = new Date( this.currentCalendarDate.getTime() + timePortion_ms);
+							this.curEntry.timeOffset = (correctedTimestamp.getTime() - this.startDate.getTime()) / 1000.0;
+						}
 						this.lastTimeOffset_sec = this.curEntry.timeOffset;
 						this.curEntry.timestamp = correctedTimestamp;
 						this.curEntry.location = {
@@ -472,7 +528,10 @@ export class DropkickReader {
 						this.altFilterSum += packet.estimatedAlt_ft; // Standard day - uncorrected for current conditions
 						this.altFilter.push( packet.estimatedAlt_ft );
 						if (this.altFilter.length > this.altFilterMax) {
-							this.altFilterSum -= this.altFilter.shift();
+							const shifted = this.altFilter.shift();
+							if (shifted !== undefined) {
+								this.altFilterSum -= shifted;
+							}
 						}
 						const baroAlt_ft = this.altFilterSum / this.altFilter.length;
 						this.curEntry.staticPressure_hPa = packet.pressure_hPa;
@@ -528,8 +587,14 @@ export class DropkickReader {
 		 * postprocessing
 		 */
 		this.state = ReaderState.END;
-		if (this.logEntries[this.logEntries.length-1].location) {
-			this.dzSurfaceGPSAltitude_m = this.logEntries[this.logEntries.length-1].location.alt_m;
+		if (this.logEntries && this.logEntries.length > 0) {
+			const lastLocation = this.logEntries[this.logEntries.length-1].location;
+			if (lastLocation) {
+				this.dzSurfaceGPSAltitude_m = lastLocation.alt_m;
+			}
+		}
+		else {
+			this.dzSurfaceGPSAltitude_m = 0;
 		}
 		this.dzSurfacePressureAltitude_m = FEETtoMETERS(this.envAltSeries_ft[this.envAltSeries_ft.length-1]);
 		/*

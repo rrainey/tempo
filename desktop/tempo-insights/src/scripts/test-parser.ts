@@ -1,7 +1,7 @@
 // Save as: src/scripts/test-parser.ts
 // Run with: tsx src/scripts/test-parser.ts
 
-import { LogParser } from '../lib/analysis/log-processor';
+import { LogParser } from '../lib/analysis/log-parser';
 function testLogParser() {
   console.log('=== Testing Log Parser ===\n');
   

@@ -5,6 +5,19 @@ import { Card, Text, Group, Stack, Badge, Divider, Skeleton, SimpleGrid, Paper, 
 import { IconClock, IconRuler, IconMapPin, IconParachute, IconCalendar, IconEye, IconEyeOff, IconMessage2Up } from '@tabler/icons-react';
 import { JumpAltitudeChart } from './JumpAltitudeChart';
 import { notifications } from '@mantine/notifications';
+import type { TimeSeriesPoint } from '../../lib/analysis/log-parser';
+
+interface JumpTimeSeries {
+  altitude: TimeSeriesPoint[];
+  vspeed: TimeSeriesPoint[];
+  gps: any[];
+  duration: number;
+  sampleRate: number;
+  hasGPS: boolean;
+  exitOffsetSec?: number;
+  deploymentOffsetSec?: number;
+  landingOffsetSec?: number;
+}
 
 interface JumpDetails {
   id: string;
@@ -33,6 +46,9 @@ interface JumpDetails {
   averageFallRate: number | null;
   maxSpeed: number | null;
   notes: string | null;
+  
+  // Time series data
+  timeSeries: JumpTimeSeries | null;
 }
 
 interface JumpDetailsPanelProps {
@@ -368,15 +384,15 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
             </Stack>
           </Card>
 
-          {/* Altitude Chart */}
-          {jump.exitTimestamp && (
+          {/* Altitude Chart with real data */}
+          {jump.timeSeries && jump.timeSeries.altitude.length > 0 && (
             <JumpAltitudeChart
-              jumpId={jump.id}
-              exitTime={20} // These would come from actual data
-              deployTime={75}
-              landingTime={180}
-              exitAltitude={jump.exitAltitude || undefined}
-              deployAltitude={jump.deploymentAltitude || undefined}
+              altitudeData={jump.timeSeries.altitude}
+              vspeedData={jump.timeSeries.vspeed}
+              exitOffsetSec={jump.timeSeries.exitOffsetSec}
+              deploymentOffsetSec={jump.timeSeries.deploymentOffsetSec}
+              landingOffsetSec={jump.timeSeries.landingOffsetSec}
+              showVSpeed={false}
             />
           )}
         </>

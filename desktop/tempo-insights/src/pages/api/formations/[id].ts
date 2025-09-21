@@ -1,55 +1,28 @@
 // pages/api/formations/[id].ts
-import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';
-import { NextApiResponse } from 'next';
+
+import { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
-import { z } from 'zod';
+import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';
+import { LogParser } from '../../../lib/analysis/log-parser';
 
 const prisma = new PrismaClient();
 
-// Mock time series data generator for testing
-// TODO: Replace with actual log parsing in Phase 11 completion
-function generateMockTimeSeries(userId: string, jumpLogId: string, index: number) {
-  const timeSeries = [];
-  const duration = 60; // 60 seconds of freefall
-  const sampleRate = 4; // 4Hz GPS
-  
-  // Starting positions offset by index for formation visualization
-  const startLat = 33.6320 + (index * 0.0001);
-  const startLon = -117.2510 + (index * 0.0001);
-  const startAlt = 4267; // 14000 ft in meters
-  
-  for (let t = 0; t < duration; t += 1/sampleRate) {
-    timeSeries.push({
-      timeOffset: t,
-      location: {
-        lat_deg: startLat + (Math.sin(t * 0.1) * 0.0002),
-        lon_deg: startLon + (Math.cos(t * 0.1) * 0.0002),
-        alt_m: startAlt - (t * 15), // ~50ft/s fall rate
-      },
-      baroAlt_ft: Math.round((startAlt - (t * 15)) * 3.28084),
-      groundspeed_kmph: 20 + Math.random() * 10,
-      groundtrack_degT: 180 + Math.sin(t * 0.05) * 30,
-      verticalSpeed_mps: -15 + Math.random() * 2,
-      normalizedFallRate_mph: 120 + Math.random() * 10,
-    });
-  }
-  
-  return timeSeries;
-}
-
-export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) => {
+async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { id } = req.query;
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
+  const { id } = req.query;
   if (typeof id !== 'string') {
     return res.status(400).json({ error: 'Invalid formation ID' });
   }
 
   try {
-    // Get the formation with all participants
+    // Fetch formation with participants and their jump logs
     const formation = await prisma.formationSkydive.findUnique({
       where: { id },
       include: {
@@ -60,117 +33,189 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
               select: {
                 id: true,
                 name: true,
-                slug: true,
-              },
+                email: true,
+                slug: true
+              }
             },
             jumpLog: {
-              select: {
-                id: true,
-                hash: true,
-                rawLog: false, // Don't include raw bytes here
-                offsets: true,
-                flags: true,
-                visibleToConnections: true,
-                exitTimestampUTC: true,
-                exitLatitude: true,
-                exitLongitude: true,
-                exitAltitudeFt: true,
-                freefallTimeSec: true,
-                avgFallRateMph: true,
-              },
-            },
+              include: {
+                device: true
+              }
+            }
           },
           orderBy: {
-            position: 'asc',
-          },
-        },
-      },
+            position: 'asc'
+          }
+        }
+      }
     });
 
     if (!formation) {
       return res.status(404).json({ error: 'Formation not found' });
     }
 
-    // Check if user is authorized to view this formation
-    const isParticipant = formation.participants.some(p => p.userId === req.user!.id);
+    // Check if user can view this formation
+    const participantIds = formation.participants.map(p => p.userId);
+    const isParticipant = participantIds.includes(req.user.id);
     
+    // Only participants can view private formations
     if (!isParticipant && !formation.isPublic) {
-      // Check if user is in a group with any participant
-      const participantIds = formation.participants.map(p => p.userId);
-      const sharedGroup = await prisma.group.findFirst({
-        where: {
-          members: {
-            some: { userId: req.user!.id },
-          },
-          AND: {
-            members: {
-              some: { 
-                userId: { in: participantIds },
-              },
-            },
-          },
-        },
-      });
+      return res.status(403).json({ error: 'Access denied - private formation' });
+    }
 
-      if (!sharedGroup && req.user!.role !== 'ADMIN' && req.user!.role !== 'SUPER_ADMIN') {
-        return res.status(403).json({ error: 'You are not authorized to view this formation' });
+    // Parse each participant's log to extract time series
+    const participantsWithData = await Promise.all(
+      formation.participants.map(async (participant) => {
+        // TODO: this could better be expressed as a type that we pass around the app
+        let timeSeries: {
+          timeOffset: number;
+          location: { lat_deg: number; lon_deg: number; alt_m: number } | null;
+          baroAlt_m: number | null;
+          groundtrack_degTrue: number | undefined;
+          groundspeed_mps: number | null;
+          rateOfDescent_mps: number | null;
+        }[] = [];
+        let jumpData = null;
+        let color = '#66ccff'; // Default color
+        
+        // Assign colors based on position
+        const colors = ['#ddff55', '#855bf0', '#66ccff', '#00ff88', '#ffaa00', '#ff3355'];
+        color = colors[(participant.position - 1) % colors.length];
+        
+        // Check if this participant's data is visible
+        const isOwnData = req.user ? participant.userId === req.user.id : false;
+        const isJumpVisible = participant.jumpLog.visibleToConnections;
+        
+        // Only include time series if user can see it
+        if (isOwnData || (isParticipant && isJumpVisible)) {
+          if (participant.jumpLog.rawLog) {
+            try {
+              // Convert Uint8Array to Buffer
+              const buffer = Buffer.from(participant.jumpLog.rawLog);
+              const parsedData = LogParser.parseLog(buffer);
+              
+              // Convert KMLDataV1 entries to formation time series format
+              timeSeries = parsedData.logEntries.map(entry => ({
+                timeOffset: entry.timeOffset,
+                location: entry.location ? {
+                  lat_deg: entry.location.lat_deg,
+                  lon_deg: entry.location.lon_deg,
+                  alt_m: entry.location.alt_m
+                } : null,
+                baroAlt_m: entry.baroAlt_ft ? entry.baroAlt_ft / 3.28084 : null,
+                groundtrack_degTrue: entry.groundtrack_degT !== null && entry.groundtrack_degT !== undefined ? entry.groundtrack_degT : undefined,
+                groundspeed_mps: entry.groundspeed_kmph ? entry.groundspeed_kmph / 3.6 : null,
+                rateOfDescent_mps: entry.rateOfDescent_fpm ? entry.rateOfDescent_fpm / 196.85 : null
+              }));
+              
+              jumpData = {
+                exitOffsetSec: participant.jumpLog.exitOffsetSec,
+                exitAltitudeFt: participant.jumpLog.exitAltitudeFt,
+                deploymentOffsetSec: participant.jumpLog.deploymentOffsetSec,
+                deployAltitudeFt: participant.jumpLog.deployAltitudeFt,
+                freefallTimeSec: participant.jumpLog.freefallTimeSec,
+                avgFallRateMph: participant.jumpLog.avgFallRateMph
+              };
+            } catch (error) {
+              console.error(`Failed to parse log for participant ${participant.userId}:`, error);
+            }
+          }
+        }
+
+        return {
+          userId: participant.userId,
+          name: participant.user.name || participant.user.email,
+          position: participant.position,
+          isBase: participant.position === 1, // Position 1 is base by convention
+          isVisible: isOwnData || (isParticipant && isJumpVisible),
+          color,
+          timeSeries,
+          jumpData
+        };
+      })
+    );
+
+    // Determine jump run track from first two participants with GPS data
+    let jumpRunTrack_degTrue = 0;
+    const participantsWithGPS = participantsWithData.filter(p => 
+      p.isVisible && p.timeSeries.some(ts => ts.location !== null)
+    );
+    
+    if (participantsWithGPS.length >= 2) {
+      // Find exit points for first two jumpers
+      const exitPoints = participantsWithGPS.slice(0, 2).map(p => {
+        const exitTime = p.jumpData?.exitOffsetSec || 0;
+        const exitEntry = p.timeSeries.find(ts => Math.abs(ts.timeOffset - exitTime) < 1);
+        return exitEntry?.location;
+      }).filter(loc => loc !== null);
+      
+      if (exitPoints.length === 2) {
+        // Calculate bearing between the two exit points
+        const lat1 = exitPoints[0]!.lat_deg * Math.PI / 180;
+        const lat2 = exitPoints[1]!.lat_deg * Math.PI / 180;
+        const dLon = (exitPoints[1]!.lon_deg - exitPoints[0]!.lon_deg) * Math.PI / 180;
+        
+        const y = Math.sin(dLon) * Math.cos(lat2);
+        const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+        
+        jumpRunTrack_degTrue = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
       }
     }
 
-    // Determine base jumper - for now, use participant at position 1
-    // TODO: Store baseJumperId in formation metadata
-    const baseParticipant = formation.participants.find(p => p.position === 1);
-    const baseJumperId = baseParticipant?.userId || formation.participants[0]?.userId;
+    // Use position 1 as base, or first visible participant
+    const baseParticipant = participantsWithData.find(p => p.position === 1 && p.isVisible);
+    const firstVisible = participantsWithData.find(p => p.isVisible);
+    let baseJumperId = baseParticipant?.userId || firstVisible?.userId || '';
 
-    // Calculate jump run track from base jumper's data
-    // TODO: Extract from actual log data
-    const jumpRunTrack_degTrue = 180; // Mock value
-
-    // Build participant data with time series
-    const participantsData = formation.participants.map((participant, index) => {
-      // Check visibility rules
-      const isOwnJump = participant.userId === req.user!.id;
-      const isVisible = isOwnJump || participant.jumpLog.visibleToConnections;
-      
-      // Generate mock time series for now
-      // TODO: Parse actual log data from rawLog bytes
-      const timeSeries = isVisible ? 
-        generateMockTimeSeries(participant.userId, participant.jumpLogId, index) : 
-        [];
-
-      // Assign colors for visualization
-      const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD', '#98D8C8'];
-      const color = colors[index % colors.length];
-
-      return {
-        userId: participant.userId,
-        jumpLogId: participant.jumpLogId,
-        name: participant.user.name || participant.user.slug,
-        color,
-        isBase: participant.userId === baseJumperId,
-        isVisible,
-        timeSeries,
+    // Get dropzone center if available, otherwise derive from first GPS point
+    let dzCenter = null;
+    if (formation.dropzone) {
+      dzCenter = {
+        lat_deg: formation.dropzone.latitude,
+        lon_deg: formation.dropzone.longitude,
+        alt_m: formation.dropzone.elevation
       };
-    });
+    } else {
+      // Fallback to first GPS point
+      const firstGPSPoint = participantsWithGPS[0]?.timeSeries.find(ts => ts.location);
+      if (firstGPSPoint?.location) {
+        dzCenter = {
+          lat_deg: firstGPSPoint.location.lat_deg,
+          lon_deg: firstGPSPoint.location.lon_deg,
+          alt_m: 436.5 // Default elevation
+        };
+      }
+    }
 
-    // Filter out participants with no visible data unless they're the requesting user
-    const visibleParticipants = participantsData.filter(p => 
-      p.isVisible || p.userId === req.user!.id
-    );
-
-    // Format response
     const formationData = {
       id: formation.id,
+      name: formation.name,
+      jumpTime: formation.jumpTime.toISOString(),
       startTime: formation.jumpTime,
+      altitude: formation.altitude,
+      notes: formation.notes,
+      isPublic: formation.isPublic,
       baseJumperId,
       jumpRunTrack_degTrue,
-      participants: visibleParticipants,
-      dzElevation_m: formation.dropzone?.elevation || null,
+      participants: participantsWithData,
+      dzElevation_m: formation.dropzone?.elevation || 436.5,
+      dzCenter,
+      dropzone: formation.dropzone ? {
+        id: formation.dropzone.id,
+        name: formation.dropzone.name,
+        slug: formation.dropzone.slug
+      } : null,
+      createdAt: formation.createdAt.toISOString(),
+      updatedAt: formation.updatedAt.toISOString()
     };
 
-    return res.status(200).json(formationData);
+    res.status(200).json(formationData);
   } catch (error) {
-    console.error('Get formation data error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('Error fetching formation:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    await prisma.$disconnect();
   }
-});
+}
+
+export default withAuth(handler);

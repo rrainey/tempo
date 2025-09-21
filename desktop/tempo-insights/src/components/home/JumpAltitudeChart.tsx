@@ -14,92 +14,80 @@ import {
   Dot,
   Label,
 } from 'recharts';
+import { TimeSeriesPoint } from '../../lib/analysis/log-parser';
 
 interface ChartDataPoint {
   time: number; // seconds from start
   altitude: number; // feet
+  vspeed?: number; // feet per minute
   event?: 'exit' | 'deploy' | 'landing';
 }
 
 interface JumpAltitudeChartProps {
-  jumpId: string;
-  exitTime?: number; // seconds from start
-  deployTime?: number;
-  landingTime?: number;
-  exitAltitude?: number;
-  deployAltitude?: number;
-}
-
-// Generate mock altitude data for visualization
-function generateMockAltitudeData(
-  exitTime: number = 20,
-  deployTime: number = 75,
-  landingTime: number = 180,
-  exitAlt: number = 14000,
-  deployAlt: number = 3500
-): ChartDataPoint[] {
-  const data: ChartDataPoint[] = [];
-  const sampleRate = 2; // Data points per second
-
-  for (let t = 0; t <= landingTime + 10; t += 1 / sampleRate) {
-    let altitude: number;
-    let event: 'exit' | 'deploy' | 'landing' | undefined;
-
-    if (t < exitTime - 10) {
-      // Climb phase
-      altitude = 3000 + (t / (exitTime - 10)) * (exitAlt - 3000);
-    } else if (t < exitTime) {
-      // Level flight
-      altitude = exitAlt;
-      if (Math.abs(t - exitTime) < 0.1) event = 'exit';
-    } else if (t < deployTime) {
-      // Freefall
-      const fallTime = t - exitTime;
-      const totalFallTime = deployTime - exitTime;
-      // Use a more realistic fall profile (accelerating then terminal velocity)
-      const normalizedTime = fallTime / totalFallTime;
-      const altitudeLost = (exitAlt - deployAlt) * normalizedTime;
-      altitude = exitAlt - altitudeLost;
-      if (Math.abs(t - deployTime) < 0.1) event = 'deploy';
-    } else if (t < landingTime) {
-      // Under canopy
-      const canopyTime = t - deployTime;
-      const totalCanopyTime = landingTime - deployTime;
-      altitude = deployAlt - (deployAlt * canopyTime / totalCanopyTime);
-      if (Math.abs(t - landingTime) < 0.1) event = 'landing';
-    } else {
-      // On ground
-      altitude = 0;
-    }
-
-    data.push({
-      time: Math.round(t * 10) / 10,
-      altitude: Math.round(altitude),
-      event,
-    });
-  }
-
-  return data;
+  altitudeData: TimeSeriesPoint[];
+  vspeedData?: TimeSeriesPoint[];
+  exitOffsetSec?: number;
+  deploymentOffsetSec?: number;
+  landingOffsetSec?: number;
+  showVSpeed?: boolean;
 }
 
 export function JumpAltitudeChart({
-  jumpId,
-  exitTime = 20,
-  deployTime = 75,
-  landingTime = 180,
-  exitAltitude = 14000,
-  deployAltitude = 3500,
+  altitudeData,
+  vspeedData,
+  exitOffsetSec,
+  deploymentOffsetSec,
+  landingOffsetSec,
+  showVSpeed = false
 }: JumpAltitudeChartProps) {
-  // Generate chart data
-  const chartData = useMemo(
-    () => generateMockAltitudeData(exitTime, deployTime, landingTime, exitAltitude, deployAltitude),
-    [exitTime, deployTime, landingTime, exitAltitude, deployAltitude]
-  );
-
-  // Find event points
-  const exitPoint = chartData.find(d => d.event === 'exit');
-  const deployPoint = chartData.find(d => d.event === 'deploy');
-  const landingPoint = chartData.find(d => d.event === 'landing');
+  
+  // Prepare chart data
+  const chartData = useMemo(() => {
+    // Create a map to merge altitude and vspeed data
+    const dataMap = new Map<number, ChartDataPoint>();
+    
+    // Add altitude data
+    altitudeData.forEach(point => {
+      dataMap.set(point.timestamp, {
+        time: point.timestamp,
+        altitude: point.value,
+        event: undefined
+      });
+    });
+    
+    // Add vspeed data if available
+    if (vspeedData && showVSpeed) {
+      vspeedData.forEach(point => {
+        const existing = dataMap.get(point.timestamp);
+        if (existing) {
+          existing.vspeed = point.value;
+        } else {
+          dataMap.set(point.timestamp, {
+            time: point.timestamp,
+            altitude: 0, // Will be interpolated
+            vspeed: point.value,
+            event: undefined
+          });
+        }
+      });
+    }
+    
+    // Convert to array and sort by time
+    const data = Array.from(dataMap.values()).sort((a, b) => a.time - b.time);
+    
+    // Mark events
+    data.forEach(point => {
+      if (exitOffsetSec && Math.abs(point.time - exitOffsetSec) < 0.5) {
+        point.event = 'exit';
+      } else if (deploymentOffsetSec && Math.abs(point.time - deploymentOffsetSec) < 0.5) {
+        point.event = 'deploy';
+      } else if (landingOffsetSec && Math.abs(point.time - landingOffsetSec) < 0.5) {
+        point.event = 'landing';
+      }
+    });
+    
+    return data;
+  }, [altitudeData, vspeedData, showVSpeed, exitOffsetSec, deploymentOffsetSec, landingOffsetSec]);
 
   // Custom dot for events
   const renderEventDot = (props: any) => {
@@ -116,22 +104,13 @@ export function JumpAltitudeChart({
           cx={cx}
           cy={cy}
           r={6}
-          fill={colors[payload.event as 'exit' | 'deploy' | 'landing']}
+          fill={colors[payload.event as keyof typeof colors]}
           stroke="#ffffff"
           strokeWidth={2}
         />
       );
     }
-    // Always return a valid SVG element (invisible dot for non-events)
-    return (
-      <circle
-        cx={cx}
-        cy={cy}
-        r={0}
-        fill="none"
-        stroke="none"
-      />
-    );
+    return null;
   };
 
   // Custom tooltip
@@ -141,11 +120,16 @@ export function JumpAltitudeChart({
       return (
         <Card p="xs" withBorder>
           <Text size="sm" fw={500}>
-            {Math.round(label)}s
+            {label.toFixed(1)}s
           </Text>
           <Text size="xs" c="dimmed">
             {data.altitude.toLocaleString()} ft
           </Text>
+          {data.vspeed !== undefined && (
+            <Text size="xs" c="dimmed">
+              {Math.round(data.vspeed)} fpm
+            </Text>
+          )}
           {data.event && (
             <Badge size="xs" mt={4} color={
               data.event === 'exit' ? 'green' :
@@ -161,14 +145,41 @@ export function JumpAltitudeChart({
     return null;
   };
 
+  if (chartData.length === 0) {
+    return (
+      <Card withBorder p="md">
+        <Text c="dimmed" ta="center">No altitude data available</Text>
+      </Card>
+    );
+  }
+
+  // Find min/max for Y axis
+  const minAlt = Math.min(...chartData.map(d => d.altitude));
+  const maxAlt = Math.max(...chartData.map(d => d.altitude));
+  const altRange = maxAlt - minAlt;
+  const yMin = Math.max(0, minAlt - altRange * 0.1);
+  const yMax = maxAlt + altRange * 0.1;
+
   return (
     <Card withBorder p="md">
       <Group justify="space-between" mb="md">
         <Text fw={500}>Altitude Profile</Text>
         <Group gap="xs">
-          <Badge size="xs" color="green">Exit</Badge>
-          <Badge size="xs" color="orange">Deploy</Badge>
-          <Badge size="xs" color="red">Landing</Badge>
+          <Badge size="xs" color="green" leftSection={<div style={{
+            width: 8, height: 8, borderRadius: '50%', backgroundColor: '#00ff88'
+          }} />}>
+            Exit
+          </Badge>
+          <Badge size="xs" color="orange" leftSection={<div style={{
+            width: 8, height: 8, borderRadius: '50%', backgroundColor: '#ffaa00'
+          }} />}>
+            Deploy
+          </Badge>
+          <Badge size="xs" color="red" leftSection={<div style={{
+            width: 8, height: 8, borderRadius: '50%', backgroundColor: '#ff3355'
+          }} />}>
+            Landing
+          </Badge>
         </Group>
       </Group>
 
@@ -177,53 +188,61 @@ export function JumpAltitudeChart({
           data={chartData}
           margin={{ top: 5, right: 20, left: 10, bottom: 40 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#004455" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#004455" opacity={0.5} />
           <XAxis
             dataKey="time"
-            stroke="#ffffff"
+            stroke="#c5c0c9"
             label={{
               value: 'Time (seconds)',
               position: 'insideBottom',
               offset: -10,
-              style: { fill: '#ffffff' },
+              style: { fill: '#c5c0c9' },
             }}
+            domain={['dataMin', 'dataMax']}
           />
           <YAxis
-            stroke="#ffffff"
+            stroke="#c5c0c9"
+            domain={[yMin, yMax]}
             label={{
               value: 'Altitude (ft)',
               angle: -90,
               position: 'insideLeft',
-              style: { fill: '#ffffff' },
+              style: { fill: '#c5c0c9' },
             }}
-            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+            tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
           />
           <Tooltip content={<CustomTooltip />} />
           
           {/* Event markers */}
-          {exitPoint && (
+          {exitOffsetSec && (
             <ReferenceLine
-              x={exitPoint.time}
+              x={exitOffsetSec}
               stroke="#00ff88"
-              strokeDasharray="3 3"
-              opacity={0.5}
-            />
+              strokeDasharray="5 5"
+              opacity={0.7}
+            >
+              <Label value="Exit" position="top" fill="#00ff88" />
+            </ReferenceLine>
           )}
-          {deployPoint && (
+          {deploymentOffsetSec && (
             <ReferenceLine
-              x={deployPoint.time}
+              x={deploymentOffsetSec}
               stroke="#ffaa00"
-              strokeDasharray="3 3"
-              opacity={0.5}
-            />
+              strokeDasharray="5 5"
+              opacity={0.7}
+            >
+              <Label value="Deploy" position="top" fill="#ffaa00" />
+            </ReferenceLine>
           )}
-          {landingPoint && (
+          {landingOffsetSec && (
             <ReferenceLine
-              x={landingPoint.time}
+              x={landingOffsetSec}
               stroke="#ff3355"
-              strokeDasharray="3 3"
-              opacity={0.5}
-            />
+              strokeDasharray="5 5"
+              opacity={0.7}
+            >
+              <Label value="Landing" position="bottom" fill="#ff3355" />
+            </ReferenceLine>
           )}
           
           <Line
@@ -231,8 +250,38 @@ export function JumpAltitudeChart({
             dataKey="altitude"
             stroke="#66ccff"
             strokeWidth={2}
-            dot={renderEventDot}
+            dot={false}
+            activeDot={{ r: 4 }}
           />
+          
+          {showVSpeed && (
+            <Line
+              yAxisId="vspeed"
+              type="monotone"
+              dataKey="vspeed"
+              stroke="#855bf0"
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              dot={false}
+            />
+          )}
+          
+          {/* Event dots */}
+          {chartData.filter(d => d.event).map((point, index) => (
+            <Dot
+              key={`event-${index}`}
+              cx={0}
+              cy={0}
+              r={6}
+              fill={
+                point.event === 'exit' ? '#00ff88' :
+                point.event === 'deploy' ? '#ffaa00' :
+                '#ff3355'
+              }
+              stroke="#ffffff"
+              strokeWidth={2}
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </Card>

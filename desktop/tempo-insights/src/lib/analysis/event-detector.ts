@@ -1,6 +1,7 @@
 // lib/analysis/event-detector.ts
 
 import { ParsedLogData, TimeSeriesPoint } from './log-parser';
+import { KMLDataV1, Vector3 } from './dropkick-reader';
 
 export interface JumpEvents {
   exitOffsetSec?: number;
@@ -11,6 +12,11 @@ export interface JumpEvents {
   exitAltitudeFt?: number;
   deployAltitudeFt?: number;
   maxDescentRateFpm?: number;
+  
+  // New fields from DropkickReader data
+  peakAcceleration?: number; // m/s²
+  exitLatitude?: number;
+  exitLongitude?: number;
 }
 
 export class EventDetector {
@@ -18,36 +24,43 @@ export class EventDetector {
    * Detect exit from aircraft
    * Exit is defined as first sustained descent >2000 fpm for ≥1 second
    */
-  static detectExit(data: ParsedLogData): { offsetSec?: number; altitudeFt?: number } {
-    const { vspeed, altitude, sampleRate } = data;
+  static detectExit(data: ParsedLogData): { offsetSec?: number; altitudeFt?: number; latitude?: number; longitude?: number } {
+    const { vspeed, logEntries } = data;
     
-    // Need at least 1 second of samples
-    const samplesPerSecond = Math.round(sampleRate);
-    const requiredSamples = samplesPerSecond;
-    
-    for (let i = 0; i < vspeed.length - requiredSamples; i++) {
-      // Check if all samples in the next second show descent > 2000 fpm
-      let allSamplesQualify = true;
+    // We can work directly with logEntries which have better time correlation
+    for (let i = 0; i < logEntries.length - 4; i++) { // Need at least 4 samples for ~1 second
+      const entry = logEntries[i];
       
-      for (let j = 0; j < requiredSamples; j++) {
-        if (vspeed[i + j].value > -2000) {
-          allSamplesQualify = false;
+      // Skip entries without rate of descent data
+      if (entry.rateOfDescent_fpm === null) continue;
+      
+      // Check if this and next few entries show descent > 2000 fpm
+      let sustainedDescent = true;
+      let endIndex = i;
+      
+      // Look ahead for 1 second worth of data
+      for (let j = i + 1; j < logEntries.length && j < i + 5; j++) {
+        const nextEntry = logEntries[j];
+        if (nextEntry.timeOffset - entry.timeOffset >= 1.0) {
+          endIndex = j;
+          break;
+        }
+        
+        if (nextEntry.rateOfDescent_fpm === null || nextEntry.rateOfDescent_fpm < 2000) {
+          sustainedDescent = false;
           break;
         }
       }
       
-      if (allSamplesQualify) {
+      if (sustainedDescent && endIndex > i) {
         // Found exit point
-        const exitTime = vspeed[i].timestamp;
-        
-        // Find corresponding altitude
-        const altPoint = altitude.find(p => Math.abs(p.timestamp - exitTime) < (1 / sampleRate));
-        
-        console.log(`[EVENT DETECTOR] Exit detected at ${exitTime.toFixed(1)}s, altitude ${altPoint?.value || 'unknown'}ft`);
+        console.log(`[EVENT DETECTOR] Exit detected at ${entry.timeOffset.toFixed(1)}s, altitude ${entry.baroAlt_ft || 'unknown'}ft`);
         
         return {
-          offsetSec: exitTime,
-          altitudeFt: altPoint?.value
+          offsetSec: entry.timeOffset,
+          altitudeFt: entry.baroAlt_ft || undefined,
+          latitude: entry.location?.lat_deg,
+          longitude: entry.location?.lon_deg
         };
       }
     }
@@ -57,54 +70,47 @@ export class EventDetector {
   }
   
   /**
-   * Detect deployment and activation
+   * Detect deployment using acceleration data from IMU
    * Deployment is 0.25g deceleration for 0.1s
-   * Activation is first RoD <2000 fpm after deployment
    */
   static detectDeployment(data: ParsedLogData): { 
     deploymentOffsetSec?: number; 
     activationOffsetSec?: number;
     deployAltitudeFt?: number;
   } {
-    const { vspeed, altitude, sampleRate } = data;
+    const { logEntries } = data;
     
-    // Calculate acceleration from vspeed changes
-    // 0.25g = 0.25 * 32.2 ft/s² = 8.05 ft/s² = 483 ft/min²
-    const gThreshold = 0.25 * 32.2 * 60; // Convert to ft/min² for fpm data
-    
-    // Samples needed for 0.1s
-    const samplesFor100ms = Math.max(1, Math.round(sampleRate * 0.1));
+    // 0.25g = 0.25 * 9.81 m/s² = 2.45 m/s²
+    const gThreshold = 0.25 * 9.81;
     
     let deploymentTime: number | undefined;
     let deploymentAlt: number | undefined;
+    let peakAccel = 0;
     
-    // Look for rapid deceleration (deployment)
-    for (let i = 1; i < vspeed.length - samplesFor100ms; i++) {
-      // Skip if we're not in freefall (need to be going fast first)
-      if (vspeed[i].value > -5000) continue;
+    // Look for rapid deceleration using IMU data
+    for (let i = 1; i < logEntries.length; i++) {
+      const entry = logEntries[i];
       
-      // Check deceleration over next 0.1s
-      let maxDecel = 0;
-      for (let j = 0; j < samplesFor100ms; j++) {
-        if (i + j + 1 >= vspeed.length) break;
-        
-        const v1 = vspeed[i + j].value;
-        const v2 = vspeed[i + j + 1].value;
-        const dt = vspeed[i + j + 1].timestamp - vspeed[i + j].timestamp;
-        
-        if (dt > 0) {
-          const decel = (v2 - v1) / (dt / 60); // Convert to per minute
-          maxDecel = Math.max(maxDecel, decel);
-        }
+      // Skip if no acceleration data or not in freefall
+      if (!entry.peakAccel_mps2 || entry.rateOfDescent_fpm === null || entry.rateOfDescent_fpm < 5000) {
+        continue;
       }
       
-      if (maxDecel > gThreshold) {
-        deploymentTime = vspeed[i].timestamp;
-        const altPoint = altitude.find(p => Math.abs(p.timestamp - deploymentTime!) < (1 / sampleRate));
-        deploymentAlt = altPoint?.value;
-        
-        console.log(`[EVENT DETECTOR] Deployment detected at ${deploymentTime.toFixed(1)}s, altitude ${deploymentAlt || 'unknown'}ft`);
-        break;
+      // Check acceleration magnitude
+      const accelMag = this.vectorMagnitude(entry.peakAccel_mps2);
+      
+      // Look for significant upward acceleration (deceleration in freefall)
+      // In freefall, we expect ~1g downward, so deployment shows as increased magnitude
+      if (accelMag > 9.81 + gThreshold) {
+        // Additional check: vertical component should show upward acceleration
+        if (entry.peakAccel_mps2.z > gThreshold) {
+          deploymentTime = entry.timeOffset;
+          deploymentAlt = entry.baroAlt_ft || undefined;
+          peakAccel = accelMag;
+          
+          console.log(`[EVENT DETECTOR] Deployment detected at ${deploymentTime.toFixed(1)}s, altitude ${deploymentAlt || 'unknown'}ft, peak ${accelMag.toFixed(2)} m/s²`);
+          break;
+        }
       }
     }
     
@@ -112,11 +118,12 @@ export class EventDetector {
     let activationTime: number | undefined;
     
     if (deploymentTime !== undefined) {
-      const deployIdx = vspeed.findIndex(p => p.timestamp >= deploymentTime);
+      const deployIdx = logEntries.findIndex(e => e.timeOffset >= deploymentTime);
       
-      for (let i = deployIdx; i < vspeed.length; i++) {
-        if (vspeed[i].value > -2000) {
-          activationTime = vspeed[i].timestamp;
+      for (let i = deployIdx; i < logEntries.length; i++) {
+        const entry = logEntries[i];
+        if (entry.rateOfDescent_fpm !== null && entry.rateOfDescent_fpm < 2000) {
+          activationTime = entry.timeOffset;
           console.log(`[EVENT DETECTOR] Activation detected at ${activationTime.toFixed(1)}s`);
           break;
         }
@@ -135,43 +142,58 @@ export class EventDetector {
    * Landing is RoD <100 fpm for 10s
    */
   static detectLanding(data: ParsedLogData): { offsetSec?: number } {
-    const { vspeed, altitude, sampleRate } = data;
+    const { logEntries } = data;
     
-    // Samples needed for 10 seconds
-    const samplesFor10s = Math.round(sampleRate * 10);
-    
-    for (let i = 0; i < vspeed.length - samplesFor10s; i++) {
-      // Check if we're on or near ground first
-      const currentAlt = altitude.find(p => Math.abs(p.timestamp - vspeed[i].timestamp) < (1 / sampleRate));
-      if (!currentAlt || currentAlt.value > 500) continue; // Must be below 500ft
+    // Find first sustained low descent rate
+    for (let i = 0; i < logEntries.length; i++) {
+      const entry = logEntries[i];
       
-      // Check if all samples in next 10s show low descent rate
-      let allSamplesQualify = true;
+      // Skip if no altitude data or too high
+      if (entry.baroAlt_ft === null || entry.baroAlt_ft > 500) continue;
       
-      for (let j = 0; j < samplesFor10s && i + j < vspeed.length; j++) {
-        if (Math.abs(vspeed[i + j].value) > 100) {
-          allSamplesQualify = false;
-          break;
-        }
-      }
-      
-      if (allSamplesQualify) {
-        const landingTime = vspeed[i].timestamp;
-        console.log(`[EVENT DETECTOR] Landing detected at ${landingTime.toFixed(1)}s`);
+      // Check if descent rate is low
+      if (entry.rateOfDescent_fpm !== null && Math.abs(entry.rateOfDescent_fpm) < 100) {
+        // Look ahead to see if it stays low for 10 seconds
+        let sustainedLowRate = true;
+        let duration = 0;
         
-        return { offsetSec: landingTime };
+        for (let j = i + 1; j < logEntries.length; j++) {
+          const nextEntry = logEntries[j];
+          duration = nextEntry.timeOffset - entry.timeOffset;
+          
+          if (duration >= 10) {
+            break; // Found 10 seconds of data
+          }
+          
+          if (nextEntry.rateOfDescent_fpm === null || Math.abs(nextEntry.rateOfDescent_fpm) > 100) {
+            sustainedLowRate = false;
+            break;
+          }
+        }
+        
+        if (sustainedLowRate && duration >= 10) {
+          console.log(`[EVENT DETECTOR] Landing detected at ${entry.timeOffset.toFixed(1)}s`);
+          return { offsetSec: entry.timeOffset };
+        }
       }
     }
     
-    // Alternative: Check if altitude reaches 0
-    const groundPoint = altitude.find(p => p.value <= 0);
-    if (groundPoint) {
-      console.log(`[EVENT DETECTOR] Landing detected at ${groundPoint.timestamp.toFixed(1)}s (altitude reached ground)`);
-      return { offsetSec: groundPoint.timestamp };
+    // Alternative: Check final entry if at low altitude
+    const lastEntry = logEntries[logEntries.length - 1];
+    if (lastEntry.baroAlt_ft !== null && lastEntry.baroAlt_ft < 50) {
+      console.log(`[EVENT DETECTOR] Landing detected at ${lastEntry.timeOffset.toFixed(1)}s (final altitude ${lastEntry.baroAlt_ft}ft)`);
+      return { offsetSec: lastEntry.timeOffset };
     }
     
     console.log('[EVENT DETECTOR] No landing detected');
     return {};
+  }
+  
+  /**
+   * Calculate magnitude of a 3D vector
+   */
+  private static vectorMagnitude(v: Vector3): number {
+    return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
   }
   
   /**
@@ -185,6 +207,8 @@ export class EventDetector {
     if (exit.offsetSec !== undefined) {
       events.exitOffsetSec = exit.offsetSec;
       events.exitAltitudeFt = exit.altitudeFt;
+      events.exitLatitude = exit.latitude;
+      events.exitLongitude = exit.longitude;
     }
     
     // Detect deployment
@@ -200,18 +224,30 @@ export class EventDetector {
       events.landingOffsetSec = landing.offsetSec;
     }
     
-    // Find max descent rate during freefall
+    // Find max descent rate and peak acceleration during freefall
     if (events.exitOffsetSec !== undefined && events.deploymentOffsetSec !== undefined) {
       let maxDescentRate = 0;
+      let peakAccel = 0;
       
-      for (const point of data.vspeed) {
-        if (point.timestamp >= events.exitOffsetSec && 
-            point.timestamp <= events.deploymentOffsetSec) {
-          maxDescentRate = Math.min(maxDescentRate, point.value);
+      for (const entry of data.logEntries) {
+        if (entry.timeOffset >= events.exitOffsetSec && 
+            entry.timeOffset <= events.deploymentOffsetSec) {
+          
+          // Track max descent rate
+          if (entry.rateOfDescent_fpm !== null) {
+            maxDescentRate = Math.max(maxDescentRate, entry.rateOfDescent_fpm);
+          }
+          
+          // Track peak acceleration
+          if (entry.peakAccel_mps2) {
+            const mag = this.vectorMagnitude(entry.peakAccel_mps2);
+            peakAccel = Math.max(peakAccel, mag);
+          }
         }
       }
       
-      events.maxDescentRateFpm = Math.abs(maxDescentRate);
+      events.maxDescentRateFpm = maxDescentRate;
+      events.peakAcceleration = peakAccel;
     }
     
     return events;
