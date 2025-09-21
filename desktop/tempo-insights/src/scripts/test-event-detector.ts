@@ -32,6 +32,12 @@ function testEventDetector() {
     }
     
     const parsedData = LogParser.parseLog(fileContent);
+
+    // Print source KML
+
+    if (false) {
+
+    console.log('   Source KML version:', JSON.stringify(parsedData.logEntries, null, 2));
     
     console.log('1. Parsed jump profile summary:');
     console.log(`   - Duration: ${parsedData.duration}s`);
@@ -39,6 +45,7 @@ function testEventDetector() {
     console.log(`   - Sample rate: ${parsedData.sampleRate} Hz`);
     console.log(`   - Has GPS: ${parsedData.hasGPS}`);
     console.log(`   - Start time: ${parsedData.startTime.toISOString()}\n`);
+    }
     
     // Test individual event detection
     console.log('2. Testing individual event detection:\n');

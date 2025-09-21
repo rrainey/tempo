@@ -106,7 +106,7 @@ export const plottableValuesFromSamples = (samples: KMLDataV1[], surfacePressure
 
             if (next.accel_mps2) {
                 next.accelMag_mps2 = Math.sqrt(next.accel_mps2.x * next.accel_mps2.x + 
-                    next.accel_mps2.y * next.accel_mps2.y + next.accel_mps2.z * next.accel_mps2.z) / 10.0
+                    next.accel_mps2.y * next.accel_mps2.y + next.accel_mps2.z * next.accel_mps2.z)
             }
 
             result.push( next )

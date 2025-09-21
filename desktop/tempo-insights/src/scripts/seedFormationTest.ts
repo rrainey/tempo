@@ -16,6 +16,108 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 );
 
+async function cleanupPreviousTestData() {
+  console.log('Cleaning up previous test data...');
+  
+  try {
+    // Find test jump logs
+    const testJumps = await prisma.jumpLog.findMany({
+      where: {
+        flags: {
+          path: ['source'],
+          equals: 'test-seed'
+        }
+      }
+    });
+    
+    if (testJumps.length > 0) {
+      console.log(`Found ${testJumps.length} test jump logs to clean up`);
+      
+      // Delete files from Supabase Storage
+      for (const jump of testJumps) {
+        if (jump.storagePath) {
+          console.log(`  - Deleting storage file: ${jump.storagePath}`);
+          const { error } = await supabase.storage
+            .from('jump-logs')
+            .remove([jump.storagePath]);
+          
+          if (error) {
+            console.warn(`    Failed to delete file: ${error.message}`);
+          }
+        }
+      }
+      
+      // Delete jump logs from database
+      const deleteResult = await prisma.jumpLog.deleteMany({
+        where: {
+          id: {
+            in: testJumps.map(j => j.id)
+          }
+        }
+      });
+      console.log(`  - Deleted ${deleteResult.count} jump logs from database`);
+      
+      // Also clean up any related device file index entries
+      const deviceIds = [...new Set(testJumps.map(j => j.deviceId))];
+      const fileIndexResult = await prisma.deviceFileIndex.deleteMany({
+        where: {
+          deviceId: {
+            in: deviceIds
+          },
+          fileName: {
+            startsWith: 'test-formation'
+          }
+        }
+      });
+      console.log(`  - Deleted ${fileIndexResult.count} device file index entries`);
+    }
+    
+    // Clean up any formations created from test data
+    const testFormations = await prisma.formationParticipant.findMany({
+      where: {
+        jumpLog: {
+          flags: {
+            path: ['source'],
+            equals: 'test-seed'
+          }
+        }
+      },
+      select: {
+        formationId: true
+      }
+    });
+    
+    if (testFormations.length > 0) {
+      const formationIds = [...new Set(testFormations.map(f => f.formationId))];
+      
+      // Delete formation participants
+      await prisma.formationParticipant.deleteMany({
+        where: {
+          formationId: {
+            in: formationIds
+          }
+        }
+      });
+      
+      // Delete formations
+      const formationResult = await prisma.formationSkydive.deleteMany({
+        where: {
+          id: {
+            in: formationIds
+          }
+        }
+      });
+      console.log(`  - Deleted ${formationResult.count} test formations`);
+    }
+    
+    console.log('Cleanup completed\n');
+    
+  } catch (error) {
+    console.error('Error during cleanup:', error);
+    // Continue with the test even if cleanup fails
+  }
+}
+
 // Simple log parser to modify GNSS timestamps
 function offsetLogTimestamps(logData: Buffer, offsetSeconds: number): Buffer {
   const logString = logData.toString('utf-8');
@@ -59,6 +161,9 @@ function offsetLogTimestamps(logData: Buffer, offsetSeconds: number): Buffer {
 }
 
 async function main() {
+
+  await cleanupPreviousTestData();
+
   console.log('Creating formation test data...');
 
   try {

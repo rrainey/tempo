@@ -2,6 +2,8 @@
 
 import { ParsedLogData, TimeSeriesPoint } from './log-parser';
 import { KMLDataV1, Vector3 } from './dropkick-reader';
+import { METERStoFEET } from './dropkick-tools';
+import { sqrt } from 'three/tsl';
 
 export interface JumpEvents {
   exitOffsetSec?: number;
@@ -31,28 +33,16 @@ export class EventDetector {
     for (let i = 0; i < logEntries.length - 4; i++) { // Need at least 4 samples for ~1 second
       const entry = logEntries[i];
       
-      // Skip entries without rate of descent data
-      if (entry.rateOfDescent_fpm === null) continue;
-      
-      // Check if this and next few entries show descent > 2000 fpm
-      let sustainedDescent = true;
-      let endIndex = i;
-      
-      // Look ahead for 1 second worth of data
-      for (let j = i + 1; j < logEntries.length && j < i + 5; j++) {
-        const nextEntry = logEntries[j];
-        if (nextEntry.timeOffset - entry.timeOffset >= 1.0) {
-          endIndex = j;
-          break;
-        }
-        
-        if (nextEntry.rateOfDescent_fpm === null || nextEntry.rateOfDescent_fpm < 2000) {
-          sustainedDescent = false;
-          break;
-        }
+      // Skip if no acceleration data or not in freefall
+      if (!entry.accel_mps2 || entry.rateOfDescent_fpm === null || entry.rateOfDescent_fpm < 5000) {
+        continue;
       }
+
+      let accelMag = Math.sqrt(entry.accel_mps2.x * entry.accel_mps2.x +
+                            entry.accel_mps2.y * entry.accel_mps2.y +
+                            entry.accel_mps2.z * entry.accel_mps2.z);
       
-      if (sustainedDescent && endIndex > i) {
+      if (accelMag < 9.81 * 0.8) {
         // Found exit point
         console.log(`[EVENT DETECTOR] Exit detected at ${entry.timeOffset.toFixed(1)}s, altitude ${entry.baroAlt_ft || 'unknown'}ft`);
         
@@ -80,8 +70,7 @@ export class EventDetector {
   } {
     const { logEntries } = data;
     
-    // 0.25g = 0.25 * 9.81 m/s² = 2.45 m/s²
-    const gThreshold = 0.25 * 9.81;
+    const gThreshold = 1.5 * 9.81;
     
     let deploymentTime: number | undefined;
     let deploymentAlt: number | undefined;
@@ -92,25 +81,26 @@ export class EventDetector {
       const entry = logEntries[i];
       
       // Skip if no acceleration data or not in freefall
-      if (!entry.peakAccel_mps2 || entry.rateOfDescent_fpm === null || entry.rateOfDescent_fpm < 5000) {
+      if (!entry.accel_mps2 || entry.rateOfDescent_fpm === null || entry.rateOfDescent_fpm < 5000) {
         continue;
       }
-      
-      // Check acceleration magnitude
-      const accelMag = this.vectorMagnitude(entry.peakAccel_mps2);
-      
-      // Look for significant upward acceleration (deceleration in freefall)
-      // In freefall, we expect ~1g downward, so deployment shows as increased magnitude
-      if (accelMag > 9.81 + gThreshold) {
-        // Additional check: vertical component should show upward acceleration
-        if (entry.peakAccel_mps2.z > gThreshold) {
+
+      let accelMag = Math.sqrt(entry.accel_mps2.x * entry.accel_mps2.x +
+                            entry.accel_mps2.y * entry.accel_mps2.y +
+                            entry.accel_mps2.z * entry.accel_mps2.z);
+
+      // Look for significant acceleration
+
+      const threshold_mps2 = 9.81 + gThreshold;
+
+      if (accelMag > threshold_mps2) {
+
           deploymentTime = entry.timeOffset;
           deploymentAlt = entry.baroAlt_ft || undefined;
           peakAccel = accelMag;
           
           console.log(`[EVENT DETECTOR] Deployment detected at ${deploymentTime.toFixed(1)}s, altitude ${deploymentAlt || 'unknown'}ft, peak ${accelMag.toFixed(2)} m/s²`);
           break;
-        }
       }
     }
     
@@ -141,50 +131,56 @@ export class EventDetector {
    * Detect landing
    * Landing is RoD <100 fpm for 10s
    */
-  static detectLanding(data: ParsedLogData): { offsetSec?: number } {
+  static detectLanding(data: ParsedLogData, deploymentOffset_sec: number  ): { offsetSec?: number } {
     const { logEntries } = data;
+
+    if (data.dzSurfacePressureAltitude_m === undefined) {
+        console.log('[EVENT DETECTOR] No DZ surface altitude available, cannot detect landing');
+        return {};
+    }
+
+    const dzSurfaceGPSAltitude_ft = METERStoFEET(data.dzSurfacePressureAltitude_m);
     
     // Find first sustained low descent rate
     for (let i = 0; i < logEntries.length; i++) {
       const entry = logEntries[i];
+
+      if (entry.timeOffset < deploymentOffset_sec) continue;
+
+      // Skip if no altitude data 
+      if (entry.baroAlt_ft === null ) continue;
+
+      const diff = Math.abs(entry.baroAlt_ft - dzSurfaceGPSAltitude_ft);
+
+      // probably too high to call that a landing
+      if (diff > 100) continue; 
       
-      // Skip if no altitude data or too high
-      if (entry.baroAlt_ft === null || entry.baroAlt_ft > 500) continue;
+      // Look ahead to see if it stays low for 10 seconds
+      let duration = 0;
       
-      // Check if descent rate is low
-      if (entry.rateOfDescent_fpm !== null && Math.abs(entry.rateOfDescent_fpm) < 100) {
-        // Look ahead to see if it stays low for 10 seconds
-        let sustainedLowRate = true;
-        let duration = 0;
-        
-        for (let j = i + 1; j < logEntries.length; j++) {
-          const nextEntry = logEntries[j];
-          duration = nextEntry.timeOffset - entry.timeOffset;
-          
-          if (duration >= 10) {
-            break; // Found 10 seconds of data
-          }
-          
-          if (nextEntry.rateOfDescent_fpm === null || Math.abs(nextEntry.rateOfDescent_fpm) > 100) {
-            sustainedLowRate = false;
-            break;
-          }
+      for (let j = i + 1; j < logEntries.length; j++) {
+        const nextEntry = logEntries[j];
+        duration = nextEntry.timeOffset - entry.timeOffset;
+
+        if (nextEntry.baroAlt_ft === null) continue;
+
+        const diff = Math.abs(nextEntry.baroAlt_ft - entry.baroAlt_ft);
+
+        //console.log(`[EVENT DETECTOR] Landing check at ${entry.timeOffset.toFixed(1)}s, altitude ${entry.baroAlt_ft}ft, diff ${diff.toFixed(1)}ft, duration ${duration.toFixed(1)}s`);  
+
+        if (diff > 20.0) {
+            continue; // too much altitude change to pass the test
         }
         
-        if (sustainedLowRate && duration >= 10) {
+        if (duration >= 20) {
           console.log(`[EVENT DETECTOR] Landing detected at ${entry.timeOffset.toFixed(1)}s`);
           return { offsetSec: entry.timeOffset };
         }
+        
       }
+
     }
-    
-    // Alternative: Check final entry if at low altitude
-    const lastEntry = logEntries[logEntries.length - 1];
-    if (lastEntry.baroAlt_ft !== null && lastEntry.baroAlt_ft < 50) {
-      console.log(`[EVENT DETECTOR] Landing detected at ${lastEntry.timeOffset.toFixed(1)}s (final altitude ${lastEntry.baroAlt_ft}ft)`);
-      return { offsetSec: lastEntry.timeOffset };
-    }
-    
+  
     console.log('[EVENT DETECTOR] No landing detected');
     return {};
   }
@@ -219,7 +215,7 @@ export class EventDetector {
     }
     
     // Detect landing
-    const landing = this.detectLanding(data);
+    const landing = this.detectLanding(data, events.deploymentOffsetSec || 30.0);
     if (landing.offsetSec !== undefined) {
       events.landingOffsetSec = landing.offsetSec;
     }

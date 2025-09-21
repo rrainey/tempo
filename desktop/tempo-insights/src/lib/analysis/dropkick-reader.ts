@@ -31,7 +31,7 @@ export interface KMLDataV1 {
 	baroAlt_ft: number | null,
 	staticPressure_hPa: number | null,
 	rateOfDescent_fpm: number | null,		// barometric
-	peakAccel_mps2: Vector3 | null,
+	peakAccel_mps2: Vector3 | null,			// peak acceleration sampled during the interval
 	accel_mps2: Vector3 | null,
 	rot_dps: Vector3 | null,
 }
@@ -204,7 +204,7 @@ class CustomPacketFactory extends DefaultPacketFactory<CustomPackets> {
 			else if (stub.sentenceId === envSurfaceElevationId) {
 				return {
 					...initStubFields(stub, envSurfaceElevationId),
-					elevation_ft: parseFloat(fields[2]),
+					elevation_ft: parseFloat(fields[1]),
 				};
 			}
 			else if (stub.sentenceId === verSentenceId) {
@@ -271,7 +271,10 @@ export class DropkickReader {
 		this.lastTimeHackTimestamp_ms = 0;
 		this.lastEnvAlt_ft = 0;
 		this.seq = 1;
-		this.maxAcc = this.acc = this.rot = this.zeroVector3();
+		// initialize vectors to zero
+		this.maxAcc = { x: 0, y: 0, z: 0 };
+		this.acc = { x: 0, y: 0, z: 0 };
+		this.rot = { x: 0, y: 0, z: 0 };
 		this.numImuSamples = 0;
 		this.maxAccMag_mps2 = 0;
 		this.altFilterMax = 8;
@@ -420,6 +423,10 @@ export class DropkickReader {
 						this.logString = packet.versionString;
 						this.state =  ReaderState.SEEKING_RMC;
 					}
+					else if (packet.sentenceId === envSurfaceElevationId) {
+						// Surface elevation (MSL) at the drop zone
+						this.dzSurfacePressureAltitude_m = FEETtoMETERS(packet.elevation_ft);
+					}
 					break;
 
 				case ReaderState.SEEKING_RMC:
@@ -434,9 +441,15 @@ export class DropkickReader {
 						//var timePortion = (myDate.getTime() - myDate.getTimezoneOffset() * 60 * 1000) % (3600 * 1000 * 24);
 						this.state =  ReaderState.NORMAL_1;
 						this.curEntry = this.cleanKMLEntry();
-						this.maxAcc = this.acc = this.rot = this.zeroVector3();
+						this.maxAcc = { x: 0, y: 0, z: 0 };
+						this.acc = { x: 0, y: 0, z: 0 };
+						this.rot = { x: 0, y: 0, z: 0 };
 						this.numImuSamples = 0;
 						this.maxAccMag_mps2 = 0;
+					}
+					else if (packet.sentenceId === envSurfaceElevationId) {
+						// Surface elevation (MSL) at the drop zone
+						this.dzSurfacePressureAltitude_m = FEETtoMETERS(packet.elevation_ft);
 					}
 					break;
 
@@ -461,7 +474,9 @@ export class DropkickReader {
 
 							this.logEntries.push( this.curEntry );
 
-							this.maxAcc = this.acc = this.rot = this.zeroVector3();
+							this.maxAcc = { x: 0, y: 0, z: 0 };
+							this.acc = { x: 0, y: 0, z: 0 };
+							this.rot = { x: 0, y: 0, z: 0 };
 							this.numImuSamples = 0;
 							this.maxAccMag_mps2 = 0;
 							this.curEntry = this.cleanKMLEntry();
@@ -524,7 +539,7 @@ export class DropkickReader {
 					}
 
 					else if (packet.sentenceId === envSentenceId) {
-						// Simple moving average filter for altitude (average of last 4 entries)
+						// Simple moving average filter for altitude (average of last N entries)
 						this.altFilterSum += packet.estimatedAlt_ft; // Standard day - uncorrected for current conditions
 						this.altFilter.push( packet.estimatedAlt_ft );
 						if (this.altFilter.length > this.altFilterMax) {
@@ -535,12 +550,13 @@ export class DropkickReader {
 						}
 						const baroAlt_ft = this.altFilterSum / this.altFilter.length;
 						this.curEntry.staticPressure_hPa = packet.pressure_hPa;
+						// Use filtered altitude for rate of descent calculation
 						if (this.lastEnvTimestamp_ms != 0.0) {
 							const interval_ms = packet.timestamp_ms - this.lastEnvTimestamp_ms;
-							this.curEntry.rateOfDescent_fpm = - (packet.estimatedAlt_ft - this.lastEnvAlt_ft) / interval_ms * 60000.0;
+							this.curEntry.rateOfDescent_fpm = - (baroAlt_ft - this.lastEnvAlt_ft) / interval_ms * 60000.0;
 						}
 						this.lastEnvTimestamp_ms = packet.timestamp_ms;
-						this.lastEnvAlt_ft = packet.estimatedAlt_ft;
+						this.lastEnvAlt_ft = baroAlt_ft;
 
 						// save (filtered) altitude samples as a time series (expressed as log start time offsets (sec)). 
 						// We will use this later generate interpolated values that will correspond to the time offsets appearing in
@@ -558,10 +574,7 @@ export class DropkickReader {
 						this.lastTimeHackTimestamp_ms = packet.timestamp_ms;
 						this.expectGGATimehack = false;
 					}
-		
-					//if (packet.sentenceId === "GSA") {
-					//	console.log("There are " + packet.satellites.length + " satellites in view.");
-					//}
+
 					break;
 
 				default:
@@ -587,6 +600,11 @@ export class DropkickReader {
 		 * postprocessing
 		 */
 		this.state = ReaderState.END;
+
+		/*
+
+		 * Obsolete now that we support $PSFC records
+
 		if (this.logEntries && this.logEntries.length > 0) {
 			const lastLocation = this.logEntries[this.logEntries.length-1].location;
 			if (lastLocation) {
@@ -596,7 +614,10 @@ export class DropkickReader {
 		else {
 			this.dzSurfaceGPSAltitude_m = 0;
 		}
+		
 		this.dzSurfacePressureAltitude_m = FEETtoMETERS(this.envAltSeries_ft[this.envAltSeries_ft.length-1]);
+		*/
+
 		/*
 		 * Generate interpolated estimates for altitude at each sample point using data from $PENV time series
 		 */
