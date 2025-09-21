@@ -57,10 +57,9 @@ export default function FormationReviewPage() {
 
   const loadFormationData = async () => {
     try {
-      // TODO: Implement formation API endpoint
-      // const response = await fetch(`/api/formations/${id}`);
-      // const data = await response.json();
-      // setFormation(data.formation);
+      const response = await fetch(`/api/formations/${id}`);
+      const data = await response.json();
+      setFormation(data.formation);
 
       // Mock data for now
       if (id === 'test-formation') {
