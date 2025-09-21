@@ -106,9 +106,20 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
                 
                 const buffer = Buffer.from(await fileData.arrayBuffer());
                 const parsedData = LogParser.parseLog(buffer);
+
+                const exitTime = participant.jumpLog.exitOffsetSec || 0;
+                const deploymentTime = participant.jumpLog.deploymentOffsetSec || 0;
+                const landingTime = participant.jumpLog.landingOffsetSec || deploymentTime + 180; // 3 min canopy default
+
+                // Filter to relevant time window: 15 seconds before exit through landing
+                const preExitBuffer = 15; // seconds before exit to include
+                const startTime = Math.max(0, exitTime - preExitBuffer);
+                const endTime = landingTime;
                 
                 // Convert KMLDataV1 entries to formation time series format
-                timeSeries = parsedData.logEntries.map(entry => ({
+                timeSeries = parsedData.logEntries
+                    .filter(entry => entry.timeOffset >= startTime && entry.timeOffset <= endTime)
+                    .map(entry => ({
                   timeOffset: entry.timeOffset,
                   location: entry.location ? {
                     lat_deg: entry.location.lat_deg,
@@ -126,6 +137,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
                   exitAltitudeFt: participant.jumpLog.exitAltitudeFt,
                   deploymentOffsetSec: participant.jumpLog.deploymentOffsetSec,
                   deployAltitudeFt: participant.jumpLog.deployAltitudeFt,
+                  landingOffsetSec: participant.jumpLog.landingOffsetSec,
                   freefallTimeSec: participant.jumpLog.freefallTimeSec,
                   avgFallRateMph: participant.jumpLog.avgFallRateMph
                 };

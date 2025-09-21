@@ -101,8 +101,22 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
   const trailLines = useRef<Map<string, THREE.Line>>(new Map());
   const frameRef = useRef<number | null>(null);
 
+  const calculateMinTime = () => {
+    const times = formation.participants.flatMap(p => 
+      p.timeSeries.map(ts => ts.timeOffset)
+    );
+    return times.length > 0 ? Math.min(...times) : 0;
+  };
+
+  const calculateMaxTime = () => {
+    const times = formation.participants.flatMap(p => 
+      p.timeSeries.map(ts => ts.timeOffset)
+    );
+    return times.length > 0 ? Math.max(...times) : 0;
+  };
+
   const [state, setState] = useState<FormationViewerState>({
-    currentTime: 0,
+    currentTime: calculateMinTime(), // Now we can use it
     isPlaying: false,
     playbackSpeed: 1,
     viewMode: 'godsEye',
@@ -112,6 +126,7 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
     showGrid: true,
     showAxes: true
   });
+
 
   // Grid helper ref for updates
   const gridRef = useRef<THREE.GridHelper>(null);
@@ -389,6 +404,14 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
         .forEach(child => sceneRef.current!.remove(child));
     }
   };
+
+  const getMinTime = useCallback(() => {
+    const times = formation.participants.flatMap(p => 
+      p.timeSeries.map(ts => ts.timeOffset)
+    );
+    return times.length > 0 ? Math.min(...times) : 0;
+  }, [formation]);
+
   // Update trails
   useEffect(() => {
     if (!sceneRef.current || !state.showTrails) {
@@ -445,6 +468,10 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
             sceneRef.current.add(line);
           }
           trailLines.current.set(participant.userId, line);
+        } else {
+          // Dispose old geometry to avoid buffer size issues
+          line.geometry.dispose();
+          line.geometry = new THREE.BufferGeometry();
         }
 
         // Update trail geometry
@@ -465,13 +492,18 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
       if (!lastTimestamp) lastTimestamp = timestamp;
       const deltaTime = (timestamp - lastTimestamp) / 1000;
 
+      // Use a callback to avoid setting state during render
       setState(prev => {
         const newTime = prev.currentTime + (deltaTime * prev.playbackSpeed);
-        if (newTime >= getMaxTime()) {
-          onTimeChange?.(getMaxTime());
-          return { ...prev, currentTime: getMaxTime(), isPlaying: false };
+        const maxTime = getMaxTime();
+        const minTime = getMinTime(); // Add this function
+        
+        if (newTime >= maxTime) {
+          // Schedule the onTimeChange call after render
+          setTimeout(() => onTimeChange?.(maxTime), 0);
+          return { ...prev, currentTime: maxTime, isPlaying: false };
         }
-        onTimeChange?.(newTime);
+        setTimeout(() => onTimeChange?.(newTime), 0);
         return { ...prev, currentTime: newTime };
       });
 
@@ -604,7 +636,7 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
         <Slider
           value={state.currentTime}
           onChange={handleTimeChange}
-          min={0}
+          min={getMinTime()}
           max={getMaxTime()}
           step={0.1}
           style={{ flex: 1 }}

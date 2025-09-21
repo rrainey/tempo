@@ -88,7 +88,7 @@ export const BaseInfoPanel: React.FC<BaseInfoPanelProps> = ({
           <Group justify="space-between">
             <Text size="sm" c="dimmed">Barometric:</Text>
             <Text size="sm" fw={500}>
-              {currentMetrics.baroAlt_ft.toFixed(0)} ft MSL
+              {currentMetrics.baroAlt_ft ? currentMetrics.baroAlt_ft.toFixed(0) : '---'} ft MSL
             </Text>
           </Group>
           
