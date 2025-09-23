@@ -44,6 +44,7 @@ model Dropzone {
 
   // Relations
   formations  FormationSkydive[]
+  homeDropzoneUsers User[]
 
   @@index([slug])
 }
@@ -55,10 +56,12 @@ model User {
   name      String
   slug      String   @unique
   role      UserRole @default(USER)
+  nextJumpNumber Int   @default(1)  // Track next jump number for this user
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   isProxy   Boolean  @default(false)
   proxyCreatorId String?
+  homeDropzoneId String?  // User's home dropzone
 
   // Relations
   ownedDevices Device[] @relation("DeviceOwner")
@@ -70,10 +73,12 @@ model User {
   invitationUsed UserInvitation? @relation("InvitationsUsed")
   proxyCreator User? @relation("ProxyCreator", fields: [proxyCreatorId], references: [id])
   createdProxies User[] @relation("ProxyCreator")
+  homeDropzone Dropzone? @relation(fields: [homeDropzoneId], references: [id])
 
   @@index([email])
   @@index([slug])
   @@index([proxyCreatorId])
+  @@index([homeDropzoneId])
 }
 
 model Device {
@@ -103,6 +108,7 @@ model Device {
 model JumpLog {
   id          String   @id @default(cuid())
   hash        String   @unique
+  jumpNumber  Int?     // The user's jump number for this jump
   storageUrl  String?  // Full URL to access the file
   storagePath String?  // Path in Supabase Storage bucket
   fileSize    Int      // Size in bytes
@@ -140,6 +146,7 @@ model JumpLog {
   @@index([userId])
   @@index([createdAt])
   @@index([initialAnalysisTimestamp])
+  @@index([jumpNumber])
 }
 
 model DeviceFileIndex {

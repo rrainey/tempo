@@ -286,6 +286,8 @@ export class DropkickReader {
 		this.lastTimeOffset_sec = 0;
 		this.dzSurfacePressureAltitude_m = NaN;
 		this.dzSurfaceGPSAltitude_m = NaN;
+		this.lastGNSSAltitude_m = NaN;
+		this.lastGNSSTimeOffset_sec = NaN;
 
 	}
 
@@ -328,6 +330,8 @@ export class DropkickReader {
 	expectGGATimehack: boolean;
 	dzSurfacePressureAltitude_m: number;	// Pressure Altitude @ DZ surface
 	dzSurfaceGPSAltitude_m: number;			// GNSS reported surface elevation (discounting carrying location)
+	lastGNSSAltitude_m: number;				// Saved GNSS altitude for use in estimating GPS-based surface elevation
+	lastGNSSTimeOffset_sec: number;
 
 	
 	// Experimental; not fully implemented
@@ -404,6 +408,11 @@ export class DropkickReader {
 		return res;
 	}
 
+	/*
+	 * We'll build a stream of position reports, each one triggered by a logged RMC record.
+	 * Intermediate record types (GGA, VTG, $PIMU, $PIM2, $PENV) will be used to add details.
+	 * This ends up being a simplified log, but captures the detail needed for graph rendering.
+	 */
 	onData(line: string): void {
 
 		let patched: string = this.appendChecksumIfMissing(line);
@@ -456,31 +465,7 @@ export class DropkickReader {
 				case ReaderState.NORMAL_1:
 				case ReaderState.NORMAL_2:
 					if (packet.sentenceId === "RMC" && packet.status === "valid") {
-						// Save last complete log entry if present
-						if (this.curEntry.timestamp) {
-							this.endDate = this.curEntry.timestamp;
-							this.curEntry.seq = this.seq++;
-							this.curEntry.accel_mps2 = { 
-								x: this.acc.x / this.numImuSamples,
-								y: this.acc.y / this.numImuSamples,
-								z: this.acc.z / this.numImuSamples
-							};
-							this.curEntry.rot_dps = { 
-								x: this.rot.x / this.numImuSamples,
-								y: this.rot.y / this.numImuSamples,
-								z: this.rot.z / this.numImuSamples
-							};
-							this.curEntry.peakAccel_mps2 = this.maxAcc;
-
-							this.logEntries.push( this.curEntry );
-
-							this.maxAcc = { x: 0, y: 0, z: 0 };
-							this.acc = { x: 0, y: 0, z: 0 };
-							this.rot = { x: 0, y: 0, z: 0 };
-							this.numImuSamples = 0;
-							this.maxAccMag_mps2 = 0;
-							this.curEntry = this.cleanKMLEntry();
-						}
+						
 						var fullDateTime_ms: number = packet.datetime.getTime();
 						var timePortion_ms = fullDateTime_ms % (86400000);
 						this.calendarDate = new Date(fullDateTime_ms - timePortion_ms);
@@ -511,10 +496,49 @@ export class DropkickReader {
 						this.curEntry.location = {
 							lat_deg: packet.latitude,
 							lon_deg: packet.longitude,
-							//alt_m: packet.altitudeMeters + egm96.meanSeaLevel(packet.latitude, packet.longitude) // convert from WGS-84 altitude to MSL
 							alt_m: packet.altitudeMeters // WGS-84
 						}
 						this.expectGGATimehack = true;
+
+						/*
+						 * Rate of descent derives from GNSS data.
+						 * It is proving to be far less noisy than barometric RoD
+						 */
+						if (!isNaN(this.lastGNSSAltitude_m) && !isNaN(this.lastGNSSTimeOffset_sec)) {
+							this.curEntry.rateOfDescent_fpm = - (packet.altitudeMeters - this.lastGNSSAltitude_m) /
+								(this.curEntry.timeOffset - this.lastGNSSTimeOffset_sec) * 196.850394; // m/s to fpm
+						}
+
+						if (!isNaN(packet.altitudeMeters)) {
+							this.lastGNSSAltitude_m = packet.altitudeMeters;
+							this.lastGNSSTimeOffset_sec = this.curEntry.timeOffset;
+						}
+
+						// Save last complete log entry if present
+						if (this.curEntry.timestamp) {
+							this.endDate = this.curEntry.timestamp;
+							this.curEntry.seq = this.seq++;
+							this.curEntry.accel_mps2 = { 
+								x: this.acc.x / this.numImuSamples,
+								y: this.acc.y / this.numImuSamples,
+								z: this.acc.z / this.numImuSamples
+							};
+							this.curEntry.rot_dps = { 
+								x: this.rot.x / this.numImuSamples,
+								y: this.rot.y / this.numImuSamples,
+								z: this.rot.z / this.numImuSamples
+							};
+							this.curEntry.peakAccel_mps2 = this.maxAcc;
+
+							this.logEntries.push( this.curEntry );
+
+							this.maxAcc = { x: 0, y: 0, z: 0 };
+							this.acc = { x: 0, y: 0, z: 0 };
+							this.rot = { x: 0, y: 0, z: 0 };
+							this.numImuSamples = 0;
+							this.maxAccMag_mps2 = 0;
+							this.curEntry = this.cleanKMLEntry();
+						}
 						//console.log("Got location via GGA packet:", correctedTimestamp, packet.time, packet.latitude, packet.longitude, packet.altitudeMeters, packet.fixType);
 					}
 
@@ -550,10 +574,11 @@ export class DropkickReader {
 						}
 						const baroAlt_ft = this.altFilterSum / this.altFilter.length;
 						this.curEntry.staticPressure_hPa = packet.pressure_hPa;
-						// Use filtered altitude for rate of descent calculation
-						if (this.lastEnvTimestamp_ms != 0.0) {
-							const interval_ms = packet.timestamp_ms - this.lastEnvTimestamp_ms;
-							this.curEntry.rateOfDescent_fpm = - (baroAlt_ft - this.lastEnvAlt_ft) / interval_ms * 60000.0;
+						// Use filtered altitude for rate of descent calculation (deprecated)
+						
+						if (false && this.lastEnvTimestamp_ms != 0.0) {
+							//const interval_ms = packet.timestamp_ms - this.lastEnvTimestamp_ms;
+							//this.curEntry.rateOfDescent_fpm = - (baroAlt_ft - this.lastEnvAlt_ft) / interval_ms * 60000.0;
 						}
 						this.lastEnvTimestamp_ms = packet.timestamp_ms;
 						this.lastEnvAlt_ft = baroAlt_ft;
@@ -564,6 +589,7 @@ export class DropkickReader {
 						this.envAltSeries_ft.push(baroAlt_ft);
 						this.envSampleTimeSeries_ft.push(this.lastTimeOffset_sec + 
 							(packet.timestamp_ms - this.lastTimeHackTimestamp_ms + this.timeHackSerialAdjustment_ms) / 1000.0);
+						
 					}
 
 					else if (packet.sentenceId == timeHackSentenceId && this.expectGGATimehack) {

@@ -238,10 +238,14 @@ export function projectFormationAtTime(
       const projected = nedDZToBaseExitFrame(nedPos, baseNEDPos, baseGroundTrack);
       
       // Calibrate fall rate
-      const normalizedFallRate_mph = calibrateFallRate(
-        data.verticalSpeed_mps,
-        data.baroAlt_ft
-      );
+
+      let normalizedFallRate_mph: number | undefined = undefined;
+      if (data.verticalSpeed_mps) {
+        normalizedFallRate_mph = calibrateFallRate(
+          data.verticalSpeed_mps,
+          data.baroAlt_ft
+        );
+      }
       
       return {
         userId: participant.userId,

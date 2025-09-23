@@ -114,6 +114,19 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
     );
     return times.length > 0 ? Math.max(...times) : 0;
   };
+  
+  useEffect(() => {
+    console.log('Formation data loaded:', formation);
+    formation.participants.forEach(p => {
+      console.log(`${p.name}:`, {
+        timeSeriesLength: p.timeSeries.length,
+        firstTime: p.timeSeries[0]?.timeOffset,
+        lastTime: p.timeSeries[p.timeSeries.length - 1]?.timeOffset,
+        //exitOffset: p.jumpData?.exitOffsetSec,
+        hasGPSData: p.timeSeries.some(ts => ts.location !== null)
+      });
+    });
+  }, [formation]);
 
   const [state, setState] = useState<FormationViewerState>({
     currentTime: calculateMinTime(), // Now we can use it
@@ -313,7 +326,11 @@ export const FormationViewer: React.FC<FormationViewerProps> = ({
         dzCenter
       );
 
+      console.log('Projected positions at time', state.currentTime, ':', positions);
+
       positions.forEach(pos => {
+        console.log(`Jumper ${pos.name} at:`, pos.position);
+
         let mesh = jumperMeshes.current.get(pos.userId);
 
         if (!mesh) {

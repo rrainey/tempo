@@ -284,147 +284,189 @@ class BluetoothScanner {
     }
   }
 
-private async processNewFile(dbDevice: any, deviceName: string, fileName: string): Promise<boolean> {
-  try {
-    console.log(`[BLUETOOTH SCANNER] Processing new file ${fileName} from ${deviceName}`);
-    
-    // Download the file using smpmgr
-    console.log(`[BLUETOOTH SCANNER] Downloading ${fileName}...`);
-    const fileContent = await bluetooth.downloadFile(deviceName, fileName);
-    
-    // Verify we got actual content
-    if (!fileContent || fileContent.length === 0) {
-      console.error(`[BLUETOOTH SCANNER] Downloaded file is empty`);
-      return false;
-    }
-    
-    // Compute SHA-256 hash of the file content
-    const hash = crypto.createHash('sha256').update(fileContent).digest('hex');
-    console.log(`[BLUETOOTH SCANNER] File hash: ${hash.substring(0, 16)}...`);
-    
-    // Check if we already have this jump log (by hash)
-    const existingJumpLog = await prisma.jumpLog.findUnique({
-      where: { hash },
-    });
-    
-    if (existingJumpLog) {
-      console.log(`[BLUETOOTH SCANNER] Jump log already exists with hash ${hash.substring(0, 16)}... (duplicate file)`);
-      console.log(`[BLUETOOTH SCANNER]   - Existing Jump ID: ${existingJumpLog.id}`);
-      console.log(`[BLUETOOTH SCANNER]   - Created: ${existingJumpLog.createdAt.toISOString()}`);
-      console.log(`[BLUETOOTH SCANNER]   - Device: ${existingJumpLog.deviceId}`);
+  private async processNewFile(dbDevice: any, deviceName: string, fileName: string): Promise<boolean> {
+    try {
+      console.log(`[BLUETOOTH SCANNER] Processing new file ${fileName} from ${deviceName}`);
       
-      // Still mark the file as processed to avoid re-downloading
-      try {
-        await prisma.deviceFileIndex.create({
-          data: {
-            deviceId: dbDevice.id,
-            fileName: fileName,
-          },
+      // Download the file using smpmgr
+      console.log(`[BLUETOOTH SCANNER] Downloading ${fileName}...`);
+      const fileContent = await bluetooth.downloadFile(deviceName, fileName);
+      
+      // Verify we got actual content
+      if (!fileContent || fileContent.length === 0) {
+        console.error(`[BLUETOOTH SCANNER] Downloaded file is empty`);
+        return false;
+      }
+      
+      // Compute SHA-256 hash of the file content
+      const hash = crypto.createHash('sha256').update(fileContent).digest('hex');
+      console.log(`[BLUETOOTH SCANNER] File hash: ${hash.substring(0, 16)}...`);
+      
+      // Check if we already have this jump log (by hash)
+      const existingJumpLog = await prisma.jumpLog.findUnique({
+        where: { hash },
+      });
+      
+      if (existingJumpLog) {
+        console.log(`[BLUETOOTH SCANNER] Jump log already exists with hash ${hash.substring(0, 16)}... (duplicate file)`);
+        console.log(`[BLUETOOTH SCANNER]   - Existing Jump ID: ${existingJumpLog.id}`);
+        console.log(`[BLUETOOTH SCANNER]   - Created: ${existingJumpLog.createdAt.toISOString()}`);
+        console.log(`[BLUETOOTH SCANNER]   - Device: ${existingJumpLog.deviceId}`);
+        
+        // Still mark the file as processed to avoid re-downloading
+        try {
+          await prisma.deviceFileIndex.create({
+            data: {
+              deviceId: dbDevice.id,
+              fileName: fileName,
+            },
+          });
+          console.log(`[BLUETOOTH SCANNER]   - Marked ${fileName} as processed for this device`);
+        } catch (indexError: any) {
+          if (indexError.code === 'P2002') {
+            console.log(`[BLUETOOTH SCANNER]   - File already marked as processed for this device`);
+          } else {
+            throw indexError;
+          }
+        }
+        
+        return true;
+      }
+      
+      // Determine the user ID for this jump log
+      let userId = dbDevice.ownerId;
+      
+      // If device is lent out, assign to the borrower
+      if (dbDevice.lentToId) {
+        userId = dbDevice.lentToId;
+        console.log(`[BLUETOOTH SCANNER] Device is lent out, assigning jump to borrower`);
+      }
+      
+      // Upload to Supabase Storage
+      const storagePath = `${userId}/${dbDevice.id}/${hash}.log`;
+      console.log(`[BLUETOOTH SCANNER] Uploading to Supabase Storage: ${storagePath}`);
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('jump-logs')
+        .upload(storagePath, fileContent, {
+          contentType: 'application/octet-stream',
+          upsert: false
         });
-        console.log(`[BLUETOOTH SCANNER]   - Marked ${fileName} as processed for this device`);
-      } catch (indexError: any) {
-        if (indexError.code === 'P2002') {
-          console.log(`[BLUETOOTH SCANNER]   - File already marked as processed for this device`);
-        } else {
-          throw indexError;
+      
+      if (uploadError) {
+        throw new Error(`Failed to upload to Supabase Storage: ${uploadError.message}`);
+      }
+      
+      console.log(`[BLUETOOTH SCANNER] Successfully uploaded to storage`);
+      
+      // Get the storage URL
+      const storageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/jump-logs/${storagePath}`;
+      
+      // Get user's current nextJumpNumber and increment it atomically
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          nextJumpNumber: { increment: 1 }
+        },
+        select: {
+          nextJumpNumber: true
+        }
+      });
+      
+      // The jump number for this log is the value BEFORE increment
+      const jumpNumber = user.nextJumpNumber - 1;
+      
+      // Create the jump log entry
+      const jumpLog = await prisma.jumpLog.create({
+        data: {
+          hash: hash,
+          jumpNumber: jumpNumber,
+          storageUrl: storageUrl,
+          storagePath: storagePath,
+          fileSize: fileContent.length,
+          mimeType: 'application/octet-stream',
+          deviceId: dbDevice.id,
+          userId: userId,
+          offsets: {}, // Will be populated by analysis worker
+          flags: {
+            originalFileName: fileName,
+            uploadedAt: new Date().toISOString()
+          },
+          visibleToConnections: true,
+          notes: null,
+        },
+      });
+      
+      console.log(`[BLUETOOTH SCANNER] Created JumpLog with ID ${jumpLog.id} for user ${userId}`);
+      console.log(`[BLUETOOTH SCANNER]   - Jump number: ${jumpNumber}`);
+      console.log(`[BLUETOOTH SCANNER]   - Storage path: ${storagePath}`);
+      console.log(`[BLUETOOTH SCANNER]   - File size: ${fileContent.length} bytes`);
+      
+      // Mark file as uploaded in database
+      await prisma.deviceFileIndex.create({
+        data: {
+          deviceId: dbDevice.id,
+          fileName: fileName,
+        },
+      });
+      
+      console.log(`[BLUETOOTH SCANNER] Successfully processed ${fileName}`);
+      
+      // Check if this was a one-jump loan and handle auto-return
+      if (dbDevice.lentToId && dbDevice.lendingDuration === 'one-jump') {
+        console.log(`[BLUETOOTH SCANNER] This device was lent for one jump - initiating auto-return`);
+        
+        try {
+          // Clear the lending fields to return device to owner
+          await prisma.device.update({
+            where: { id: dbDevice.id },
+            data: {
+              lentToId: null,
+              lendingDuration: null,
+              lendingStartedAt: null,
+            },
+          });
+          
+          console.log(`[BLUETOOTH SCANNER] Device ${dbDevice.name} automatically returned to owner`);
+          
+          // TODO: In future, we might also want to update the device's internal
+          // user assignment back to the owner via Bluetooth command
+          
+        } catch (returnError) {
+          console.error(`[BLUETOOTH SCANNER] Error auto-returning device:`, returnError);
+          // Continue - auto-return failure should not affect upload success
+        }
+      }
+      
+      // Try to delete the file from device after successful upload
+      if (process.env.AUTO_DELETE_AFTER_UPLOAD === 'true') {
+        try {
+          // Extract session path from fileName (e.g., "20250117/7BF3655C/flight.dat" -> "20250117/7BF3655C")
+          const sessionPath = fileName.substring(0, fileName.lastIndexOf('/'));
+          
+          console.log(`[BLUETOOTH SCANNER] Attempting to delete session ${sessionPath} from device...`);
+          const deleteSuccess = await bluetooth.deleteSession(deviceName, sessionPath);
+          
+          if (deleteSuccess) {
+            console.log(`[BLUETOOTH SCANNER] Successfully deleted session ${sessionPath} from device`);
+          } else {
+            console.warn(`[BLUETOOTH SCANNER] Failed to delete session ${sessionPath} from device`);
+          }
+        } catch (deleteError) {
+          console.error(`[BLUETOOTH SCANNER] Error deleting file from device:`, deleteError);
+          // Continue - deletion failure should not affect upload success
         }
       }
       
       return true;
+      
+    } catch (error) {
+      console.error(`[BLUETOOTH SCANNER] Error processing file ${fileName}:`, error);
+      
+      // Don't mark as processed if there was an error
+      return false;
     }
-    
-    // Determine the user ID for this jump log
-    let userId = dbDevice.ownerId;
-    
-    // If device is lent out, assign to the borrower
-    if (dbDevice.lentToId) {
-      userId = dbDevice.lentToId;
-      console.log(`[BLUETOOTH SCANNER] Device is lent out, assigning jump to borrower`);
-    }
-    
-    // Upload to Supabase Storage
-    const storagePath = `${userId}/${dbDevice.id}/${hash}.log`;
-    console.log(`[BLUETOOTH SCANNER] Uploading to Supabase Storage: ${storagePath}`);
-    
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('jump-logs')
-      .upload(storagePath, fileContent, {
-        contentType: 'application/octet-stream',
-        upsert: false
-      });
-    
-    if (uploadError) {
-      throw new Error(`Failed to upload to Supabase Storage: ${uploadError.message}`);
-    }
-    
-    console.log(`[BLUETOOTH SCANNER] Successfully uploaded to storage`);
-    
-    // Get the storage URL
-    const storageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/jump-logs/${storagePath}`;
-    
-    // Create the jump log entry (without rawLog field)
-    const jumpLog = await prisma.jumpLog.create({
-      data: {
-        hash: hash,
-        storageUrl: storageUrl,
-        storagePath: storagePath,
-        fileSize: fileContent.length,
-        mimeType: 'application/octet-stream',
-        deviceId: dbDevice.id,
-        userId: userId,
-        offsets: {}, // Will be populated by analysis worker
-        flags: {
-          originalFileName: fileName,
-          uploadedAt: new Date().toISOString()
-        },
-        visibleToConnections: true,
-        notes: null,
-      },
-    });
-    
-    console.log(`[BLUETOOTH SCANNER] Created JumpLog with ID ${jumpLog.id} for user ${userId}`);
-    console.log(`[BLUETOOTH SCANNER]   - Storage path: ${storagePath}`);
-    console.log(`[BLUETOOTH SCANNER]   - File size: ${fileContent.length} bytes`);
-    
-    // Mark file as uploaded in database
-    await prisma.deviceFileIndex.create({
-      data: {
-        deviceId: dbDevice.id,
-        fileName: fileName,
-      },
-    });
-    
-    console.log(`[BLUETOOTH SCANNER] Successfully processed ${fileName}`);
-    
-    // Try to delete the file from device after successful upload
-    if (process.env.AUTO_DELETE_AFTER_UPLOAD === 'true') {
-      try {
-        // Extract session path from fileName (e.g., "20250117/7BF3655C/flight.dat" -> "20250117/7BF3655C")
-        const sessionPath = fileName.substring(0, fileName.lastIndexOf('/'));
-        
-        console.log(`[BLUETOOTH SCANNER] Attempting to delete session ${sessionPath} from device...`);
-        const deleteSuccess = await bluetooth.deleteSession(deviceName, sessionPath);
-        
-        if (deleteSuccess) {
-          console.log(`[BLUETOOTH SCANNER] Successfully deleted session ${sessionPath} from device`);
-        } else {
-          console.warn(`[BLUETOOTH SCANNER] Failed to delete session ${sessionPath} from device`);
-        }
-      } catch (deleteError) {
-        console.error(`[BLUETOOTH SCANNER] Error deleting file from device:`, deleteError);
-        // Continue - deletion failure should not affect upload success
-      }
-    }
-    
-    return true;
-    
-  } catch (error) {
-    console.error(`[BLUETOOTH SCANNER] Error processing file ${fileName}:`, error);
-    
-    // Don't mark as processed if there was an error
-    return false;
   }
-}
 
   private async updateDeviceStatuses() {
     try {

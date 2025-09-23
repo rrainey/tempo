@@ -89,6 +89,21 @@ export function JumpAltitudeChart({
     return data;
   }, [altitudeData, vspeedData, showVSpeed, exitOffsetSec, deploymentOffsetSec, landingOffsetSec]);
 
+  // Calculate altitude at each event time for label positioning
+  const getAltitudeAtTime = (time: number): number => {
+    const point = chartData.find(d => Math.abs(d.time - time) < 1);
+    if (point) return point.altitude;
+    
+    // Interpolate if needed
+    const before = chartData.filter(d => d.time <= time).pop();
+    const after = chartData.find(d => d.time >= time);
+    if (before && after && before.time !== after.time) {
+      const ratio = (time - before.time) / (after.time - before.time);
+      return before.altitude + (after.altitude - before.altitude) * ratio;
+    }
+    return 0;
+  };
+
   // Custom dot for events
   const renderEventDot = (props: any) => {
     const { cx, cy, payload } = props;
@@ -107,6 +122,9 @@ export function JumpAltitudeChart({
           fill={colors[payload.event as keyof typeof colors]}
           stroke="#ffffff"
           strokeWidth={2}
+          style={{
+                color: "black",
+              }}
         />
       );
     }
@@ -118,15 +136,15 @@ export function JumpAltitudeChart({
     if (active && payload && payload[0]) {
       const data = payload[0].payload;
       return (
-        <Card p="xs" withBorder>
+        <Card p="s" withBorder>
           <Text size="sm" fw={500}>
             {label.toFixed(1)}s
           </Text>
-          <Text size="xs" c="dimmed">
-            {data.altitude.toLocaleString()} ft
+          <Text size="s" c="dimmed">
+            {data.altitude.toFixed(0).toLocaleString()} ft
           </Text>
           {data.vspeed !== undefined && (
-            <Text size="xs" c="dimmed">
+            <Text size="s" c="dimmed">
               {Math.round(data.vspeed)} fpm
             </Text>
           )}
@@ -134,8 +152,9 @@ export function JumpAltitudeChart({
             <Badge size="xs" mt={4} color={
               data.event === 'exit' ? 'green' :
               data.event === 'deploy' ? 'orange' :
-              'red'
-            }>
+              'red' } style={{
+                color: "black",
+              }}>
               {data.event.toUpperCase()}
             </Badge>
           )}
@@ -159,6 +178,21 @@ export function JumpAltitudeChart({
   const altRange = maxAlt - minAlt;
   const yMin = Math.max(0, minAlt - altRange * 0.1);
   const yMax = maxAlt + altRange * 0.1;
+
+  // Calculate label positions to avoid overlap
+  const eventAltitudes = {
+    exit: exitOffsetSec ? getAltitudeAtTime(exitOffsetSec) : 0,
+    deploy: deploymentOffsetSec ? getAltitudeAtTime(deploymentOffsetSec) : 0,
+    landing: landingOffsetSec ? getAltitudeAtTime(landingOffsetSec) : 0,
+  };
+
+  // Determine label positions (offset from lines to avoid overlap)
+  const labelOffsets = {
+    exit: eventAltitudes.exit > maxAlt * 0.8 ? -20 : 20,
+    deploy: Math.abs(eventAltitudes.deploy - eventAltitudes.exit) < altRange * 0.1 ? 
+      (eventAltitudes.deploy < eventAltitudes.exit ? -40 : 40) : 20,
+    landing: eventAltitudes.landing < minAlt + altRange * 0.2 ? 20 : -20,
+  };
 
   return (
     <Card withBorder p="md">
@@ -186,7 +220,7 @@ export function JumpAltitudeChart({
       <ResponsiveContainer width="100%" height={300}>
         <LineChart
           data={chartData}
-          margin={{ top: 5, right: 20, left: 10, bottom: 40 }}
+          margin={{ top: 35, right: 20, left: 10, bottom: 35 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#004455" opacity={0.5} />
           <XAxis
@@ -211,7 +245,10 @@ export function JumpAltitudeChart({
             }}
             tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip 
+            content={<CustomTooltip />}
+            cursor={false} // This removes the cursor/crosshair
+          />
           
           {/* Event markers */}
           {exitOffsetSec && (
@@ -221,7 +258,13 @@ export function JumpAltitudeChart({
               strokeDasharray="5 5"
               opacity={0.7}
             >
-              <Label value="Exit" position="top" fill="#00ff88" />
+              <Label 
+                value="Exit" 
+                position="top" 
+                fill="#00ff88"
+                offset={labelOffsets.exit}
+                style={{ textAnchor: 'middle' }}
+              />
             </ReferenceLine>
           )}
           {deploymentOffsetSec && (
@@ -231,7 +274,13 @@ export function JumpAltitudeChart({
               strokeDasharray="5 5"
               opacity={0.7}
             >
-              <Label value="Deploy" position="top" fill="#ffaa00" />
+              <Label 
+                value="Deploy" 
+                position={labelOffsets.deploy > 0 ? "top" : "bottom"}
+                fill="#ffaa00"
+                offset={Math.abs(labelOffsets.deploy)}
+                style={{ textAnchor: 'middle' }}
+              />
             </ReferenceLine>
           )}
           {landingOffsetSec && (
@@ -241,7 +290,13 @@ export function JumpAltitudeChart({
               strokeDasharray="5 5"
               opacity={0.7}
             >
-              <Label value="Landing" position="bottom" fill="#ff3355" />
+              <Label 
+                value="Landing" 
+                position={labelOffsets.landing > 0 ? "top" : "bottom"}
+                fill="#ff3355"
+                offset={Math.abs(labelOffsets.landing)}
+                style={{ textAnchor: 'middle' }}
+              />
             </ReferenceLine>
           )}
           

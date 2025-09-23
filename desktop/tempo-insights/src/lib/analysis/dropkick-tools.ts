@@ -67,7 +67,23 @@ export const plottableValuesFromSamples = (samples: KMLDataV1[], surfacePressure
     let result = new Array<KMLDisplayV1>();
     samples.forEach( (cur) => {
         if (lastSample && lastSample.location && cur.location && cur.groundspeed_kmph && cur.groundtrack_degT) {
-            let next: KMLDisplayV1 = {...cur};
+            let next: KMLDisplayV1 = {
+                ...cur,
+                GDot_mps: 0,
+                HDot_mps: 0,
+                XDot_kmph: 0,
+                XDot_mph: 0,
+                groundspeed_mph: 0,
+                HDot_fpm: 0,
+                gamma_deg: 0,
+                H_ftAGL: 0,
+                H_B_ftAGL: 0,
+                H_B_mAGL: 0,
+                TDLocation: null,
+                FlareTDLocation: null,
+                H_mAGL: 0,
+                accelMag_mps2: 0
+            };
             // we might have a quantization problem with 3D altitude report given 
             // the short time scale (4Hz) between GNSS reports (3D altitudes reported with 10cm resolution)
             next.HDot_mps = (cur.location.alt_m - lastSample.location.alt_m) / (cur.timeOffset - lastSample.timeOffset);
@@ -81,12 +97,19 @@ export const plottableValuesFromSamples = (samples: KMLDataV1[], surfacePressure
             const H_m = cur.location.alt_m - estimatedHAT_G_m;
             next.H_ftAGL = METERStoFEET(H_m);
 
-            next.H_B_ftAGL = next.baroAlt_ft - METERStoFEET(surfacePressureAlt_mMSL);
-            next.H_B_mAGL = FEETtoMETERS(next.H_B_ftAGL);
+            //
+            next.H_B_ftAGL = null;  // barometric altitude above ground level
+            next.H_B_mAGL = null;   // barometric altitude above ground level
+            // if we have barometric altitude, compute H_B_ftAGL and 
+            //
+            if (next.baroAlt_ft !== null) {
+                next.H_B_ftAGL = next.baroAlt_ft - METERStoFEET(surfacePressureAlt_mMSL);
+                next.H_B_mAGL = FEETtoMETERS(next.H_B_ftAGL);
+            }
 
             // Compute estimated touchdown point
 
-            if (H_m < 1000.0 && next.HDot_mps < 0.0 ) {
+            if (next.H_B_mAGL !== null &&H_m < 1000.0 && next.HDot_mps < 0.0 ) {
 
                 const TGo_sec = next.H_B_mAGL  / Math.abs(next.HDot_mps);           // no-flare time till touchdown
                 const G_m = next.GDot_mps * TGo_sec;

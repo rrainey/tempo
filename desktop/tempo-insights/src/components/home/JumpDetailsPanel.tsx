@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Text, Group, Stack, Badge, Divider, Skeleton, SimpleGrid, Paper, Title, Switch, Textarea, Button } from '@mantine/core';
 import { IconClock, IconRuler, IconMapPin, IconParachute, IconCalendar, IconEye, IconEyeOff, IconMessage2Up } from '@tabler/icons-react';
 import { JumpAltitudeChart } from './JumpAltitudeChart';
+import { VelocityBinChart } from './VelocityBinChart';
 import { notifications } from '@mantine/notifications';
 import type { TimeSeriesPoint } from '../../lib/analysis/log-parser';
 
@@ -19,9 +20,30 @@ interface JumpTimeSeries {
   landingOffsetSec?: number;
 }
 
+interface VelocityBinData {
+  fallRate_mph: number;
+  elapsed_sec: number;
+}
+
+interface VelocityBinResponse {
+  velocityBins: VelocityBinData[];
+  summary: {
+    totalAnalysisTime: number;
+    averageFallRate: number;
+    minFallRate: number | null;
+    maxFallRate: number | null;
+    analysisWindow: {
+      startOffset: number;
+      endOffset: number;
+      duration: number;
+    };
+  };
+}
+
 interface JumpDetails {
   id: string;
   hash: string;
+  jumpNumber: number | null;
   device: {
     name: string;
     bluetoothId: string;
@@ -63,12 +85,17 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  
+  // Velocity bin data
+  const [velocityBinData, setVelocityBinData] = useState<VelocityBinResponse | null>(null);
+  const [loadingVelocityBins, setLoadingVelocityBins] = useState(false);
 
   useEffect(() => {
     if (jumpId) {
       fetchJumpDetails(jumpId);
     } else {
       setJump(null);
+      setVelocityBinData(null);
     }
   }, [jumpId]);
 
@@ -84,11 +111,41 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
       
       const data = await response.json();
       setJump(data.jump);
+      setNotesValue(data.jump.notes || '');
+      
+      // Fetch velocity bins if analysis is complete
+      if (data.jump.exitTimestamp && data.jump.freefallTime) {
+        fetchVelocityBins(id);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load jump details');
       setJump(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchVelocityBins = async (id: string) => {
+    setLoadingVelocityBins(true);
+    
+    try {
+      const response = await fetch(`/api/jumps/${id}/velocity-bins`);
+      if (!response.ok) {
+        if (response.status === 400) {
+          // Analysis incomplete or missing data - this is expected for some jumps
+          console.log('Velocity bin analysis not available for this jump');
+          return;
+        }
+        throw new Error('Failed to fetch velocity bins');
+      }
+      
+      const data = await response.json();
+      setVelocityBinData(data);
+    } catch (err) {
+      console.error('Error fetching velocity bins:', err);
+      // Don't show error to user as this is optional data
+    } finally {
+      setLoadingVelocityBins(false);
     }
   };
 
@@ -234,7 +291,14 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
       <div>
         <Group justify="space-between" align="flex-start">
           <div>
-            <Title order={3}>Jump Summary</Title>
+            <Title order={3}>
+              Jump Summary
+              {jump.jumpNumber && (
+                <Text component="span" size="lg" c="dimmed" ml="xs">
+                  #{jump.jumpNumber}
+                </Text>
+              )}
+            </Title>
             <Group gap="xs" mt="xs">
               <IconCalendar size={16} />
               <Text size="sm" c="dimmed">{formatDate(jump.createdAt)}</Text>
@@ -393,6 +457,20 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
               deploymentOffsetSec={jump.timeSeries.deploymentOffsetSec}
               landingOffsetSec={jump.timeSeries.landingOffsetSec}
               showVSpeed={false}
+            />
+          )}
+
+          {/* Velocity Bin Chart */}
+          {loadingVelocityBins && (
+            <Card withBorder p="md">
+              <Skeleton height={300} />
+            </Card>
+          )}
+          
+          {velocityBinData && velocityBinData.velocityBins.length > 0 && (
+            <VelocityBinChart
+              data={velocityBinData.velocityBins}
+              summary={velocityBinData.summary}
             />
           )}
         </>
