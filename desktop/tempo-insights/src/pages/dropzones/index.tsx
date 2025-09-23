@@ -22,6 +22,7 @@ import { IconPlus, IconEdit, IconTrash, IconMapPin } from '@tabler/icons-react';
 import { AppLayout } from '../../components/AppLayout';
 import { AuthGuard } from '../../components/AuthGuard';
 import { useRouter } from 'next/router';
+import TimezoneSelect from 'react-timezone-select';
 
 interface Dropzone {
   id: string;
@@ -44,6 +45,7 @@ export default function DropzonesPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDropzone, setEditingDropzone] = useState<Dropzone | null>(null);
+  const [selectedTimezone, setSelectedTimezone] = useState<any>(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
   const form = useForm({
     initialValues: {
@@ -60,7 +62,6 @@ export default function DropzonesPage() {
       name: (value) => !value ? 'Name is required' : null,
       latitude: (value) => value < -90 || value > 90 ? 'Invalid latitude' : null,
       longitude: (value) => value < -180 || value > 180 ? 'Invalid longitude' : null,
-      timezone: (value) => !value ? 'Timezone is required' : null,
     }
   });
 
@@ -94,10 +95,32 @@ export default function DropzonesPage() {
       
       const method = editingDropzone ? 'PATCH' : 'POST';
       
+      // Extract timezone string from the selected timezone object
+      const timezoneValue = typeof selectedTimezone === 'string' 
+        ? selectedTimezone 
+        : selectedTimezone.value;
+      
+      // Validate timezone
+      if (!timezoneValue) {
+        notifications.show({
+          title: 'Error',
+          message: 'Please select a timezone',
+          color: 'red'
+        });
+        return;
+      }
+      
+      const requestBody = {
+        ...values,
+        timezone: timezoneValue
+      };
+      
+      console.log('Submitting dropzone:', requestBody);
+      
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values)
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -114,8 +137,10 @@ export default function DropzonesPage() {
       setModalOpen(false);
       form.reset();
       setEditingDropzone(null);
+      setSelectedTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
       loadDropzones();
     } catch (error) {
+      console.error('Error submitting dropzone:', error);
       notifications.show({
         title: 'Error',
         message: error instanceof Error ? error.message : 'Failed to save dropzone',
@@ -136,6 +161,7 @@ export default function DropzonesPage() {
       notes: '',
       isActive: dropzone.isActive
     });
+    setSelectedTimezone(dropzone.timezone);
     setModalOpen(true);
   };
 
@@ -185,6 +211,7 @@ export default function DropzonesPage() {
               onClick={() => {
                 form.reset();
                 setEditingDropzone(null);
+                setSelectedTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
                 setModalOpen(true);
               }}
             >
@@ -292,12 +319,44 @@ export default function DropzonesPage() {
                   required
                   {...form.getInputProps('elevation')}
                 />
-                <TextInput
-                  label="Timezone"
-                  required
-                  placeholder="e.g., America/Los_Angeles"
-                  {...form.getInputProps('timezone')}
-                />
+                <div>
+                  <Text size="sm" fw={500} mb={4}>Timezone *</Text>
+                  <TimezoneSelect
+                    value={selectedTimezone}
+                    onChange={setSelectedTimezone}
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        backgroundColor: '#11425d',
+                        borderColor: '#004455',
+                        minHeight: 36,
+                        '&:hover': {
+                          borderColor: '#0088ff'
+                        }
+                      }),
+                      menu: (base) => ({
+                        ...base,
+                        backgroundColor: '#11425d',
+                      }),
+                      option: (base, state) => ({
+                        ...base,
+                        backgroundColor: state.isFocused ? '#004455' : '#11425d',
+                        color: '#c5c0c9',
+                        '&:hover': {
+                          backgroundColor: '#004455'
+                        }
+                      }),
+                      singleValue: (base) => ({
+                        ...base,
+                        color: '#c5c0c9'
+                      }),
+                      input: (base) => ({
+                        ...base,
+                        color: '#c5c0c9'
+                      })
+                    }}
+                  />
+                </div>
                 <Textarea
                   label="Notes"
                   {...form.getInputProps('notes')}
