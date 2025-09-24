@@ -1,6 +1,6 @@
 // lib/analysis/log-parser.ts
 
-import { DropkickReader, KMLDataV1, GeodeticCoordinates } from './dropkick-reader';
+import { DropkickReader, KMLDataV1, GeodeticCoordinates, ReaderState } from './dropkick-reader';
 
 export interface TimeSeriesPoint {
   timestamp: number; // Seconds from log start
@@ -182,7 +182,15 @@ export class LogParser {
   /**
    * Validate if the raw log appears to be valid jump data
    */
-  static validateLog(rawLog: Buffer): { isValid: boolean; message?: string } {
+/**
+   * Validate if the raw log appears to be valid jump data
+   */
+  static validateLog(rawLog: Buffer): { 
+    isValid: boolean; 
+    message?: string; 
+    startDate?: Date;
+    startLocation?: GeodeticCoordinates;
+  } {
     if (!rawLog || rawLog.length === 0) {
       return { isValid: false, message: 'Empty log file' };
     }
@@ -195,25 +203,88 @@ export class LogParser {
       return { isValid: false, message: 'Log file too large (>16MB)' };
     }
     
-    // Check for NMEA-like content
-    const header = rawLog.toString('utf-8', 0, Math.min(1000, rawLog.length));
+    // Process only the first 5KB worth of complete lines
+    const sampleSize = Math.min(50 * 1024, rawLog.length);
+    const sampleBuffer = rawLog.subarray(0, sampleSize);
+    const sampleText = sampleBuffer.toString('utf-8');
     
-    // Look for common NMEA sentence markers that DropkickReader expects
-    const hasNMEA = header.includes('$') && (
-      header.includes('RMC') ||
-      header.includes('GGA') ||
-      header.includes('VTG') ||
-      header.includes('$P') // Proprietary sentences
-    );
-    
-    // Look for version info
-    const hasVersion = header.includes('$PVER') || header.includes('$P_VER');
-    
-    if (!hasNMEA) {
-      return { isValid: false, message: 'No NMEA sentences found' };
+    // Find the last complete line in our sample
+    const lastNewline = sampleText.lastIndexOf('\n');
+    if (lastNewline === -1) {
+      return { isValid: false, message: 'No complete lines found' };
     }
     
-    return { isValid: true };
+    // Get only complete lines
+    const completeText = sampleText.substring(0, lastNewline);
+    const lines = completeText.split(/\r?\n/).filter(line => line.trim());
+    
+    if (lines.length === 0) {
+      return { isValid: false, message: 'No valid lines found' };
+    }
+    
+    // Use DropkickReader to validate
+    const reader = new DropkickReader();
+    let hasValidData = false;
+    let errorCount = 0;
+    
+    try {
+      // Process lines until we have both startDate and startLocation
+      for (const line of lines) {
+        try {
+          reader.onData(line);
+          
+          // Check if we have what we need
+          if (reader.startDate && reader.logEntries.length > 0) {
+            const firstEntry = reader.logEntries[0];
+            if (reader.startLocation) {
+              // We have both date and location - validation successful
+              return {
+                isValid: true,
+                startDate: reader.startDate,
+                startLocation: reader.startLocation
+              };
+            }
+          }
+          
+          // Track that we're processing valid NMEA data
+          if (reader.state !== ReaderState.START) {
+            hasValidData = true;
+          }
+        } catch (lineError) {
+          errorCount++;
+          // Continue processing other lines
+        }
+      }
+      
+      // If we processed data but didn't get complete info
+      if (hasValidData) {
+        if (!reader.startDate) {
+          return { isValid: false, message: 'No valid RMC sentence found for date' };
+        }
+        if (!reader.startLocation) {
+          return { isValid: false, message: 'No valid position data found' };
+        }
+        // Have date but no location yet - still valid, just incomplete
+        return {
+          isValid: true,
+          startDate: reader.startDate,
+          message: 'Valid log but location data not yet found in sample'
+        };
+      }
+      
+      // Check if we at least found version info
+      if (reader.logVersion > 0) {
+        return { isValid: false, message: 'Found version info but no valid GPS data' };
+      }
+      
+      return { isValid: false, message: 'No valid NMEA sentences found' };
+      
+    } catch (error) {
+      return { 
+        isValid: false, 
+        message: `Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
   }
   
   /**

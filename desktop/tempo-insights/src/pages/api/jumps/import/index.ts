@@ -1,7 +1,8 @@
-// pages/api/jumps/import/index.ts
+// pages/api/jumps/import/index/.ts
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { withAuth, AuthenticatedRequest } from '../../../../lib/auth/middleware';
+import { LogParser } from '../../../../lib/analysis/log-parser';
 import formidable from 'formidable';
 import { createReadStream } from 'fs';
 import crypto from 'crypto';
@@ -63,6 +64,15 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
       stream.on('end', () => resolve(Buffer.concat(chunks)));
     });
 
+    // Validate the log file structure
+    const validation = LogParser.validateLog(fileBuffer);
+    
+    if (!validation.isValid) {
+      return res.status(400).json({ 
+        error: `Invalid log file: ${validation.message}` 
+      });
+    }
+    
     // Compute hash
     const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
     console.log(`[IMPORT] File hash: ${hash.substring(0, 16)}...`);
@@ -120,6 +130,9 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
         fileName: originalFileName,
         fileSize: fileBuffer.length,
         suggestedJumpNumber: user?.nextJumpNumber || 1,
+        // Include validation data if available
+        startDate: validation.startDate?.toISOString() || null,
+        startLocation: validation.startLocation || null,
       },
     });
 

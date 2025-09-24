@@ -149,7 +149,7 @@ interface StatePacket extends PacketStub<typeof stateSentenceId> {
 }
 
 
-enum ReaderState {
+export enum ReaderState {
 	START,			// Initial state, process version information
 	SEEKING_RMC,	// version info processed, look for first RMC record to establish date
 	NORMAL_1,       // Date known, process GNSS records, average PIMU values, record changes in baro altitude
@@ -441,7 +441,7 @@ export class DropkickReader {
 				case ReaderState.SEEKING_RMC:
 					if (packet.sentenceId === "RMC" && packet.status === "valid") {
 						// use RMC for track, speed, and date (not time)
-						// console.log("Got location via RMC packet:", packet.datetime, packet.latitude, packet.longitude, packet.trackTrue, packet.speedKnots);
+						console.log("Got location via RMC packet:", packet.datetime, packet.latitude, packet.longitude, packet.trackTrue, packet.speedKnots);
 						var fullDateTime_ms: number = packet.datetime.getTime();
 						var timePortion_ms = fullDateTime_ms % (86400000);
 						this.calendarDate = new Date(fullDateTime_ms - timePortion_ms);
@@ -497,6 +497,9 @@ export class DropkickReader {
 							lat_deg: packet.latitude,
 							lon_deg: packet.longitude,
 							alt_m: packet.altitudeMeters // WGS-84
+						}
+						if (this.startLocation === null) {
+							this.startLocation = this.curEntry.location;
 						}
 						this.expectGGATimehack = true;
 

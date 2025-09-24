@@ -25,7 +25,9 @@ import {
   IconCheck,
   IconAlertCircle,
   IconHash,
+  IconCalendar,
   IconFileDescription,
+  IconMapPin,
 } from '@tabler/icons-react';
 
 interface ImportJumpModalProps {
@@ -39,6 +41,12 @@ interface FileInfo {
   fileName: string;
   fileSize: number;
   suggestedJumpNumber: number;
+  startDate: string | null;
+  startLocation: {
+    lat_deg: number;
+    lon_deg: number;
+    alt_m: number;
+  } | null;
 }
 
 export function ImportJumpModal({ opened, onClose, onImportComplete }: ImportJumpModalProps) {
@@ -181,13 +189,13 @@ export function ImportJumpModal({ opened, onClose, onImportComplete }: ImportJum
     <Modal
       opened={opened}
       onClose={handleClose}
-      title="Import Jump Log"
+      title="Import a Jump Log"
       size="lg"
       closeOnClickOutside={false}
     >
       <LoadingOverlay visible={uploading || processing} />
       
-      <Stepper active={active} onStepClick={setActive} >
+      <Stepper active={active} onStepClick={setActive}>
         <Stepper.Step label="Upload File" description="Select jump log file">
           <Stack mt="xl">
             {error && (
@@ -282,22 +290,60 @@ export function ImportJumpModal({ opened, onClose, onImportComplete }: ImportJum
                       <IconHash size={16} />
                       <Text size="sm">Size: {formatFileSize(fileInfo.fileSize)}</Text>
                     </Group>
+                    {fileInfo.startDate && (
+                      <Group gap="xs">
+                        <IconCalendar size={16} />
+                        <Text size="sm">
+                          Jump Date: {new Date(fileInfo.startDate).toLocaleString('en-US', {
+                            weekday: 'short',
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: true
+                          })}
+                        </Text>
+                      </Group>
+                    )}
+                    {fileInfo.startLocation && (
+                      <Group gap="xs">
+                        <IconMapPin size={16} />
+                        <Text size="sm">
+                          Location: {fileInfo.startLocation.lat_deg.toFixed(5)}°, {fileInfo.startLocation.lon_deg.toFixed(5)}°
+                        </Text>
+                      </Group>
+                    )}
                     <Badge size="sm" color="blue" variant="light">
                       Hash: {fileInfo.hash.substring(0, 16)}...
                     </Badge>
                   </Stack>
                 </Paper>
 
-                {/* Editable Fields */}
                 <Stack>
+                  <Alert icon={<IconAlertCircle />} color="blue" variant="light">
+                    {fileInfo.startDate ? (
+                      <>
+                        Look at the date and time shown above. If this doesn't match the jump 
+                        you wish to import, you can go back and select a different file.
+                      </>
+                    ) : (
+                      <>
+                        Jump date/time could not be determined from the file. 
+                        Please ensure this is the correct jump file before proceeding.
+                      </>
+                    )}
+                  </Alert>
+
                   <NumberInput
                     label="Jump Number"
-                    description="Your personal jump count (optional - will auto-increment if left blank)"
+                    description="From your logbook (optional - will auto-increment if left blank)"
                     placeholder={`Suggested: ${fileInfo.suggestedJumpNumber}`}
                     value={jumpNumber}
                     onChange={(val) => {
-                      const num = typeof val === 'string' ? Number(val) : val;
-                      setJumpNumber(num || undefined);
+                      const num = typeof val === 'number' && !isNaN(val) ? val : undefined;
+                      setJumpNumber(num);
                     }}
                     min={1}
                   />
@@ -314,8 +360,8 @@ export function ImportJumpModal({ opened, onClose, onImportComplete }: ImportJum
                   />
                 </Stack>
 
-                <Alert icon={<IconAlertCircle />} color="blue" variant="light">
-                  After import, your jump will be automatically analyzed. Exit time, freefall duration, 
+                <Alert icon={<IconAlertCircle />} color="blue" variant="light" mt="md">
+                  After import, your jump will be automatically analyzed. Exit time, freefall time, 
                   and other metrics will appear once processing is complete.
                 </Alert>
               </>
