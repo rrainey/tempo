@@ -67,7 +67,7 @@ async function testSmpmgrIntegration() {
         });
         
         // 6. Test file download (if files available)
-        const jumpFiles = files.filter(f => f.endsWith('.dat'));
+        const jumpFiles = files.filter(f => f.endsWith('.txt') || f.endsWith('.log'));
         if (jumpFiles.length > 0) {
           console.log(`\n6. Testing file download for ${jumpFiles[0]}:`);
           

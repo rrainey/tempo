@@ -1,8 +1,8 @@
 // components/home/MyJumpsPanel.tsx
 
 import React, { useEffect, useState } from 'react';
-import { Card, Text, Badge, Group, Stack, Skeleton, ScrollArea } from '@mantine/core';
-import { IconClock, IconRuler, IconAlertCircle } from '@tabler/icons-react';
+import { Card, Text, Badge, Group, Stack, Skeleton, ScrollArea, Menu, ActionIcon } from '@mantine/core';
+import { IconClock, IconRuler, IconAlertCircle, IconDots, IconUpload } from '@tabler/icons-react';
 
 interface Jump {
   id: string;
@@ -22,9 +22,10 @@ interface Jump {
 
 interface MyJumpsPanelProps {
   onJumpSelect?: (jumpId: string) => void;
+  onImportClick?: () => void;
 }
 
-export function MyJumpsPanel({ onJumpSelect }: MyJumpsPanelProps) {
+export function MyJumpsPanel({ onJumpSelect, onImportClick }: MyJumpsPanelProps) {
   const [jumps, setJumps] = useState<Jump[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +104,25 @@ export function MyJumpsPanel({ onJumpSelect }: MyJumpsPanelProps) {
 
   return (
     <Card>
-      <Text size="lg" fw={600} mb="md">My Recent Jumps</Text>
+      <Group justify="space-between" mb="md">
+        <Text size="lg" fw={600}>My Recent Jumps</Text>
+        <Menu withinPortal position="bottom-end" shadow="sm">
+          <Menu.Target>
+            <ActionIcon variant="subtle" color="gray">
+              <IconDots size={20} />
+            </ActionIcon>
+          </Menu.Target>
+
+          <Menu.Dropdown>
+            <Menu.Item
+              leftSection={<IconUpload size={16} />}
+              onClick={onImportClick}
+            >
+              Import...
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
+      </Group>
       
       <ScrollArea style={{ height: 400 }}>
         <Stack gap="sm">

@@ -251,8 +251,8 @@ class BluetoothScanner {
         this.fileProcessingState.set(dbDevice.id, fileState);
       }
       
-      // Find new files (only .dat files are jump logs)
-      const jumpLogFiles = deviceFiles.filter(fileName => fileName.endsWith('.dat'));
+      // Find new files (only .txt or .log files are jump logs)
+      const jumpLogFiles = deviceFiles.filter(fileName => fileName.endsWith('.txt') || fileName.endsWith('.log'));
       const newFiles = jumpLogFiles.filter(fileName => !fileState.knownFiles.has(fileName));
       
       if (newFiles.length > 0) {

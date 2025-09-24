@@ -5,6 +5,7 @@ import { AuthGuard } from '../components/AuthGuard';
 import { MyJumpsPanel } from '../components/home/MyJumpsPanel';
 import { FormationJumpsPanel } from '../components/home/FormationJumpsPanel';
 import { JumpDetailsPanel } from '../components/home/JumpDetailsPanel';
+import { ImportJumpModal } from '../components/home/ImportJumpModal';
 import { LendDeviceForm } from '../components/LendDeviceForm';
 import { useEffect, useState } from 'react';
 import { notifications } from '@mantine/notifications';
@@ -32,6 +33,8 @@ export default function HomePage() {
   const [processingInvite, setProcessingInvite] = useState<string | null>(null);
   const [selectedJumpId, setSelectedJumpId] = useState<string | null>(null);
   const [lendDeviceOpened, setLendDeviceOpened] = useState(false);
+  const [importModalOpened, setImportModalOpened] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     loadInvitations();
@@ -93,6 +96,11 @@ export default function HomePage() {
 
   const handleFormationSelect = (formationId: string) => {
     router.push(`/review/fs/${formationId}`);
+  };
+
+  const handleImportComplete = () => {
+    // Trigger a refresh of the jumps panel
+    setRefreshKey(prev => prev + 1);
   };
 
   return (
@@ -166,7 +174,11 @@ export default function HomePage() {
             {/* Right Column - Recent Activity */}
             <Grid.Col span={{ base: 12, md: 4 }}>
               <Stack gap="md">
-                <MyJumpsPanel onJumpSelect={handleJumpSelect} />
+                <MyJumpsPanel 
+                  key={`jumps-${refreshKey}`}
+                  onJumpSelect={handleJumpSelect}
+                  onImportClick={() => setImportModalOpened(true)}
+                />
                 <FormationJumpsPanel onFormationSelect={handleFormationSelect} />
               </Stack>
             </Grid.Col>
@@ -178,6 +190,11 @@ export default function HomePage() {
           onSuccess={() => {
             // Optionally refresh data
           }}
+        />
+        <ImportJumpModal
+          opened={importModalOpened}
+          onClose={() => setImportModalOpened(false)}
+          onImportComplete={handleImportComplete}
         />
       </AppLayout>
     </AuthGuard>

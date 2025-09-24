@@ -119,7 +119,7 @@ class LogProcessor {
     });
   }
 
-  private async processJumpLog(jumpLog: any) {
+  public async processJumpLog(jumpLog: any) {
     console.log(`[LOG PROCESSOR] Processing jump log ${jumpLog.id}`);
     console.log(`[LOG PROCESSOR]   - Created: ${jumpLog.createdAt.toISOString()}`);
     console.log(`[LOG PROCESSOR]   - User: ${jumpLog.user.name || jumpLog.user.email}`);

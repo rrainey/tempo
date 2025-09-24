@@ -66,7 +66,7 @@ async function testFileUpload() {
     
     // List files on device
     const files = await bluetooth.listDeviceFiles(testDevice.bluetoothId);
-    const jumpFiles = files.filter(f => f.endsWith('.dat'));
+    const jumpFiles = files.filter(f => f.endsWith('.txt') || f.endsWith('.log'));
     
     console.log(`   Total files: ${files.length}`);
     console.log(`   Jump logs: ${jumpFiles.length}`);
