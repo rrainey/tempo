@@ -62,6 +62,7 @@ tempo-insights/
     │   │       ├── FormationJumpsPanel.tsx
     │   │       ├── JumpAltitudeChart.tsx
     │   │       ├── JumpDetailsPanel.tsx
+    │   │       ├── VelocityBinChart.tsx
     │   │       └── MyJumpsPanel.tsx
     │   ├── lib/
     │   │   ├── analysis/
@@ -140,6 +141,7 @@ tempo-insights/
     │   │   │   │   ├── mine.ts
     │   │   │   │   └── [id]/
     │   │   │   │       ├── notes.ts
+    |   |   |   |       ├── velocity-bins.ts
     │   │   │   │       └── visibility.ts
     │   │   │   └── users/
     │   │   │       ├── invitations.ts
@@ -360,7 +362,7 @@ Local Component State: Individual React components use local state (via hooks li
 
 Global Client State (Context): Some state is shared across the app and needs to be accessible by many components. We utilize React Context for these cases:
 
-Authentication Context: After a user logs in, we store the user’s session info (e.g., user ID, name, roles, and session token) in context (or use Next.js built-in mechanisms if using something like NextAuth, but here likely a custom context). This avoids prop-drilling the user info into every page and allows any component to check authContext.currentUser or similar to get the logged-in user. The context is provided in _app.tsx and populated on login or page load (possibly via an getServerSideProps that validates the session token and provides user info).
+**Authentication Context:** After a user logs in, we store the user’s session info (e.g., user ID, name, roles, and session token) in context. API routes use `withAuth` HOC pattern. `AuthenticatedRequest` type extends `NextApiRequest` with user information. This avoids prop-drilling the user info into every page and allows any component to check authContext.currentUser or similar to get the logged-in user.
 
 Theme Context: Mantine’s provider largely handles theming, but we might also keep a context if needed for toggling theme. However, since the app is dark-mode only at MVP, we likely hardcode dark theme. In future, a context could toggle light/dark.
 
@@ -390,7 +392,7 @@ User accounts are the cornerstone of application security and personalization. T
 
 Registration & Authentication: New users register by providing a full name, email, and password. The password is immediately hashed (using a strong algorithm like bcrypt) and only the hash is stored. User creation is handled by the register API route and userService, which also generates a unique URL-friendly slug for the user (based on their name). After registration, the user can log in via the login page, which calls the login API. Successful login returns a session token (cookie) as described, establishing the user’s session. There is no third-party auth in MVP, and no email verification flow mentioned, so accounts are active immediately. The initial deployment will include a default Administrator account (created via seeding) to bootstrap the system.
 
-Roles and Permissions: The system currently defines one special role: Administrator. The first user (seeded) is an Admin by default. The Roles are stored in a separate relation (e.g., a UserRoles table linking userId and role name), allowing for future expansion. Role checks are enforced in the API routes and front-end:
+Roles and Permissions: The system currently defines one special role: Administrator. The first user (seeded) is an Admin by default. 
 
 Only Admins see the “Device Management” menu and can access /devices page.
 
@@ -528,7 +530,7 @@ In summary, device management is handled by a combination of real-time backgroun
 
 The primary function of Tempo Insights is to collect jump logs and turn raw data into useful information. This involves capturing logs from devices, storing them, processing them, and then making them available for user review.
 
-Log Upload and Storage: As described, the Bluetooth scanning service automatically uploads new jump logs from devices when they come into range after a jump. Each log file (on the device it might be e.g. a .bin or .csv) is saved in the JumpLog table as a binary blob. Storing logs in the database (Supabase) is acceptable for our size needs; typical log sizes (estimated up to ~8MB) and frequency are manageable on a local Postgres. Each log entry includes:
+Log Upload and Storage: As described, the Bluetooth scanning service automatically uploads new jump logs from devices when they come into range after a jump. Each log file (on the device it might be e.g. a .bin or .csv) is saved in the JumpLog table as a binary blob. Log file contents will be stored in Supabase Storage.  The Postgres database entre for a JumpLog will include a reference to that file. Each log entry includes:
 
 A unique ID (UUID).
 

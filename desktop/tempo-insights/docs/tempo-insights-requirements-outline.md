@@ -1,5 +1,20 @@
 # Tempo Insights Application
 
+## Recent Updates
+
+This section describes recent updates to the original requirements.  Items called out in this section supersedes anything appearing in the main section of the document.
+
+### In "Device Management", clarifications:
+
+Devices no longer store nextJumpNumber - this is user-level
+Devices only store user UUID for log attribution
+
+### Add "Analysis Features" section, additions:
+
+**Velocity Bin Analysis Chart** Shows time distribution across fall rates during main portion of the jump: the analysis window starts 12 seconds after exit - to allow for acceleration to terminal velocity - to 2 seconds before deployment 
+
+## Introduction
+
 **Tempo Insights** will be a web-based application designed to securely collect and analyze jump logs collected by Tempo-BT jump logging devices. The application will be designed to run on Raspberry Pi 5 servers. It will include a Bluetooth-capable component designed to interact at the local drop zone with logging devices with ontly a minimal requirement for user interactions with the devices.  Under normal operating circumstances, the User/Jumper simply turns the device on, makes a jump, and the Tempo Insights application will automatically discover, upload, and securely store information about the jump.  The Jumper/User can then log into the application via the web and review their results.
 
 ## Core Application Objects
@@ -97,14 +112,25 @@ Here's notes about the minimal fields we'd expect to have present in each applic
 - creation timestamp UTC
 - last active timestamp UTC
 - a "User Slug" - used to form the url of the user; must be unique (automatically generated to define a URL for the group; a lowercase, whitespace-mapped version of the friendly name; e.g. "Bill Jones" should be mapped to "bill-jones"; when a user is created and a "slug" already exists, the generated slog will have a "-nnn" appended, where nnn is a randomly generated decimal number)
+- nextJumpNumber: Integer tracking the user's next jump number (default: 1)
+- homeDropzoneId: Reference to user's home dropzone (optional)
 - Assigned User Roles
 
 ### User Roles
 Currently the only defined user role is (system) "Administrator"
 - UUID of User (indexed) 
-- Role enumeration **currently** only Administrator is defined.
+- Currently defined user roles are:
+  - USER (default role for new users)
+  - ADMIN (administrative access)
+  - SUPER_ADMIN (full system access, initial seeded user)
 
 Together, these two elements form a composite primary key for the table.
+
+### Dropzones
+Dropzones represent physical locations where jumps occur
+- Fields: name, slug, ICAO code, latitude, longitude, elevation (meters MSL), timezone, isActive flag
+- Admin-only management interface at /dropzones
+- Used for timezone conversion and future location-based features
 
 ### Groups
 - A UUID (auto generated)
@@ -118,8 +144,8 @@ Together, these two elements form a composite primary key for the table.
 - Estimated Exit Lat/Lon (possibly null)
 - estimated exit altitude (feet, possibly null)
 - owning User UUID
-- Jump Number for the user
-- Log contents (long text or blob, whatever is most efficient for 8MB log files)
+- Jump Number for the user. Jump numbers are assigned from User's nextJumpNumber and auto-incremented
+- Log file reference (reference to a log file residing in Supabase Storage)
 - time offset for exit (estimated, seconds, relative to start of log) - sustained rate of descent over 2000 fpm for 1 second.
 - time offset for parachute activation (estimated,seconds, relative to start of log) - estimated by first significant vertical deceleration (0.25g for 0.1 seconds for rough draft purposes)
 - time offset for parachute deployment (seconds, relative to start of log) - first rate of descent below 2000 fpm after being in freefall
@@ -204,8 +230,11 @@ Use the Mantine default per-platform font choices.
 
 ### 1. **Authentication and Authorization**
 
-* Should the authentication flow using a session token following username/password authentication is acceptable.
-* User login session token should expire after 30 days.
+Authentication is handled via HOC middleware functions:
+- withAuth: Validates JWT token and attaches user to request
+- requireAdmin: Extends withAuth to check for ADMIN or SUPER_ADMIN role
+- AuthenticatedRequest type extends NextApiRequest with user property
+- User login session token expires after 30 days
 
 ### 2. **Device Communication**
 
