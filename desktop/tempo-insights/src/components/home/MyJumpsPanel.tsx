@@ -139,7 +139,7 @@ export function MyJumpsPanel({ onJumpSelect, onImportClick }: MyJumpsPanelProps)
               >
                 <Group justify="space-between" mb="xs">
                   <Text size="sm" fw={500}>
-                    {formatDate(jump.createdAt)}
+                    {formatDate(jump.exitTimestamp || jump.createdAt)}
                   </Text>
                   <Badge size="xs" color={jump.visible ? 'green' : 'gray'}>
                     {jump.visible ? 'Visible' : 'Private'}

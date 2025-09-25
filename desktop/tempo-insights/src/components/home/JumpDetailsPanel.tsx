@@ -301,7 +301,7 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
             </Title>
             <Group gap="xs" mt="xs">
               <IconCalendar size={16} />
-              <Text size="sm" c="dimmed">{formatDate(jump.createdAt)}</Text>
+              <Text size="sm" c="dimmed">{formatDate(jump.exitTimestamp)}</Text>
             </Group>
           </div>
           <Stack gap="xs" align="flex-end">
