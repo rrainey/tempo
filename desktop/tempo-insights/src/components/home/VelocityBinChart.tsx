@@ -159,7 +159,7 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
               content={<CustomTooltip />}
               cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
             />
-            <Bar dataKey="elapsed_sec" fill="#0088ff" activeBar={<Rectangle fill="#f2f2f2" stroke="blue" />}/>
+            <Bar dataKey="elapsed_sec" fill="#0088ff" radius={[0,10,10,0]} activeBar={<Rectangle fill="#f2f2f2" stroke="blue" radius={[0,10,10,0]}/>}/>
           </BarChart>
         </ResponsiveContainer>
       </Stack>
