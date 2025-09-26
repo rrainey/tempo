@@ -147,6 +147,16 @@ export default function DevicesPage() {
   };
 
   const handleAssign = (device: Device) => {
+    // Check if device is already in PROVISIONING state
+    if (device.state === 'PROVISIONING') {
+      notifications.show({
+        title: 'Device Not Ready',
+        message: 'This device is still in provisioning state. Please initialize it first.',
+        color: 'orange',
+      });
+      return;
+    }
+    
     setSelectedDevice(device);
     setAssignModalOpened(true);
   };
@@ -390,7 +400,51 @@ export default function DevicesPage() {
             opened={assignModalOpened}
             onClose={() => setAssignModalOpened(false)}
             device={selectedDevice}
-            onSuccess={() => loadDevices(false)}
+            onSuccess={async (userId: string) => {
+              if (!selectedDevice) return;
+              
+              try {
+                // Get the selected user's next jump number
+                const userResponse = await fetch(`/api/users/${userId}`);
+                let nextJumpNumber = 1;
+                
+                if (userResponse.ok) {
+                  const userData = await userResponse.json();
+                  nextJumpNumber = userData.user?.nextJumpNumber || 1;
+                }
+                
+                const response = await fetch(`/api/devices/${selectedDevice.id}/commands/assign`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    userId,
+                    nextJumpNumber
+                  })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                  throw new Error(data.error || 'Failed to assign device');
+                }
+
+                notifications.show({
+                  title: 'Device Assignment Queued',
+                  message: data.message,
+                  color: 'green',
+                });
+
+                setAssignModalOpened(false);
+                setSelectedDevice(null);
+                loadDevices(false);
+              } catch (error) {
+                notifications.show({
+                  title: 'Error',
+                  message: error instanceof Error ? error.message : 'Failed to assign device',
+                  color: 'red',
+                });
+              }
+            }}
           />
         </Container>
       </AppLayout>

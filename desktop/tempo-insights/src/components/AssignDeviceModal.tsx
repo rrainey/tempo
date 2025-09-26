@@ -13,6 +13,7 @@ interface User {
   name: string;
   email: string;
   slug: string;
+  nextJumpNumber: number;
 }
 
 interface AssignDeviceModalProps {
@@ -25,13 +26,14 @@ interface AssignDeviceModalProps {
       name: string;
     };
   } | null;
-  onSuccess?: () => void;
+  onSuccess?: (userId: string) => void;
 }
 
 export function AssignDeviceModal({ opened, onClose, device, onSuccess }: AssignDeviceModalProps) {
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const form = useForm<AssignDeviceForm>({
     initialValues: {
@@ -54,32 +56,43 @@ export function AssignDeviceModal({ opened, onClose, device, onSuccess }: Assign
     if (opened) {
       loadUsers();
       form.reset();
+      setSelectedUser(null);
     }
   }, [opened]);
 
   const loadUsers = async () => {
     try {
       setLoadingUsers(true);
-      // TODO: Replace with actual users endpoint
-      const response = await fetch('/api/users');
+      const response = await fetch('/api/users?limit=100');
       if (response.ok) {
         const data = await response.json();
         setUsers(data.users || []);
       } else {
-        // For now, use mock data
-        setUsers([
-          { id: 'user1', name: 'Test User', email: 'test@example.com', slug: 'test-user' },
-          { id: 'user2', name: 'Another User', email: 'another@example.com', slug: 'another-user' },
-        ]);
+        console.error('Failed to load users');
+        notifications.show({
+          title: 'Error',
+          message: 'Failed to load users',
+          color: 'red',
+        });
       }
     } catch (error) {
-      // For now, use mock data
-      setUsers([
-        { id: 'user1', name: 'Test User', email: 'test@example.com', slug: 'test-user' },
-        { id: 'user2', name: 'Another User', email: 'another@example.com', slug: 'another-user' },
-      ]);
+      console.error('Error loading users:', error);
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to load users',
+        color: 'red',
+      });
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  const handleUserSelect = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setSelectedUser(user);
+      // Set the user's next jump number as the default
+      form.setFieldValue('nextJumpNumber', user.nextJumpNumber || 1);
     }
   };
 
@@ -88,36 +101,14 @@ export function AssignDeviceModal({ opened, onClose, device, onSuccess }: Assign
 
     setLoading(true);
     try {
-      // TODO: Implement actual API endpoint
-      const response = await fetch(`/api/devices/${device.id}/assign`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to assign device');
-      }
-
-      // For now, just log the action
-      console.log('Assign device:', device.id, 'to user:', values.userId, 'with jump number:', values.nextJumpNumber);
-
-      notifications.show({
-        title: 'Device Assigned',
-        message: `${device.name} has been assigned (action stubbed)`,
-        color: 'blue',
-      });
-
+      // Call the parent's onSuccess handler which will make the API call
+      await onSuccess?.(values.userId);
+      
+      form.reset();
       onClose();
-      onSuccess?.();
     } catch (error) {
-      notifications.show({
-        title: 'Error',
-        message: 'Failed to assign device (endpoint not implemented)',
-        color: 'red',
-      });
+      // Error handling is done in the parent component
+      console.error('Error in assign modal:', error);
     } finally {
       setLoading(false);
     }
@@ -144,7 +135,7 @@ export function AssignDeviceModal({ opened, onClose, device, onSuccess }: Assign
 
           <Select
             label="Assign to User"
-            placeholder="Select a user"
+            placeholder={loadingUsers ? "Loading users..." : "Select a user"}
             data={users.map(user => ({
               value: user.id,
               label: `${user.name} (${user.email})`,
@@ -153,11 +144,20 @@ export function AssignDeviceModal({ opened, onClose, device, onSuccess }: Assign
             disabled={loadingUsers}
             required
             {...form.getInputProps('userId')}
+            onChange={(value) => {
+              form.setFieldValue('userId', value || '');
+              if (value) {
+                handleUserSelect(value);
+              }
+            }}
           />
 
           <NumberInput
             label="Next Jump Number"
-            description="Starting jump number for this device"
+            description={selectedUser 
+              ? `This user's current jump count is ${(selectedUser.nextJumpNumber || 1) - 1}`
+              : "Starting jump number for this device"
+            }
             min={1}
             required
             {...form.getInputProps('nextJumpNumber')}
@@ -170,7 +170,7 @@ export function AssignDeviceModal({ opened, onClose, device, onSuccess }: Assign
             <Button
               type="submit"
               loading={loading}
-              disabled={loading}
+              disabled={loading || loadingUsers}
             >
               Assign Device
             </Button>

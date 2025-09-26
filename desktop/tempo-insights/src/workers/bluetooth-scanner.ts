@@ -594,8 +594,61 @@ class BluetoothScanner {
       commandType: CommandType.ASSIGN,
       execute: async (device, commandData) => {
         console.log(`[COMMAND] Executing ASSIGN on ${device.name}`);
-        // TODO: Write uinfo.json to device
-        throw new Error('ASSIGN command not yet implemented');
+        
+        if (!commandData || !commandData.userId) {
+          throw new Error('Missing user information for assignment');
+        }
+        
+        // Create uinfo.json content
+        const uinfoContent = JSON.stringify({
+          userId: commandData.userId,
+          userName: commandData.userName,
+          userSlug: commandData.userSlug,
+          assignedAt: commandData.assignedAt,
+          nextJumpNumber: commandData.nextJumpNumber || 1
+        }, null, 2);
+        
+        console.log(`[COMMAND] Writing user info for ${commandData.userName} to ${device.name}`);
+        
+        // Write the file using smpmgr file upload
+        // First, we need to create a temporary file
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        const os = await import('os');
+        
+        const tempDir = os.tmpdir();
+        const tempFile = path.join(tempDir, `uinfo-${Date.now()}.json`);
+        
+        try {
+          // Write content to temp file
+          await fs.writeFile(tempFile, uinfoContent, 'utf-8');
+          
+          // Upload to device using smpmgr
+          const uploadCommand = `smpmgr --ble ${device.name} file upload ${tempFile} /lfs/uinfo.json`;
+          console.log(`[COMMAND] Running: ${uploadCommand}`);
+          
+          const { stdout, stderr } = await execAsync(uploadCommand, { timeout: 30000 });
+          
+          if (stderr && !stderr.includes('Done')) {
+            throw new Error(`Upload failed: ${stderr}`);
+          }
+          
+          console.log(`[COMMAND] Successfully wrote uinfo.json to ${device.name}`);
+          
+          // Clean up temp file
+          await fs.unlink(tempFile).catch(() => {}); // Ignore cleanup errors
+          
+          return {
+            success: true,
+            message: `Device assigned to ${commandData.userName}`,
+            bytesWritten: uinfoContent.length
+          };
+          
+        } catch (error) {
+          // Clean up temp file on error
+          await fs.unlink(tempFile).catch(() => {});
+          throw error;
+        }
       }
     });
     
