@@ -1,8 +1,12 @@
-import { PrismaClient, DeviceState } from '@prisma/client';
+import { PrismaClient, DeviceState, CommandType, CommandStatus } from '@prisma/client';
 import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import { BluetoothService } from '../lib/bluetooth/bluetooth.service';
 import crypto from 'crypto';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // Load environment variables
 config({ path: '.env' });
@@ -26,11 +30,19 @@ interface FileProcessingState {
   knownFiles: Set<string>;
 }
 
+// Device Command Queue Processing
+interface CommandProcessor {
+  commandType: CommandType;
+  execute: (device: any, commandData: any) => Promise<any>;
+}
+
 class BluetoothScanner {
   private isRunning = false;
   private scanInterval: NodeJS.Timeout | null = null;
   private discoveredDevices = new Map<string, Date>(); // Track all discovered devices by name
   private fileProcessingState = new Map<string, FileProcessingState>(); // Track file state per device
+  private commandProcessors: Map<CommandType, CommandProcessor> = new Map();
+  private isProcessingCommand = false;
 
   async start() {
     console.log('[BLUETOOTH SCANNER] Starting worker...');
@@ -46,6 +58,8 @@ class BluetoothScanner {
       console.error('[BLUETOOTH SCANNER] Also ensure the plugin path is set correctly (SMPMGR_PLUGIN_PATH env var)');
       process.exit(1);
     }
+
+    this.initializeCommandProcessors();
     
     console.log('[BLUETOOTH SCANNER] smpmgr is available and ready');
     
@@ -137,6 +151,9 @@ class BluetoothScanner {
       
       // Update device online/offline status based on lastSeen
       await this.updateDeviceStatuses();
+
+      // process queued commands
+      await this.processQueuedCommands();
       
     } catch (error) {
       console.error(`[BLUETOOTH SCANNER] Error in scan cycle ${scanId}:`, error);
@@ -533,6 +550,183 @@ class BluetoothScanner {
       
     } catch (error) {
       console.error('[BLUETOOTH SCANNER] Error updating device statuses:', error);
+    }
+  }
+
+  private initializeCommandProcessors() {
+    // PING command
+    this.commandProcessors.set(CommandType.PING, {
+      commandType: CommandType.PING,
+      execute: async (device, commandData) => {
+        console.log(`[COMMAND] Executing PING on ${device.name}`);
+        // Simple echo test using smpmgr
+        const { stdout } = await execAsync(
+          `smpmgr --ble ${device.name} os echo hello`,
+          { timeout: 10000 }
+        );
+        return { response: stdout.trim() };
+      }
+    });
+    
+    // BLINK_ON command
+    this.commandProcessors.set(CommandType.BLINK_ON, {
+      commandType: CommandType.BLINK_ON,
+      execute: async (device, commandData) => {
+        const color = commandData?.color || 'orange';
+        console.log(`[COMMAND] Executing BLINK_ON (${color}) on ${device.name}`);
+        await bluetooth.blinkDevice(device.name, color);
+        return { success: true, color };
+      }
+    });
+    
+    // BLINK_OFF command
+    this.commandProcessors.set(CommandType.BLINK_OFF, {
+      commandType: CommandType.BLINK_OFF,
+      execute: async (device, commandData) => {
+        console.log(`[COMMAND] Executing BLINK_OFF on ${device.name}`);
+        await bluetooth.blinkDevice(device.name, 'off');
+        return { success: true };
+      }
+    });
+    
+    // ASSIGN command
+    this.commandProcessors.set(CommandType.ASSIGN, {
+      commandType: CommandType.ASSIGN,
+      execute: async (device, commandData) => {
+        console.log(`[COMMAND] Executing ASSIGN on ${device.name}`);
+        // TODO: Write uinfo.json to device
+        throw new Error('ASSIGN command not yet implemented');
+      }
+    });
+    
+    // UNPROVISION command
+    this.commandProcessors.set(CommandType.UNPROVISION, {
+      commandType: CommandType.UNPROVISION,
+      execute: async (device, commandData) => {
+        console.log(`[COMMAND] Executing UNPROVISION on ${device.name}`);
+        // TODO: Remove uinfo.json from device
+        throw new Error('UNPROVISION command not yet implemented');
+      }
+    });
+    
+    // INITIALIZE command
+    this.commandProcessors.set(CommandType.INITIALIZE, {
+      commandType: CommandType.INITIALIZE,
+      execute: async (device, commandData) => {
+        console.log(`[COMMAND] Executing INITIALIZE on ${device.name}`);
+        // TODO: Set device name and PCB version
+        throw new Error('INITIALIZE command not yet implemented');
+      }
+    });
+  }
+  
+  private async processQueuedCommands() {
+    // Don't process if already processing to avoid concurrency issues
+    if (this.isProcessingCommand) {
+      return;
+    }
+    
+    try {
+      this.isProcessingCommand = true;
+      
+      // Get all QUEUED commands ordered by creation time
+      const queuedCommands = await prisma.deviceCommandQueue.findMany({
+        where: {
+          commandStatus: CommandStatus.QUEUED
+        },
+        include: {
+          targetDevice: true
+        },
+        orderBy: {
+          createdAt: 'asc'
+        }
+      });
+      
+      if (queuedCommands.length === 0) {
+        return;
+      }
+      
+      console.log(`[COMMAND QUEUE] Found ${queuedCommands.length} queued command(s)`);
+      
+      // Process each command
+      for (const command of queuedCommands) {
+        await this.processCommand(command);
+      }
+      
+    } catch (error) {
+      console.error('[COMMAND QUEUE] Error processing queued commands:', error);
+    } finally {
+      this.isProcessingCommand = false;
+    }
+  }
+  
+  private async processCommand(command: any) {
+    console.log(`[COMMAND QUEUE] Processing command ${command.id} (${command.commandType}) for device ${command.targetDevice.name}`);
+    
+    try {
+      // Update status to SENDING
+      await prisma.deviceCommandQueue.update({
+        where: { id: command.id },
+        data: {
+          commandStatus: CommandStatus.SENDING,
+          startedAt: new Date()
+        }
+      });
+      
+      // Check if device is online
+      const cutoffTime = new Date(Date.now() - DISCOVERY_WINDOW * 1000);
+      const isOnline = command.targetDevice.lastSeen && 
+                      new Date(command.targetDevice.lastSeen) > cutoffTime;
+      
+      if (!isOnline) {
+        throw new Error('Device is offline');
+      }
+      
+      // Get the processor for this command type
+      const processor = this.commandProcessors.get(command.commandType);
+      
+      if (!processor) {
+        throw new Error(`No processor found for command type: ${command.commandType}`);
+      }
+      
+      // Execute the command
+      const result = await processor.execute(
+        command.targetDevice,
+        command.commandData
+      );
+      
+      // Update command as completed
+      await prisma.deviceCommandQueue.update({
+        where: { id: command.id },
+        data: {
+          commandStatus: CommandStatus.COMPLETED,
+          completedAt: new Date(),
+          responseData: result || {}
+        }
+      });
+      
+      console.log(`[COMMAND QUEUE] Command ${command.id} completed successfully`);
+      
+    } catch (error) {
+      console.error(`[COMMAND QUEUE] Command ${command.id} failed:`, error);
+      
+      // Update command as failed
+      let errorMessage = 'Unknown error';
+      let isDeviceOffline = false;
+      if (typeof error === 'object' && error !== null && 'message' in error) {
+        errorMessage = (error as { message: string }).message;
+        isDeviceOffline = errorMessage === 'Device is offline';
+      }
+      await prisma.deviceCommandQueue.update({
+        where: { id: command.id },
+        data: {
+          commandStatus: isDeviceOffline
+            ? CommandStatus.DEVICE_TIMEOUT
+            : CommandStatus.DEVICE_ERROR,
+          completedAt: new Date(),
+          errorMessage: errorMessage
+        }
+      });
     }
   }
 }

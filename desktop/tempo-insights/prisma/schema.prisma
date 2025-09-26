@@ -29,6 +29,46 @@ enum GroupRole {
   OWNER
 }
 
+enum CommandStatus {
+  QUEUED
+  SENDING
+  COMPLETED
+  DEVICE_ERROR
+  DEVICE_TIMEOUT
+}
+
+enum CommandType {
+  PING
+  BLINK_ON
+  BLINK_OFF
+  ASSIGN
+  UNPROVISION
+  INITIALIZE
+}
+
+model DeviceCommandQueue {
+  id              String        @id @default(cuid())
+  commandType     CommandType
+  commandStatus   CommandStatus @default(QUEUED)
+  commandData     Json?         // Command-specific data (e.g., color for BLINK_ON, user data for ASSIGN)
+  responseData    Json?         // Any response from the device
+  errorMessage    String?       // Error details if command fails
+  
+  createdAt       DateTime      @default(now())
+  startedAt       DateTime?     // When command execution started
+  completedAt     DateTime?     // When command finished (success or failure)
+  
+  // Relations
+  targetDeviceId  String
+  targetDevice    Device        @relation(fields: [targetDeviceId], references: [id])
+  sendingUserId   String
+  sendingUser     User          @relation(fields: [sendingUserId], references: [id])
+  
+  @@index([targetDeviceId, commandStatus])
+  @@index([commandStatus])
+  @@index([createdAt])
+}
+
 model Dropzone {
   id          String   @id @default(cuid())
   name        String
@@ -75,6 +115,7 @@ model User {
   proxyCreator User? @relation("ProxyCreator", fields: [proxyCreatorId], references: [id])
   createdProxies User[] @relation("ProxyCreator")
   homeDropzone Dropzone? @relation(fields: [homeDropzoneId], references: [id])
+  deviceCommands DeviceCommandQueue[]
 
   @@index([email])
   @@index([slug])
@@ -100,6 +141,7 @@ model Device {
   lentTo      User?       @relation("DeviceLentTo", fields: [lentToId], references: [id])
   jumpLogs    JumpLog[]
   fileIndex   DeviceFileIndex[] 
+  commands DeviceCommandQueue[]
 
   @@index([bluetoothId])
   @@index([ownerId])
