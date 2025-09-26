@@ -18,7 +18,7 @@ import {
 } from '@mantine/core';
 import { AppLayout } from '../components/AppLayout';
 import { AuthGuard } from '../components/AuthGuard';
-import { IconSearch, IconTrash, IconRefresh, IconUserPlus, IconDots, IconBulb } from '@tabler/icons-react';
+import { IconSearch, IconTrash, IconRefresh, IconUserPlus, IconDotsVertical, IconBulb, IconSettings } from '@tabler/icons-react';
 import { useRouter } from 'next/router';
 import { notifications } from '@mantine/notifications';
 import { AssignDeviceModal } from '../components/AssignDeviceModal';
@@ -194,7 +194,7 @@ export default function DevicesPage() {
     if (!confirmUnprovision) return;
 
     try {
-      const response = await fetch(`/api/devices/${confirmUnprovision.id}/unprovision`, {
+      const response = await fetch(`/api/devices/${confirmUnprovision.id}/commands/unprovision`, {
         method: 'POST',
       });
 
@@ -205,7 +205,7 @@ export default function DevicesPage() {
       }
 
       notifications.show({
-        title: 'Device Unprovisioned',
+        title: 'Unprovision Command Queued',
         message: data.message,
         color: 'orange',
       });
@@ -217,6 +217,37 @@ export default function DevicesPage() {
       notifications.show({
         title: 'Error',
         message: error instanceof Error ? error.message : 'Failed to unprovision device',
+        color: 'red',
+      });
+    }
+  };
+
+  const handleInitialize = async (device: Device) => {
+    try {
+      const response = await fetch(`/api/devices/${device.id}/commands/initialize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pcbVersion: '1.0' })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initialize device');
+      }
+
+      notifications.show({
+        title: 'Initialize Command Queued',
+        message: `Device will be initialized as ${data.newName}`,
+        color: 'blue',
+      });
+
+      // Reload devices to show updated state
+      loadDevices(false);
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to initialize device',
         color: 'red',
       });
     }
@@ -336,30 +367,41 @@ export default function DevicesPage() {
                         <Menu>
                           <Menu.Target>
                             <ActionIcon variant="subtle">
-                              <IconDots size={16} />
+                              <IconDotsVertical size={16} />
                             </ActionIcon>
                           </Menu.Target>
 
-                          <Menu.Dropdown>
-                            <Menu.Item
-                              leftSection={<IconUserPlus size={14} />}
-                              onClick={() => handleAssign(device)}
-                            >
-                              Assign to User
-                            </Menu.Item>
-                            <Menu.Item
-                              leftSection={<IconBulb size={14} />}
-                              onClick={() => handleBlink(device)}
-                            >
-                              Blink Device
-                            </Menu.Item>
-                            <Menu.Item
-                              leftSection={<IconTrash size={14} />}
-                              color="red"
-                              onClick={() => setConfirmUnprovision(device)}
-                            >
-                              Unprovision
-                            </Menu.Item>
+                           <Menu.Dropdown>
+                            {device.state === 'PROVISIONING' || device.name === 'Tempo-BT' ? (
+                              <Menu.Item
+                                leftSection={<IconSettings size={14} />}
+                                onClick={() => handleInitialize(device)}
+                              >
+                                Initialize Device
+                              </Menu.Item>
+                            ) : (
+                              <>
+                                <Menu.Item
+                                  leftSection={<IconUserPlus size={14} />}
+                                  onClick={() => handleAssign(device)}
+                                >
+                                  Assign to User
+                                </Menu.Item>
+                                <Menu.Item
+                                  leftSection={<IconBulb size={14} />}
+                                  onClick={() => handleBlink(device)}
+                                >
+                                  Blink Device
+                                </Menu.Item>
+                                <Menu.Item
+                                  leftSection={<IconTrash size={14} />}
+                                  color="red"
+                                  onClick={() => setConfirmUnprovision(device)}
+                                >
+                                  Unprovision
+                                </Menu.Item>
+                              </>
+                            )}
                           </Menu.Dropdown>
                         </Menu>
                       </Table.Td>

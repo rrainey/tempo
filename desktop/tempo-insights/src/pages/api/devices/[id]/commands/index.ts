@@ -1,4 +1,4 @@
-// Save as: src/pages/api/devices/[id]/commands/index.ts
+// /pages/api/devices/[id]/commands/index.ts
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { withAuth, AuthenticatedRequest } from '../../../../../lib/auth/middleware';

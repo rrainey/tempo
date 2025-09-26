@@ -657,8 +657,59 @@ class BluetoothScanner {
       commandType: CommandType.UNPROVISION,
       execute: async (device, commandData) => {
         console.log(`[COMMAND] Executing UNPROVISION on ${device.name}`);
-        // TODO: Remove uinfo.json from device
-        throw new Error('UNPROVISION command not yet implemented');
+        
+        try {
+          // Delete the uinfo.json file using smpmgr file delete
+          const deleteCommand = `smpmgr --ble ${device.name} file delete /lfs/uinfo.json`;
+          console.log(`[COMMAND] Running: ${deleteCommand}`);
+          
+          const { stdout, stderr } = await execAsync(deleteCommand, { timeout: 30000 });
+          
+          // Check if file was deleted or didn't exist
+          if (stderr && !stderr.includes('Done') && !stderr.includes('No such file')) {
+            throw new Error(`Delete failed: ${stderr}`);
+          }
+          
+          console.log(`[COMMAND] Successfully removed uinfo.json from ${device.name}`);
+          
+          // Also clear the owner in the database after successful unprovision
+          await prisma.device.update({
+            where: { id: device.id },
+            data: {
+              ownerId: undefined,
+              state: DeviceState.PROVISIONING
+            }
+          });
+          
+          return {
+            success: true,
+            message: `Device unprovisioned successfully`,
+            previousOwner: commandData?.previousOwner || null
+          };
+          
+        } catch (error:any) {
+          // If error is "No such file", consider it a success
+          if (error.message && error.message.includes('No such file')) {
+            console.log(`[COMMAND] uinfo.json already absent on ${device.name}`);
+            
+            // Still update the database
+            await prisma.device.update({
+              where: { id: device.id },
+              data: {
+                ownerId: undefined,
+                state: DeviceState.PROVISIONING
+              }
+            });
+            
+            return {
+              success: true,
+              message: `Device unprovisioned (file already absent)`,
+              previousOwner: commandData?.previousOwner || null
+            };
+          }
+          
+          throw error;
+        }
       }
     });
     

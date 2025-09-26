@@ -1,4 +1,4 @@
-// Save as: src/pages/api/devices/[id]/commands/led-off.ts
+// /pages/api/devices/[id]/commands/led-off.ts
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { withAuth, AuthenticatedRequest } from '../../../../../lib/auth/middleware';
