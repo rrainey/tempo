@@ -50,16 +50,18 @@ smpmgr --ble Tempo-BT-0004 --plugin-path=plugins tempo --help
 │ --help          Show this message and exit.                                                     │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────╮
-│ session-list     List all logging sessions on the device.                                       |
-| session-delete   delete a session                                                               │
+│ session-list     List all logging sessions on the device.                                       │
 │ storage-info     Get storage statistics from the device.                                        │
 │ led-on           Turn on the LED with specified color.                                          │
 │ led-off          Turn off LED override (return to app control).                                 │
 │ logger-start     Start logging (will auto-arm if needed).                                       │
 │ logger-stop      Stop logging.                                                                  │
-│ logger-arm       Arm the logger.                                                                │
+│ logger-arm       Arm the logger.                                                                |
 │ logger-disarm    Disarm the logger.                                                             │
 │ logger-control   Generic logger control command.                                                │
+│ session-delete   Delete a logging session and all its files.                                    │
+│ settings-get     Get all device settings from non-volatile memory.                              │
+│ settings-set     Set one or more device settings in non-volatile memory.                        │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
