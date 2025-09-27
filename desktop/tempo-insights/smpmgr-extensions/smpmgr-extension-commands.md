@@ -157,3 +157,18 @@ smpmgr --ble Tempo-BT-0004 --plugin-path=plugins tempo led-off
 ⠼ Connecting to Tempo-BT-0004... OK
 LED override disabled - returned to app control
 ```
+
+## Get all NVM settings
+`smpmgr --ble Tempo-BT-0004 --plugin-path=plugins tempo settings-get`
+
+## Set BLE name only
+`smpmgr --ble Tempo-BT-0004 --plugin-path=plugins tempo settings-set --ble-name "Tempo-BT-9999"`
+
+## Set multiple settings at once
+`smpmgr --ble Tempo-BT-0004 --plugin-path=plugins tempo settings-set --ble-name "Tempo-BT-9999" --pps-enabled --pcb-variant 0x02`
+
+## Disable PPS
+`smpmgr --ble Tempo-BT-0004 --plugin-path=plugins tempo settings-set --no-pps-enabled`
+
+## Change storage backend
+`smpmgr --ble Tempo-BT-0004 --plugin-path=plugins tempo settings-set --log-backend littlefs`

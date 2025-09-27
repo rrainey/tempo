@@ -36,6 +36,8 @@ TEMPO_MGMT_ID_STORAGE_INFO = 2
 TEMPO_MGMT_ID_LED_CONTROL = 3
 TEMPO_MGMT_ID_LOGGER_CONTROL = 4
 TEMPO_MGMT_ID_SESSION_DELETE = 5
+TEMPO_MGMT_ID_SETTINGS_GET = 6
+TEMPO_MGMT_ID_SETTINGS_SET = 7
 
 
 @unique
@@ -147,6 +149,78 @@ class LoggerControl(LoggerControlRequest):
     _ErrorV1 = TempoErrorV1
     _ErrorV2 = TempoErrorV2
 
+class SettingsGetRequest(smpmsg.ReadRequest):
+    _GROUP_ID = MGMT_GROUP_ID_TEMPO
+    _COMMAND_ID = TEMPO_MGMT_ID_SETTINGS_GET
+
+
+class SettingsGetResponse(smpmsg.ReadResponse):
+    _GROUP_ID = MGMT_GROUP_ID_TEMPO
+    _COMMAND_ID = TEMPO_MGMT_ID_SETTINGS_GET
+    
+    ble_name: str
+    pps_enabled: bool
+    pcb_variant: int
+    log_backend: str
+
+
+class SettingsGet(SettingsGetRequest):
+    _Response = SettingsGetResponse
+    _ErrorV1 = TempoErrorV1
+    _ErrorV2 = TempoErrorV2
+
+
+# Add Settings Set Command classes
+class SettingsSetRequest(smpmsg.WriteRequest):
+    _GROUP_ID = MGMT_GROUP_ID_TEMPO
+    _COMMAND_ID = TEMPO_MGMT_ID_SETTINGS_SET
+    
+    # All fields are optional - only send what needs to be changed
+    ble_name: Optional[str] = None
+    pps_enabled: Optional[bool] = None
+    pcb_variant: Optional[int] = None
+    log_backend: Optional[str] = None
+
+
+class SettingsSetResponse(smpmsg.WriteResponse):
+    _GROUP_ID = MGMT_GROUP_ID_TEMPO
+    _COMMAND_ID = TEMPO_MGMT_ID_SETTINGS_SET
+    
+    ble_name: str
+    pps_enabled: bool
+    pcb_variant: int
+    log_backend: str
+    success: bool
+    note: Optional[str] = None  # For messages like "BLE name changes require reboot"
+
+
+class SettingsSet(SettingsSetRequest):
+    _Response = SettingsSetResponse
+    _ErrorV1 = TempoErrorV1
+    _ErrorV2 = TempoErrorV2
+
+
+# Add Session Delete Command classes (missing from current plugin)
+class SessionDeleteRequest(smpmsg.WriteRequest):
+    _GROUP_ID = MGMT_GROUP_ID_TEMPO
+    _COMMAND_ID = TEMPO_MGMT_ID_SESSION_DELETE
+    
+    session: str
+
+
+class SessionDeleteResponse(smpmsg.WriteResponse):
+    _GROUP_ID = MGMT_GROUP_ID_TEMPO
+    _COMMAND_ID = TEMPO_MGMT_ID_SESSION_DELETE
+    
+    success: bool
+    files_deleted: Optional[int] = None
+    error: Optional[str] = None
+
+
+class SessionDelete(SessionDeleteRequest):
+    _Response = SessionDeleteResponse
+    _ErrorV1 = TempoErrorV1
+    _ErrorV2 = TempoErrorV2
 
 # CLI Commands
 @app.command(name="session-list")
@@ -430,6 +504,112 @@ def session_delete(
 
     asyncio.run(f())
 
+# Add CLI commands for settings
+@app.command(name="settings-get")
+def settings_get(ctx: typer.Context) -> None:
+    """Get all device settings from non-volatile memory."""
+    options = cast(Options, ctx.obj)
+    smpclient = get_smpclient(options)
+
+    async def f() -> None:
+        await connect_with_spinner(smpclient, options.timeout)
+        
+        response = await smpclient.request(SettingsGet())
+        
+        table = Table(title="Tempo-BT Device Settings")
+        table.add_column("Setting", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_column("Description", style="yellow")
+        
+        table.add_row("BLE Name", response.ble_name, "Bluetooth advertising name")
+        table.add_row("PPS Enabled", str(response.pps_enabled), "GPS pulse-per-second input")
+        table.add_row("PCB Variant", f"0x{response.pcb_variant:02X}", "Hardware variant identifier")
+        table.add_row("Log Backend", response.log_backend, "Storage backend (sdcard/littlefs)")
+        
+        console.print(table)
+
+    asyncio.run(f())
+
+@app.command(name="settings-set")
+def settings_set(
+    ctx: typer.Context,
+    ble_name: Optional[str] = typer.Option(None, "--ble-name", help="Set Bluetooth advertising name (max 31 chars)"),
+    pps_enabled: Optional[bool] = typer.Option(None, "--pps-enabled/--no-pps-enabled", help="Enable/disable GPS PPS input"),
+    pcb_variant: Optional[int] = typer.Option(None, "--pcb-variant", help="Set PCB hardware variant (0-255)"),
+    log_backend: Optional[str] = typer.Option(None, "--log-backend", help="Set log storage backend (sdcard/internal)"),
+) -> None:
+    """Set one or more device settings in non-volatile memory."""
+    options = cast(Options, ctx.obj)
+    smpclient = get_smpclient(options)
+    
+    # Check if any settings were provided
+    if all(opt is None for opt in [ble_name, pps_enabled, pcb_variant, log_backend]):
+        console.print("Error: No settings provided. Use --help to see available options.", style="red")
+        raise typer.Exit(1)
+    
+    # Validate inputs
+    if ble_name is not None and len(ble_name) > 31:
+        console.print(f"Error: BLE name too long (max 31 chars, got {len(ble_name)})", style="red")
+        raise typer.Exit(1)
+    
+    if pcb_variant is not None and not 0 <= pcb_variant <= 255:
+        console.print(f"Error: PCB variant must be 0-255 (got {pcb_variant})", style="red")
+        raise typer.Exit(1)
+    
+    if log_backend is not None and log_backend not in ["fatfs", "littlefs"]:
+        console.print(f"Error: Invalid log backend '{log_backend}' (must be 'fatfs' or 'littlefs')", style="red")
+        raise typer.Exit(1)
+
+    async def f() -> None:
+        await connect_with_spinner(smpclient, options.timeout)
+        
+        # Build request with only the fields that were specified
+        request = SettingsSet()
+        settings_to_change = []
+        
+        if ble_name is not None:
+            request.ble_name = ble_name
+            settings_to_change.append(f"BLE Name = '{ble_name}'")
+        
+        if pps_enabled is not None:
+            request.pps_enabled = pps_enabled
+            settings_to_change.append(f"PPS Enabled = {pps_enabled}")
+        
+        if pcb_variant is not None:
+            request.pcb_variant = pcb_variant
+            settings_to_change.append(f"PCB Variant = 0x{pcb_variant:02X}")
+        
+        if log_backend is not None:
+            request.log_backend = log_backend
+            settings_to_change.append(f"Log Backend = '{log_backend}'")
+        
+        console.print("Setting:", style="cyan")
+        for setting in settings_to_change:
+            console.print(f"  • {setting}", style="yellow")
+        
+        response = await smpclient.request(request)
+        
+        if response.success:
+            console.print("\nSettings updated successfully!", style="green")
+            
+            # Show current values
+            table = Table(title="Current Settings")
+            table.add_column("Setting", style="cyan")
+            table.add_column("Value", style="green")
+            
+            table.add_row("BLE Name", response.ble_name)
+            table.add_row("PPS Enabled", str(response.pps_enabled))
+            table.add_row("PCB Variant", f"0x{response.pcb_variant:02X}")
+            table.add_row("Log Backend", response.log_backend)
+            
+            console.print(table)
+            
+            if response.note:
+                console.print(f"\nNote: {response.note}", style="yellow")
+        else:
+            console.print("Failed to update settings", style="red")
+
+    asyncio.run(f())
 
 # Plugin export - this is what smpmgr looks for
 plugin = app

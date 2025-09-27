@@ -718,8 +718,83 @@ class BluetoothScanner {
       commandType: CommandType.INITIALIZE,
       execute: async (device, commandData) => {
         console.log(`[COMMAND] Executing INITIALIZE on ${device.name}`);
-        // TODO: Set device name and PCB version
-        throw new Error('INITIALIZE command not yet implemented');
+        
+        if (!commandData || !commandData.newName || !commandData.deviceId) {
+          throw new Error('Missing device name or ID for initialization');
+        }
+        
+        const { newName, pcbVersion } = commandData;
+        const pcbVariant = pcbVersion || '0x01'; // Default to 0x01 if not specified
+        
+        console.log(`[COMMAND] Setting new device name: ${newName}`);
+        console.log(`[COMMAND] Setting PCB variant: ${pcbVariant}`);
+        
+        try {
+          // Use smpmgr to set the device settings
+          const pluginPath = process.env.SMPMGR_PLUGIN_PATH || 'plugins';
+          
+          // Convert pcbVersion string to numeric value for the command
+          let pcbVariantNum = 1; // default
+          if (pcbVersion) {
+            if (pcbVersion.startsWith('0x') || pcbVersion.startsWith('0X')) {
+              pcbVariantNum = parseInt(pcbVersion.substring(2), 16);
+            } else {
+              pcbVariantNum = parseInt(pcbVersion);
+            }
+          }
+          
+          // Build the smpmgr command to set both BLE name and PCB variant
+          const settingsCommand = `smpmgr --ble "${device.name}" --plugin-path="${pluginPath}" tempo settings-set --ble-name "${newName}" --pcb-variant ${pcbVariantNum}`;
+          
+          console.log(`[COMMAND] Running: ${settingsCommand}`);
+          
+          const { stdout, stderr } = await execAsync(settingsCommand, { 
+            timeout: 30000,
+            env: { ...process.env }
+          });
+          
+          // Check for success
+          if (stderr && !stderr.includes('Settings updated successfully')) {
+            throw new Error(`Settings update failed: ${stderr}`);
+          }
+          
+          console.log(`[COMMAND] Settings updated successfully`);
+          
+          // Update the device name in the database
+          await prisma.device.update({
+            where: { id: device.id },
+            data: {
+              name: newName,
+              state: DeviceState.PROVISIONING, // Still in provisioning state, needs owner assignment
+              // Store the PCB version in device metadata if we have such a field
+              // metadata: { pcbVersion }
+            }
+          });
+          
+          console.log(`[COMMAND] Database updated with new device name: ${newName}`);
+          
+          // The device will need to be power-cycled for the BLE name change to take effect
+          return {
+            success: true,
+            message: `Device initialized with name ${newName}`,
+            newName: newName,
+            deviceId: commandData.deviceId,
+            pcbVersion: pcbVersion,
+            note: 'Device must be power-cycled for BLE name change to take effect'
+          };
+          
+        } catch (error: any) {
+          console.error(`[COMMAND] Failed to initialize device:`, error);
+          
+          // Try to provide more specific error message
+          if (error.message?.includes('timeout')) {
+            throw new Error('Device communication timeout - ensure device is in range');
+          } else if (error.message?.includes('not found')) {
+            throw new Error('Device not found - it may have gone offline');
+          }
+          
+          throw error;
+        }
       }
     });
   }
