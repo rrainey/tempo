@@ -551,7 +551,7 @@ Done when: scanner sees new name; DB updated.
 - Done when: systemctl starts all; restart on failure.
 
 - **Task 115: smpmgr install script**
-- Do: shell script to install dependencies on Ubuntu 24.04 (BlueZ, smpmgr)
+- Do: shell script to install dependencies on Ubuntu 24.04 (bluetoothctl, smpmgr)
 - Done when: script exits 0 and smpmgr -h works.
 
 - **Task 116: Health endpoints**
