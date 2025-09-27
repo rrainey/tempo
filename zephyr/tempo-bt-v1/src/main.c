@@ -403,13 +403,6 @@ int main(void)
     
     /* Give event thread time to process */
     k_msleep(10);
-
-    
-    /* Initialize settings */
-    ret = app_settings_init();
-    if (ret < 0) {
-        LOG_ERR("Failed to initialize settings: %d", ret);
-    }
     
     /* Test settings */
     LOG_INF("About to test settings...");

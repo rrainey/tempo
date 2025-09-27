@@ -17,6 +17,7 @@
 #include "services/storage.h"
 #include "services/logger.h"
 #include "services/led.h"
+#include "config/settings.h"
 
 LOG_MODULE_REGISTER(mcumgr_custom, LOG_LEVEL_INF);
 
@@ -30,6 +31,8 @@ LOG_MODULE_REGISTER(mcumgr_custom, LOG_LEVEL_INF);
 #define TEMPO_MGMT_ID_LED_CONTROL      3
 #define TEMPO_MGMT_ID_LOGGER_CONTROL   4
 #define TEMPO_MGMT_ID_SESSION_DELETE   5
+#define TEMPO_MGMT_ID_SETTINGS_GET     6
+#define TEMPO_MGMT_ID_SETTINGS_SET     7
 
 /* List callback context */
 struct list_context {
@@ -455,7 +458,6 @@ static int tempo_mgmt_led_control(struct smp_streamer *ctxt)
     bool has_enable = false;
     bool has_r = false, has_g = false, has_b = false;
     struct zcbor_string key;
-    size_t decoded;
     
     /* Start decoding the map */
     ok = zcbor_map_start_decode(zsd);
@@ -541,6 +543,179 @@ static int tempo_mgmt_led_control(struct smp_streamer *ctxt)
     return 0;
 }
 
+/* Get NVM settings */
+static int tempo_mgmt_settings_get(struct smp_streamer *ctxt)
+{
+    zcbor_state_t *zse = ctxt->writer->zs;
+    
+    /* Get current settings values */
+    const char *ble_name = app_settings_get_ble_name();
+    bool pps_enabled = app_settings_get_pps_enabled();
+    uint8_t pcb_variant = app_settings_get_pcb_variant();
+    const char *log_backend = app_settings_get_log_backend();
+    
+    /* Build response with all settings */
+    bool ok = zcbor_tstr_put_lit(zse, "ble_name") &&
+              zcbor_tstr_put_term(zse, ble_name, 32) &&
+              zcbor_tstr_put_lit(zse, "pps_enabled") &&
+              zcbor_bool_put(zse, pps_enabled) &&
+              zcbor_tstr_put_lit(zse, "pcb_variant") &&
+              zcbor_uint32_put(zse, pcb_variant) &&
+              zcbor_tstr_put_lit(zse, "log_backend") &&
+              zcbor_tstr_put_term(zse, log_backend, 12);
+    
+    if (!ok) {
+        return MGMT_ERR_EMSGSIZE;
+    }
+    
+    LOG_INF("Settings get: ble_name=%s, pps=%d, pcb=0x%02X, backend=%s", 
+            ble_name, pps_enabled, pcb_variant, log_backend);
+    
+    return 0;
+}
+
+/* Set NVM settings */
+static int tempo_mgmt_settings_set(struct smp_streamer *ctxt)
+{
+    zcbor_state_t *zsd = ctxt->reader->zs;  /* Decoder for request */
+    zcbor_state_t *zse = ctxt->writer->zs;  /* Encoder for response */
+    
+    bool ok;
+    struct zcbor_string key;
+    struct zcbor_string str_value;
+    uint32_t uint_value;
+    int ret = 0;
+    
+    /* Values to update */
+    bool has_ble_name = false;
+    bool has_pps = false;
+    bool has_pcb = false;
+    bool has_backend = false;
+    
+    char new_ble_name[32];
+    bool new_pps;
+    uint8_t new_pcb = 1;
+    char new_backend[12];
+    
+    /* Start decoding the map */
+    ok = zcbor_map_start_decode(zsd);
+    if (!ok) {
+        LOG_ERR("Failed to start decoding map");
+        return MGMT_ERR_EINVAL;
+    }
+    
+    /* Decode each setting */
+    while (zcbor_tstr_decode(zsd, &key)) {
+        if (key.len == 8 && memcmp(key.value, "ble_name", 8) == 0) {
+            ok = zcbor_tstr_decode(zsd, &str_value);
+            if (ok && str_value.len < sizeof(new_ble_name)) {
+                memcpy(new_ble_name, str_value.value, str_value.len);
+                new_ble_name[str_value.len] = '\0';
+                has_ble_name = true;
+            }
+        }
+        else if (key.len == 11 && memcmp(key.value, "pps_enabled", 11) == 0) {
+            ok = zcbor_bool_decode(zsd, &new_pps);
+            if (ok) has_pps = true;
+        }
+        else if (key.len == 11 && memcmp(key.value, "pcb_variant", 11) == 0) {
+            ok = zcbor_uint32_decode(zsd, &uint_value);
+            if (ok && uint_value <= 255) {
+                new_pcb = (uint8_t)uint_value;
+                has_pcb = true;
+            }
+        }
+        else if (key.len == 11 && memcmp(key.value, "log_backend", 11) == 0) {
+            ok = zcbor_tstr_decode(zsd, &str_value);
+            if (ok && str_value.len < sizeof(new_backend)) {
+                memcpy(new_backend, str_value.value, str_value.len);
+                new_backend[str_value.len] = '\0';
+                has_backend = true;
+            }
+        }
+        else {
+            /* Skip unknown keys */
+            ok = zcbor_any_skip(zsd, NULL);
+        }
+        
+        if (!ok) {
+            LOG_ERR("Failed to decode value");
+            return MGMT_ERR_EINVAL;
+        }
+    }
+    
+    ok = zcbor_map_end_decode(zsd);
+    if (!ok) {
+        LOG_ERR("Failed to end decoding map");
+        return MGMT_ERR_EINVAL;
+    }
+    
+    /* Apply the settings */
+    if (has_ble_name) {
+        ret = app_settings_set_ble_name(new_ble_name);
+        if (ret != 0) {
+            LOG_ERR("Failed to set ble_name: %d", ret);
+            return MGMT_ERR_EUNKNOWN;
+        }
+        LOG_INF("Set ble_name: %s", new_ble_name);
+    }
+    
+    if (has_pps) {
+        ret = app_settings_set_pps_enabled(new_pps);
+        if (ret != 0) {
+            LOG_ERR("Failed to set pps_enabled: %d", ret);
+            return MGMT_ERR_EUNKNOWN;
+        }
+        LOG_INF("Set pps_enabled: %d", new_pps);
+    }
+    
+    if (has_pcb) {
+        ret = app_settings_set_pcb_variant(new_pcb);
+        if (ret != 0) {
+            LOG_ERR("Failed to set pcb_variant: %d", ret);
+            return MGMT_ERR_EUNKNOWN;
+        }
+        LOG_INF("Set pcb_variant: 0x%02X", new_pcb);
+    }
+    
+    if (has_backend) {
+        ret = app_settings_set_log_backend(new_backend);
+        if (ret != 0) {
+            LOG_ERR("Failed to set log_backend: %d", ret);
+            return MGMT_ERR_EUNKNOWN;
+        }
+        LOG_INF("Set log_backend: %s", new_backend);
+    }
+    
+    /* Build response with all current settings (after updates) */
+    const char *ble_name = app_settings_get_ble_name();
+    bool pps_enabled = app_settings_get_pps_enabled();
+    uint8_t pcb_variant = app_settings_get_pcb_variant();
+    const char *log_backend = app_settings_get_log_backend();
+    
+    ok = zcbor_tstr_put_lit(zse, "ble_name") &&
+         zcbor_tstr_put_term(zse, ble_name, 32) &&
+         zcbor_tstr_put_lit(zse, "pps_enabled") &&
+         zcbor_bool_put(zse, pps_enabled) &&
+         zcbor_tstr_put_lit(zse, "pcb_variant") &&
+         zcbor_uint32_put(zse, pcb_variant) &&
+         zcbor_tstr_put_lit(zse, "log_backend") &&
+         zcbor_tstr_put_term(zse, log_backend, 12) &&
+         zcbor_tstr_put_lit(zse, "success") &&
+         zcbor_bool_put(zse, true);
+    
+    if (has_ble_name) {
+        ok = ok && zcbor_tstr_put_lit(zse, "note") &&
+             zcbor_tstr_put_lit(zse, "BLE name changes require reboot");
+    }
+    
+    if (!ok) {
+        return MGMT_ERR_EMSGSIZE;
+    }
+    
+    return 0;
+}
+
 /* Command handlers table */
 static const struct mgmt_handler tempo_mgmt_handlers[] = {
     [TEMPO_MGMT_ID_SESSION_LIST] = {
@@ -566,6 +741,14 @@ static const struct mgmt_handler tempo_mgmt_handlers[] = {
     [TEMPO_MGMT_ID_SESSION_DELETE] = {
         .mh_read = NULL,
         .mh_write = tempo_mgmt_session_delete,
+    },
+    [TEMPO_MGMT_ID_SETTINGS_GET] = {
+        .mh_read = tempo_mgmt_settings_get,
+        .mh_write = NULL,
+    },
+    [TEMPO_MGMT_ID_SETTINGS_SET] = {
+        .mh_read = NULL,
+        .mh_write = tempo_mgmt_settings_set,
     },
 };
 

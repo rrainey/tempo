@@ -6,7 +6,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-//#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/uuid.h>
@@ -21,10 +21,14 @@
 #include <zephyr/mgmt/mcumgr/grp/shell_mgmt/shell_mgmt.h>
 
 #include "app/events.h"
+#include "config/settings.h"
 
 LOG_MODULE_REGISTER(ble_mcumgr, LOG_LEVEL_INF);
 
 static struct k_work advertising_work;
+
+/* Storage for dynamic device name */
+static char device_name[32] = "Tempo-BT";  /* Default fallback */
 
 /* BLE advertising data */
 static const struct bt_data ad[] = {
@@ -34,10 +38,8 @@ static const struct bt_data ad[] = {
                   0xd3, 0x4c, 0xb7, 0x1d, 0x1d, 0xdc, 0x53, 0x8d), /* SMP/mcumgr UUID */
 };
 
-/* Scan response data */
-static const struct bt_data sd[] = {
-    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
-};
+/* Scan response data - will be updated with dynamic name */
+static struct bt_data sd[1];
 
 /* Connection reference */
 static struct bt_conn *current_conn;
@@ -175,6 +177,27 @@ int ble_mcumgr_init(void)
 
     LOG_INF("Initializing BLE and mcumgr");
 
+    /* Initialize settings first to get the device name */
+    ret = app_settings_init();
+    if (ret) {
+        LOG_WRN("Failed to initialize settings: %d, using default name", ret);
+    } else {
+        /* Get the configured device name */
+        const char *configured_name = app_settings_get_ble_name();
+        if (configured_name && strlen(configured_name) > 0) {
+            strncpy(device_name, configured_name, sizeof(device_name) - 1);
+            device_name[sizeof(device_name) - 1] = '\0';
+            LOG_INF("Using configured device name: %s", device_name);
+        } else {
+            LOG_INF("No configured name, using default: %s", device_name);
+        }
+    }
+
+    /* Update scan response data with the device name */
+    sd[0].type = BT_DATA_NAME_COMPLETE;
+    sd[0].data_len = strlen(device_name);
+    sd[0].data = (const uint8_t *)device_name;
+
     /* Initialize Bluetooth */
     ret = bt_enable(NULL);
     if (ret) {
@@ -183,6 +206,12 @@ int ble_mcumgr_init(void)
     }
 
     LOG_INF("Bluetooth initialized");
+
+    /* Set the device name in the Bluetooth stack */
+    ret = bt_set_name(device_name);
+    if (ret) {
+        LOG_WRN("Failed to set Bluetooth device name: %d", ret);
+    }
 
     k_work_init(&advertising_work, advertising_work_handler);
 
@@ -212,7 +241,7 @@ int ble_mcumgr_init(void)
         return ret;
     }
 
-    LOG_INF("BLE advertising started");
+    LOG_INF("BLE advertising started with name: %s", device_name);
 
     return 0;
 }
@@ -231,4 +260,10 @@ int ble_get_conn_info(struct bt_conn_info *info)
     }
 
     return bt_conn_get_info(current_conn, info);
+}
+
+/* Get current device name */
+const char *ble_get_device_name(void)
+{
+    return device_name;
 }
