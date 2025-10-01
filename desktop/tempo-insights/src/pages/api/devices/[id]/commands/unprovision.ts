@@ -1,6 +1,6 @@
 // /pages/api/devices/[id]/commands/unprovision.ts
 
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiResponse } from 'next';
 import { withAuth, AuthenticatedRequest } from '../../../../../lib/auth/middleware';
 import { PrismaClient, CommandType } from '@prisma/client';
 

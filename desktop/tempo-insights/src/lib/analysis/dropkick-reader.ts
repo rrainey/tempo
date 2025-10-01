@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/prefer-as-const */
 import { parseGenericPacket, DefaultPacketFactory, parseUnsafeNmeaSentence, getUnsafePacketId, UnsafePacket } from "nmea-simple";
 import { initStubFields, PacketStub } from "nmea-simple/dist/codecs/PacketStub";
 import { KMLWriter } from './kml-writer'
-import { getPackedSettings } from "http2";
+//import { getPackedSettings } from "http2";
 import * as egm96 from 'egm96-universal'
 import { FEETtoMETERS, interp1 } from "./dropkick-tools";
 
@@ -386,7 +387,7 @@ export class DropkickReader {
 		res = res.replace("$PST", "$P_ST");
 		// recalculate checksums; really we should be manually validating the existing checksum prior to doing the
 		// "replace" statements above ...
-		var lineEnd = res.lastIndexOf("*");
+		const lineEnd = res.lastIndexOf("*");
 		if (lineEnd != -1) {
 			res = res.substring(0,lineEnd);
 		}
@@ -415,7 +416,7 @@ export class DropkickReader {
 	 */
 	onData(line: string): void {
 
-		let patched: string = this.appendChecksumIfMissing(line);
+		const patched: string = this.appendChecksumIfMissing(line);
 
 		try {
 
@@ -442,12 +443,12 @@ export class DropkickReader {
 					if (packet.sentenceId === "RMC" && packet.status === "valid") {
 						// use RMC for track, speed, and date (not time)
 						console.log("Got location via RMC packet:", packet.datetime, packet.latitude, packet.longitude, packet.trackTrue, packet.speedKnots);
-						var fullDateTime_ms: number = packet.datetime.getTime();
-						var timePortion_ms = fullDateTime_ms % (86400000);
+						const fullDateTime_ms: number = packet.datetime.getTime();
+						const timePortion_ms = fullDateTime_ms % (86400000);
 						this.calendarDate = new Date(fullDateTime_ms - timePortion_ms);
 						this.currentCalendarDate = this.calendarDate;
 						this.startDate = packet.datetime;
-						//var timePortion = (myDate.getTime() - myDate.getTimezoneOffset() * 60 * 1000) % (3600 * 1000 * 24);
+						//const timePortion = (myDate.getTime() - myDate.getTimezoneOffset() * 60 * 1000) % (3600 * 1000 * 24);
 						this.state =  ReaderState.NORMAL_1;
 						this.curEntry = this.cleanKMLEntry();
 						this.maxAcc = { x: 0, y: 0, z: 0 };
@@ -466,8 +467,8 @@ export class DropkickReader {
 				case ReaderState.NORMAL_2:
 					if (packet.sentenceId === "RMC" && packet.status === "valid") {
 						
-						var fullDateTime_ms: number = packet.datetime.getTime();
-						var timePortion_ms = fullDateTime_ms % (86400000);
+						const fullDateTime_ms: number = packet.datetime.getTime();
+						const timePortion_ms = fullDateTime_ms % (86400000);
 						this.calendarDate = new Date(fullDateTime_ms - timePortion_ms);
 						this.currentCalendarDate = this.calendarDate;
 						
@@ -483,8 +484,8 @@ export class DropkickReader {
 		
 					else if (packet.sentenceId === "GGA" && packet.fixType !== "none") {
 						// use GGA to get GNSS (WGS-84) altitude; convert to MSL
-						var fullDateTime_ms: number = packet.time.getTime();
-						var timePortion_ms = fullDateTime_ms % (86400000);
+						const fullDateTime_ms: number = packet.time.getTime();
+						const timePortion_ms = fullDateTime_ms % (86400000);
 						let correctedTimestamp = new Date(fullDateTime_ms);
 						// TODO handle first entry more gracefully
 						if (this.currentCalendarDate !== undefined && this.startDate !== null && this.startDate !== undefined) {

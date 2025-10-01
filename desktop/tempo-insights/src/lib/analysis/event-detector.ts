@@ -38,7 +38,7 @@ export class EventDetector {
         continue;
       }
 
-      let accelMag = Math.sqrt(entry.accel_mps2.x * entry.accel_mps2.x +
+      const accelMag = Math.sqrt(entry.accel_mps2.x * entry.accel_mps2.x +
                             entry.accel_mps2.y * entry.accel_mps2.y +
                             entry.accel_mps2.z * entry.accel_mps2.z);
       
@@ -85,7 +85,7 @@ export class EventDetector {
         continue;
       }
 
-      let accelMag = Math.sqrt(entry.accel_mps2.x * entry.accel_mps2.x +
+      const accelMag = Math.sqrt(entry.accel_mps2.x * entry.accel_mps2.x +
                             entry.accel_mps2.y * entry.accel_mps2.y +
                             entry.accel_mps2.z * entry.accel_mps2.z);
 

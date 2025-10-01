@@ -8,7 +8,6 @@ import {
   Group as MantineGroup,
   Badge,
   Tabs,
-  Stack,
   Card,
   Button,
   Avatar,
@@ -76,7 +75,7 @@ export default function GroupPage() {
       const data = await response.json();
       setGroup(data.group);
     } catch (err) {
-      setError('Failed to load group');
+      setError('Failed to load group: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setLoading(false);
     }

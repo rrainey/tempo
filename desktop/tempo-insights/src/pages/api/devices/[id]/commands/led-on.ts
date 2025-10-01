@@ -1,6 +1,6 @@
 // /pages/api/devices/[id]/commands/led-on.ts
 
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiResponse } from 'next';
 import { withAuth, AuthenticatedRequest } from '../../../../../lib/auth/middleware';
 import { PrismaClient, CommandType } from '@prisma/client';
 import { z } from 'zod';

@@ -1,6 +1,6 @@
 // pages/api/jumps/[id].ts
 
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import { createClient } from '@supabase/supabase-js';
 import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';

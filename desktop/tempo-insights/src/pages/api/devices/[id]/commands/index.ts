@@ -1,6 +1,6 @@
 // /pages/api/devices/[id]/commands/index.ts
 
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiResponse } from 'next';
 import { withAuth, AuthenticatedRequest } from '../../../../../lib/auth/middleware';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';

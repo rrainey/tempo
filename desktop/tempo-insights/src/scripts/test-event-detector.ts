@@ -84,7 +84,8 @@ function testEventDetector() {
     
     // Test landing detection  
     console.log('\n   Landing Detection:');
-    const landing = EventDetector.detectLanding(parsedData);
+    // Use deployment.deploymentOffsetSec as the second argument if available, otherwise undefined
+    const landing = EventDetector.detectLanding(parsedData, deployment.deploymentOffsetSec ?? 30.0);
     if (landing.offsetSec !== undefined) {
       console.log(`   ✓ Landing detected at ${landing.offsetSec.toFixed(1)}s`);
       

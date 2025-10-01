@@ -230,7 +230,7 @@ Phase 5 — Users & Groups Basics
 
 - **Task 49: Create JumpLog API (internal)**
 Do: /api/internal/jumps/create (protected to workers via shared token header)
-Done when: posting bytes creates JumpLog row with hash.
+Done when: posting bytes uploads to Supabase Storage and creates JumpLog row with storage references and hash.
 
 - **Task 50: My Jumps list**
 Do: /api/jumps/mine returns paginated jump summaries
@@ -273,8 +273,8 @@ Do: maintain per-device uploaded filenames in DB (table DeviceFileIndex)
 Done when: calling ingestion simulates one new file per appearance.
 
 - **Task 59: Upload → JumpLog**
-Do: write raw bytes (mock), compute SHA-256, set userId from device assignment
-Done when: new JumpLog rows appear with hash.
+Do: upload file to Supabase Storage, compute SHA-256, set userId from device assignment, store file references
+Done when: new JumpLog rows appear with storage URLs and hash.
 
 - **Task 60: Replace stubs with smpmgr list**
 Do: implement fs ls parse to list files on device

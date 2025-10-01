@@ -68,7 +68,7 @@ export default function GroupsPage() {
             <div>
               <Title order={3} mb="md">My Groups</Title>
               {myGroups.length === 0 ? (
-                <Text c="dimmed">You're not a member of any groups yet.</Text>
+                <Text c="dimmed">You&apos;re not a member of any groups yet.</Text>
               ) : (
                 <Grid>
                   {myGroups.map(group => (

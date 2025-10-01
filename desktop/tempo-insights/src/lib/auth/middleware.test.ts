@@ -1,3 +1,4 @@
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 import { requireAdmin, withAuth } from './middleware';
 import { UserRole } from '@prisma/client';
 import { NextApiResponse } from 'next';

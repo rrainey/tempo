@@ -1,9 +1,17 @@
+// pages/api/internal/jumps/create.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
+import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import crypto from 'crypto';
 
 const prisma = new PrismaClient();
+
+// Initialize Supabase client with service key for server-side operations
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
 const createJumpLogSchema = z.object({
   deviceId: z.string(),
@@ -54,13 +62,53 @@ export default async function handler(
       });
     }
 
-    // Create new jump log
+    // Generate unique ID for this jump log
+    const jumpId = crypto.randomUUID();
+
+    // Create storage path
+    const storagePath = `users/${userId}/jumps/${jumpId}/${fileName}`;
+
+    // Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('jump-logs')
+      .upload(storagePath, rawLogBuffer, {
+        contentType: 'application/octet-stream',
+        upsert: false, // Prevent accidental overwrites
+      });
+
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError);
+      return res.status(500).json({ 
+        error: 'Failed to upload jump log to storage',
+        details: uploadError.message 
+      });
+    }
+
+    // Get the public URL for the uploaded file
+    const { data: urlData } = supabase.storage
+      .from('jump-logs')
+      .getPublicUrl(storagePath);
+
+    // Get the user's current jump number and increment it
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { nextJumpNumber: true }
+    });
+
+    const jumpNumber = user?.nextJumpNumber || 1;
+
+    // Create jump log record in database
     const jumpLog = await prisma.jumpLog.create({
       data: {
+        id: jumpId,
         deviceId,
         userId,
+        jumpNumber,
         hash,
-        rawLog: rawLogBuffer,
+        storageUrl: urlData.publicUrl,
+        storagePath: storagePath,
+        fileSize: rawLogBuffer.length,
+        mimeType: 'application/octet-stream',
         offsets: {}, // Will be populated by analysis worker
         flags: {
           fileName,
@@ -79,14 +127,25 @@ export default async function handler(
       },
     });
 
+    // Update user's next jump number
+    await prisma.user.update({
+      where: { id: userId },
+      data: { nextJumpNumber: jumpNumber + 1 }
+    });
+
     console.log(`[JUMP LOG] Created new jump log ${jumpLog.id} for user ${jumpLog.user.name} from device ${jumpLog.device.name}`);
+    console.log(`[JUMP LOG] Stored at: ${storagePath} (${rawLogBuffer.length} bytes)`);
 
     return res.status(201).json({
       jumpLog: {
         id: jumpLog.id,
+        jumpNumber: jumpLog.jumpNumber,
         hash: jumpLog.hash,
         deviceId: jumpLog.deviceId,
         userId: jumpLog.userId,
+        storageUrl: jumpLog.storageUrl,
+        storagePath: jumpLog.storagePath,
+        fileSize: jumpLog.fileSize,
         createdAt: jumpLog.createdAt,
       },
       message: 'Jump log created successfully',
@@ -104,3 +163,12 @@ export default async function handler(
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
+
+// For Next.js API routes handling file uploads
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '20mb', // Increase limit to handle base64 encoded files up to ~15MB raw
+    },
+  },
+};

@@ -1,7 +1,7 @@
 import { PrismaClient, DeviceState, CommandType, CommandStatus } from '@prisma/client';
 import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
-import { BluetoothService } from '../lib/bluetooth/bluetooth.service';
+import { BluetoothService, TempoDevice } from '../lib/bluetooth/bluetooth.service';
 import crypto from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -21,7 +21,7 @@ const supabase = createClient(
 // Configuration
 const DISCOVERY_WINDOW = parseInt(process.env.DISCOVERY_WINDOW || '300'); // 5 minutes default
 const SCAN_INTERVAL = 30000; // 30 seconds between scans
-const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || 'default-internal-token';
+//const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || 'default-internal-token';
 
 // Track file processing state
 interface FileProcessingState {
@@ -33,7 +33,7 @@ interface FileProcessingState {
 // Device Command Queue Processing
 interface CommandProcessor {
   commandType: CommandType;
-  execute: (device: any, commandData: any) => Promise<any>;
+  execute: (device: TempoDevice, commandData: any) => Promise<any>;
 }
 
 class BluetoothScanner {
@@ -160,7 +160,7 @@ class BluetoothScanner {
     }
   }
 
-  private async discoverDevices(): Promise<any[]> {
+  private async discoverDevices(): Promise<TempoDevice[]> {
     try {
       const devices = await bluetooth.listTempoDevices();
       return devices;
@@ -170,7 +170,7 @@ class BluetoothScanner {
     }
   }
 
-  private async processDevice(device: any) {
+  private async processDevice(device: TempoDevice) {
     console.log(`[BLUETOOTH SCANNER] Processing device ${device.name} (${device.bluetoothId})`);
     
     try {
@@ -674,7 +674,7 @@ class BluetoothScanner {
           
           // Also clear the owner in the database after successful unprovision
           await prisma.device.update({
-            where: { id: device.id },
+            where: { id: device.bluetoothId },
             data: {
               ownerId: undefined,
               state: DeviceState.PROVISIONING
@@ -694,7 +694,7 @@ class BluetoothScanner {
             
             // Still update the database
             await prisma.device.update({
-              where: { id: device.id },
+              where: { id: device.bluetoothId },
               data: {
                 ownerId: undefined,
                 state: DeviceState.PROVISIONING
@@ -762,7 +762,7 @@ class BluetoothScanner {
           
           // Update the device name in the database
           await prisma.device.update({
-            where: { id: device.id },
+            where: { id: device.bluetoothId },
             data: {
               name: newName,
               state: DeviceState.PROVISIONING, // Still in provisioning state, needs owner assignment

@@ -1,5 +1,6 @@
 // src/scripts/test-unprovision-command.ts
 // Run with: tsx src/scripts/test-unprovision-command.ts
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 
 import { config } from 'dotenv';
 

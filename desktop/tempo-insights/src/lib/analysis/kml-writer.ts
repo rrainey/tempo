@@ -143,7 +143,7 @@ export class KMLWriter {
             "               </gx:SimpleArrayData>\n" +
 
             "               <gx:SimpleArrayData name=\"groundspeed_kts\">\n" +
-            records.map((s) => { return "                  <gx:value>" + (s.groundspeed_kmph * 0.539957) + "</gx:value>\n" }).join('') +
+            records.map((s) => { return "                  <gx:value>" + (((s.groundspeed_kmph ?? 0) * 0.539957)) + "</gx:value>\n" }).join('') +
             "               </gx:SimpleArrayData>\n" +
 
             "               <gx:SimpleArrayData name=\"track_degTrue\">\n" +

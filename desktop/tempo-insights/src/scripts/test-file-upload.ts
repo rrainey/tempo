@@ -1,169 +1,271 @@
-// Save as: src/scripts/test-file-upload.ts
-// Run with: tsx src/scripts/test-file-upload.ts
+// Save as: src/scripts/test-idempotency.ts
+// Run with: tsx src/scripts/test-idempotency.ts
 
 import { PrismaClient } from '@prisma/client';
-import { BluetoothService } from '../lib/bluetooth/bluetooth.service';
+import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import crypto from 'crypto';
-import fs from 'fs/promises';
-import path from 'path';
 
 config({ path: '.env' });
 
 const prisma = new PrismaClient();
-const bluetooth = BluetoothService.getInstance();
 
-// Override the bluetooth service to use sample flight data
-async function getSampleFlightData(): Promise<Buffer> {
-  try {
-    // Read the sample flight data from the docs directory
-    const samplePath = path.join(process.cwd(), 'docs', 'sample-flight.txt');
-    const fileContent = await fs.readFile(samplePath);
-    console.log(`   Loaded sample flight data: ${fileContent.length} bytes`);
-    return fileContent;
-  } catch (error) {
-    console.error('   Error reading sample-flight.txt:', error);
-    console.log('   Using fallback mock data');
-    // Fallback if file doesn't exist
-    return Buffer.from('Mock flight data - sample-flight.txt not found');
-  }
-}
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
-async function testFileUpload() {
-  console.log('=== Testing File Upload to JumpLog ===\n');
+async function testIdempotency() {
+  console.log('=== Testing Idempotency with Supabase Storage ===\n');
   
   try {
-    // 1. Get test devices (avoid Tempo-BT-0004)
-    console.log('1. Getting test devices:');
-    const devices = await prisma.device.findMany({
+    // 1. Get a test device
+    console.log('1. Getting test device:');
+    const device = await prisma.device.findFirst({
       where: {
         name: {
-          not: 'Tempo-BT-0004', // Reserved for live testing
+          not: 'Tempo-BT-0004', // Avoid live device
         },
-      },
-      include: {
-        owner: true,
-        lentTo: true,
       },
     });
     
-    if (devices.length === 0) {
-      console.log('No test devices found. Please run seed script first.');
+    if (!device) {
+      console.log('No test device found. Please run seed script first.');
       return;
     }
     
-    for (const device of devices) {
-      console.log(`\n   Device: ${device.name} (${device.bluetoothId})`);
-      console.log(`   Owner: ${device.owner.name}`);
-      if (device.lentTo) {
-        console.log(`   Lent to: ${device.lentTo.name}`);
+    console.log(`   Using device: ${device.name}`);
+    
+    // 2. Create a test file entry
+    const testFileName = '20250120/TEST1234/flight.dat';
+    const testContent = Buffer.from('Test flight data content');
+    const testHash = crypto.createHash('sha256').update(testContent).digest('hex');
+    
+    console.log(`\n2. Testing filename-based idempotency:`);
+    console.log(`   Test file: ${testFileName}`);
+    
+    // Check if file already indexed
+    const existingIndex = await prisma.deviceFileIndex.findFirst({
+      where: {
+        deviceId: device.id,
+        fileName: testFileName,
+      },
+    });
+    
+    if (existingIndex) {
+      console.log(`   âœ" File already indexed (created at ${existingIndex.uploadedAt})`);
+    } else {
+      // Create file index entry
+      const newIndex = await prisma.deviceFileIndex.create({
+        data: {
+          deviceId: device.id,
+          fileName: testFileName,
+        },
+      });
+      console.log(`   âœ" Created file index entry`);
+    }
+    
+    // Try to create duplicate - should fail
+    console.log(`   Testing duplicate prevention...`);
+    try {
+      await prisma.deviceFileIndex.create({
+        data: {
+          deviceId: device.id,
+          fileName: testFileName,
+        },
+      });
+      console.log(`   âœ— ERROR: Duplicate was allowed!`);
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        console.log(`   âœ" Duplicate prevented by unique constraint`);
+      } else {
+        console.log(`   âœ— Unexpected error: ${error.message}`);
       }
     }
     
-    // 2. Simulate file download and upload for first device
-    const testDevice = devices[0];
-    console.log(`\n2. Testing file upload for ${testDevice.name}:`);
+    // 3. Test content hash idempotency with Supabase Storage
+    console.log(`\n3. Testing content hash idempotency with storage:`);
+    console.log(`   Content hash: ${testHash.substring(0, 16)}...`);
     
-    // List files on device
-    const files = await bluetooth.listDeviceFiles(testDevice.bluetoothId);
-    const jumpFiles = files.filter(f => f.endsWith('.txt') || f.endsWith('.log'));
-    
-    console.log(`   Total files: ${files.length}`);
-    console.log(`   Jump logs: ${jumpFiles.length}`);
-    
-    if (jumpFiles.length === 0) {
-      console.log('   No jump files to process');
-      return;
-    }
-    
-    // Process first jump file
-    const testFile = jumpFiles[0];
-    console.log(`\n3. Processing ${testFile}:`);
-    
-    // Instead of downloading from device, use sample flight data
-    console.log('   Using sample flight data from docs/sample-flight.txt...');
-    const fileContent = await getSampleFlightData();
-    
-    // Compute hash
-    const hash = crypto.createHash('sha256').update(fileContent).digest('hex');
-    console.log(`   SHA-256: ${hash}`);
-    
-    // Check for duplicate
-    const existing = await prisma.jumpLog.findUnique({
-      where: { hash },
+    // Check if jump log with this hash exists
+    const existingJump = await prisma.jumpLog.findUnique({
+      where: { hash: testHash },
     });
     
-    if (existing) {
-      console.log('   Jump log already exists (duplicate)');
-      console.log(`   Jump ID: ${existing.id}`);
-      console.log(`   Created: ${existing.createdAt}`);
+    if (existingJump) {
+      console.log(`   âœ" Jump log already exists with this hash`);
+      console.log(`   Jump ID: ${existingJump.id}`);
+      console.log(`   Created: ${existingJump.createdAt}`);
+      console.log(`   Storage: ${existingJump.storagePath}`);
     } else {
-      // Create new jump log
-      const userId = testDevice.lentToId || testDevice.ownerId;
-      console.log(`   Creating new jump log for user ${userId}...`);
+      // Create jump log with storage
+      const jumpId = crypto.randomUUID();
+      const storagePath = `users/${device.ownerId}/jumps/${jumpId}/${testFileName}`;
       
-      const jumpLog = await prisma.jumpLog.create({
+      // Upload to storage
+      console.log(`   Uploading to storage: ${storagePath}`);
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('jump-logs')
+        .upload(storagePath, testContent, {
+          contentType: 'application/octet-stream',
+          upsert: false
+        });
+      
+      if (uploadError) {
+        console.error(`   Upload error: ${uploadError.message}`);
+        return;
+      }
+      
+      const { data: urlData } = supabase.storage
+        .from('jump-logs')
+        .getPublicUrl(storagePath);
+      
+      const newJump = await prisma.jumpLog.create({
         data: {
-          hash: hash,
-          rawLog: fileContent,
-          deviceId: testDevice.id,
-          userId: userId,
+          id: jumpId,
+          hash: testHash,
+          storageUrl: urlData.publicUrl,
+          storagePath: storagePath,
+          fileSize: testContent.length,
+          mimeType: 'application/octet-stream',
+          deviceId: device.id,
+          userId: device.ownerId,
           offsets: {},
           flags: {},
           visibleToConnections: true,
         },
       });
-      
-      console.log(`   ✓ Created JumpLog with ID: ${jumpLog.id}`);
-      
-      // Mark file as processed
-      await prisma.deviceFileIndex.create({
-        data: {
-          deviceId: testDevice.id,
-          fileName: testFile,
-        },
-      });
-      
-      console.log(`   ✓ Marked ${testFile} as processed`);
+      console.log(`   âœ" Created jump log with ID: ${newJump.id}`);
+      console.log(`   âœ" File uploaded to storage`);
     }
     
-    // 4. Show jump log statistics
-    console.log('\n4. Jump log statistics:');
-    const stats = await prisma.jumpLog.groupBy({
+    // Try to create duplicate jump log - should fail
+    console.log(`   Testing duplicate hash prevention...`);
+    try {
+      const duplicateId = crypto.randomUUID();
+      await prisma.jumpLog.create({
+        data: {
+          id: duplicateId,
+          hash: testHash,
+          storageUrl: 'dummy-url',
+          storagePath: 'dummy-path',
+          fileSize: testContent.length,
+          mimeType: 'application/octet-stream',
+          deviceId: device.id,
+          userId: device.ownerId,
+          offsets: {},
+          flags: {},
+          visibleToConnections: true,
+        },
+      });
+      console.log(`   âœ— ERROR: Duplicate hash was allowed!`);
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        console.log(`   âœ" Duplicate prevented by unique hash constraint`);
+      } else {
+        console.log(`   âœ— Unexpected error: ${error.message}`);
+      }
+    }
+    
+    // 4. Test cross-device idempotency
+    console.log(`\n4. Testing cross-device idempotency:`);
+    
+    // Get another device
+    const device2 = await prisma.device.findFirst({
+      where: {
+        id: { not: device.id },
+        name: { not: 'Tempo-BT-0004' },
+      },
+    });
+    
+    if (device2) {
+      console.log(`   Second device: ${device2.name}`);
+      
+      // Same filename on different device should be allowed
+      try {
+        await prisma.deviceFileIndex.create({
+          data: {
+            deviceId: device2.id,
+            fileName: testFileName,
+          },
+        });
+        console.log(`   âœ" Same filename allowed on different device`);
+      } catch (error) {
+        console.log(`   âœ— Filename blocked on different device (unexpected)`);
+      }
+      
+      // Same content hash should still be blocked globally
+      console.log(`   Testing global hash uniqueness...`);
+      try {
+        const anotherJumpId = crypto.randomUUID();
+        await prisma.jumpLog.create({
+          data: {
+            id: anotherJumpId,
+            hash: testHash,
+            storageUrl: 'dummy-url-2',
+            storagePath: 'dummy-path-2',
+            fileSize: testContent.length,
+            mimeType: 'application/octet-stream',
+            deviceId: device2.id,
+            userId: device2.ownerId,
+            offsets: {},
+            flags: {},
+            visibleToConnections: true,
+          },
+        });
+        console.log(`   âœ— ERROR: Same hash allowed from different device!`);
+      } catch (error: any) {
+        if (error.code === 'P2002') {
+          console.log(`   âœ" Hash uniqueness enforced across devices`);
+        }
+      }
+    } else {
+      console.log(`   No second device available for cross-device test`);
+    }
+    
+    // 5. Show idempotency statistics
+    console.log(`\n5. Idempotency statistics:`);
+    
+    // Count file indices per device
+    const fileStats = await prisma.deviceFileIndex.groupBy({
       by: ['deviceId'],
       _count: true,
     });
     
-    for (const stat of stats) {
-      const device = devices.find(d => d.id === stat.deviceId);
-      if (device) {
-        console.log(`   - ${device.name}: ${stat._count} jump(s)`);
+    console.log(`   File indices by device:`);
+    for (const stat of fileStats) {
+      const statDevice = await prisma.device.findUnique({
+        where: { id: stat.deviceId },
+      });
+      if (statDevice) {
+        console.log(`   - ${statDevice.name}: ${stat._count} files indexed`);
       }
     }
     
-    // 5. Show recent jump logs
-    console.log('\n5. Recent jump logs:');
-    const recentJumps = await prisma.jumpLog.findMany({
-      take: 5,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        device: true,
-        user: true,
-      },
+    // Count unique jump logs
+    const jumpCount = await prisma.jumpLog.count();
+    console.log(`\n   Total unique jump logs: ${jumpCount}`);
+    
+    // 6. Test storage path uniqueness
+    console.log(`\n6. Testing storage path uniqueness:`);
+    const existingJumpWithPath = await prisma.jumpLog.findFirst({
+      where: { storagePath: { not: null } }
     });
     
-    for (const jump of recentJumps) {
-      console.log(`\n   Jump ${jump.id}:`);
-      console.log(`   - Device: ${jump.device.name}`);
-      console.log(`   - User: ${jump.user.name}`);
-      console.log(`   - Hash: ${jump.hash.substring(0, 16)}...`);
-      console.log(`   - Size: ${jump.rawLog.length} bytes`);
-      console.log(`   - Created: ${jump.createdAt.toISOString()}`);
+    if (existingJumpWithPath) {
+      console.log(`   Attempting to use existing path: ${existingJumpWithPath.storagePath}`);
       
-      // Show first line of data if it's the sample data
-      const firstLine = jump.rawLog.toString().split('\n')[0];
-      if (firstLine.startsWith('$PVER')) {
-        console.log(`   - Data: ${firstLine.substring(0, 40)}...`);
+      const { error: uploadError } = await supabase.storage
+        .from('jump-logs')
+        .upload(existingJumpWithPath.storagePath!, Buffer.from('duplicate content'), {
+          upsert: false // This should prevent overwriting
+        });
+      
+      if (uploadError) {
+        console.log(`   âœ" Storage prevented duplicate path upload: ${uploadError.message}`);
+      } else {
+        console.log(`   âœ— Storage allowed duplicate path!`);
       }
     }
     
@@ -177,4 +279,4 @@ async function testFileUpload() {
 }
 
 // Run the test
-testFileUpload().catch(console.error);
+testIdempotency().catch(console.error);

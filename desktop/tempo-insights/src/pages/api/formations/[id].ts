@@ -1,6 +1,6 @@
 // pages/api/formations/[id].ts
 
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import { withAuth, AuthenticatedRequest } from '../../../lib/auth/middleware';
 import { LogParser } from '../../../lib/analysis/log-parser';
@@ -191,7 +191,7 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
     // Use position 1 as base, or first visible participant
     const baseParticipant = participantsWithData.find(p => p.position === 1 && p.isVisible);
     const firstVisible = participantsWithData.find(p => p.isVisible);
-    let baseJumperId = baseParticipant?.userId || firstVisible?.userId || '';
+    const baseJumperId = baseParticipant?.userId || firstVisible?.userId || '';
 
     // Get dropzone center if available, otherwise derive from first GPS point
     let dzCenter = null;

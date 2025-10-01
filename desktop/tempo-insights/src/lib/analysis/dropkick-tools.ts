@@ -64,10 +64,10 @@ export function interp1(xarray: number[], varray: number[], x: number): number {
 export const plottableValuesFromSamples = (samples: KMLDataV1[], surfacePressureAlt_mMSL: number) => {
     const estimatedHAT_G_m = surfacePressureAlt_mMSL;
     let lastSample: KMLDataV1 | null = null;
-    let result = new Array<KMLDisplayV1>();
+    const result = new Array<KMLDisplayV1>();
     samples.forEach( (cur) => {
         if (lastSample && lastSample.location && cur.location && cur.groundspeed_kmph && cur.groundtrack_degT) {
-            let next: KMLDisplayV1 = {
+            const next: KMLDisplayV1 = {
                 ...cur,
                 GDot_mps: 0,
                 HDot_mps: 0,

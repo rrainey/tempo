@@ -325,7 +325,7 @@ export function ImportJumpModal({ opened, onClose, onImportComplete }: ImportJum
                   <Alert icon={<IconAlertCircle />} color="blue" variant="light">
                     {fileInfo.startDate ? (
                       <>
-                        Look at the date and time shown above. If this doesn't match the jump 
+                        Look at the date and time shown above. If this doesn&apos;t match the jump 
                         you wish to import, you can go back and select a different file.
                       </>
                     ) : (

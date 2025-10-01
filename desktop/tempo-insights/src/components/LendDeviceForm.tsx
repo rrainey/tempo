@@ -309,7 +309,7 @@ export function LendDeviceForm({ opened, onClose, onSuccess }: LendDeviceFormPro
         </Stack>
       ) : devices.length === 0 ? (
         <Alert icon={<IconAlertCircle size={16} />} color="yellow">
-          You don't have any devices available to lend.
+          You don&apos;t have any devices available to lend.
         </Alert>
       ) : (
         <Stack gap="md">

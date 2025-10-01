@@ -124,7 +124,7 @@ export default function DevicesPage() {
         });
       }
     } catch (err) {
-      setError('Failed to load devices');
+      setError('Failed to load devices: ' + (err instanceof Error ? err.message : 'Unknown error')  );
       if (!silent) {
         notifications.show({
           title: 'Error',

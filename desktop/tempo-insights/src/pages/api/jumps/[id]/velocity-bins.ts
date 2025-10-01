@@ -1,6 +1,6 @@
 // pages/api/jumps/[id]/velocity-bins.ts
 
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import { withAuth, AuthenticatedRequest } from '../../../../lib/auth/middleware';
 import { createClient } from '@supabase/supabase-js';

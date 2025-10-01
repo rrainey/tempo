@@ -1,4 +1,5 @@
-// Save as: src/workers/bluetooth-scanner.test.ts
+// src/workers/bluetooth-scanner.test.ts
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 
 import { PrismaClient, DeviceState } from '@prisma/client';
 import { BluetoothService } from '../lib/bluetooth/bluetooth.service';

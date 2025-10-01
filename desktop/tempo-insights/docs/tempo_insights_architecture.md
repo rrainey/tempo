@@ -292,7 +292,7 @@ workers/bluetoothScanner.ts – Implements the Log Discovery and Upload Service 
 
 workers/logProcessor.ts – Implements the Preliminary Jump Analysis background job. This script runs periodically (for example, using setInterval or a simple sleep loop waking every 30 seconds) to check for any new jump logs that need analysis. It queries the database for all Jump Log records where initialAnalysisTimestamp is NULL (meaning not yet processed). Those records are then processed one by one (serially) – avoiding parallel processing simplifies load on a small device and ensures formation grouping logic can easily find existing logs. For each log:
 
-It loads the raw log data (the binary/blob) and runs analysis to extract key events and metrics. Using the logic in analysisService, it determines:
+It loads the raw log data by fetching the file from Supabase Storage using the stored URL/path reference, then runs analysis to extract key events and metrics. Using the logic in analysisService, it determines:
 
 Exit time offset – when freefall likely began (e.g., first moment vertical speed exceeds 2000 fpm).
 
@@ -326,7 +326,7 @@ Purpose: The workers processes implement continuous and periodic background task
 
 prisma/ – Prisma ORM files and database schema:
 
-prisma/schema.prisma – The Prisma schema defining the database structure (tables and relations). It will include models for Users, JumpLogs, Devices, Groups, GroupMemberships, Formations, etc. For example, the User model with fields: id (UUID), fullName, email, passwordHash, isProxy (flag), proxyCreatorId (nullable foreign key if this is a proxy user created by someone), createdAt, lastActiveAt, and a unique slug for profile URL. The UserRole or roles model linking users to roles (like “Administrator”). The Device model with fields as described: id (UUID), ownerId (User who owns it), lentToId (User who currently has it, if any), state (enum: Unprovisioned/Provisioned/Assigned), bluetoothId & name, deviceUID (hardware identifier if any), onlineStatus (bool or lastSeen timestamp), lendingPolicy (enum or flags for one-jump or until reclaim). The JumpLog model with fields: id (UUID), userId (owner), deviceId, jumpNumber (the user’s jump count), startTimestamp (UTC of log start), exitTimestamp (UTC estimated exit time), exitLat, exitLon, exitAlt, freefallTime, deploymentTime (timestamps or offsets), landingTime, rawLog (binary blob of log file), logHash (SHA-256), notes (text), visibleToConnections (bool), initialAnalysisTimestamp, initialAnalysisMessage. The FormationSkydive model with fields: id (UUID), maybe formationTimestamp or date, baseLogId (which jump log is base), and a relation to FormationParticipants or a JSON map of participant logs with their visibility flags. Many-to-many relations like User-Group membership (with an isAdmin flag), or User-User connections can be represented as join tables as well. This schema is the single source of truth for data structure.
+prisma/schema.prisma – The Prisma schema defining the database structure (tables and relations). It will include models for Users, JumpLogs, Devices, Groups, GroupMemberships, Formations, etc. For example, the User model with fields: id (UUID), fullName, email, passwordHash, isProxy (flag), proxyCreatorId (nullable foreign key if this is a proxy user created by someone), createdAt, lastActiveAt, and a unique slug for profile URL. The UserRole or roles model linking users to roles (like “Administrator”). The Device model with fields as described: id (UUID), ownerId (User who owns it), lentToId (User who currently has it, if any), state (enum: Unprovisioned/Provisioned/Assigned), bluetoothId & name, deviceUID (hardware identifier if any), onlineStatus (bool or lastSeen timestamp), lendingPolicy (enum or flags for one-jump or until reclaim). The JumpLog model with fields: id (UUID), userId (owner), deviceId, jumpNumber (the user's jump count), hash (SHA-256 of file content), storageUrl (full URL to access file), storagePath (path in storage bucket), fileSize (bytes), mimeType, offsets (JSON), flags (JSON), notes (text), visibleToConnections (bool), initialAnalysisTimestamp, initialAnalysisMessage, and analysis fields like exitOffsetSec, deploymentOffsetSec, exitTimestampUTC, exitLatitude, exitLongitude, exitAltitudeFt, deployAltitudeFt, freefallTimeSec, avgFallRateMph. The FormationSkydive model with fields: id (UUID), maybe formationTimestamp or date, baseLogId (which jump log is base), and a relation to FormationParticipants or a JSON map of participant logs with their visibility flags. Many-to-many relations like User-Group membership (with an isAdmin flag), or User-User connections can be represented as join tables as well. This schema is the single source of truth for data structure.
 
 prisma/seed.ts – A seed script to initialize the database with an initial Administrator user (since one admin must exist to manage devices). This creates a user with Admin role on first run.
 
@@ -353,6 +353,42 @@ pages/_document.tsx – Custom Document for Next.js, used to augment the HTML do
 This structured file layout ensures clear separation of concerns: pages define the views and fetch data, components encapsulate UI elements, services handle logic/IO, and workers handle background tasks. All code is in TypeScript for type safety, and the folder names are meaningful (e.g., “components”, “services” instead of generic “utils”)
 medium.com
  for clarity.
+
+## File Storage Architecture
+
+Jump log files are stored in Supabase Storage rather than directly in the database to optimize performance and scalability:
+
+Storage Bucket Structure:
+- Bucket name: `jump-logs` (private bucket, requires authentication)
+- File paths: `users/{userId}/jumps/{jumpId}/{originalFilename}`
+- Access control via Supabase RLS policies tied to user authentication
+
+Upload Process (in Bluetooth Scanner):
+1. Receive file from device via Bluetooth
+2. Calculate SHA-256 hash for deduplication
+3. Check if hash already exists in database
+4. If new, upload to Supabase Storage using the Supabase client
+5. Create JumpLog record with storage references
+6. Mark file as processed in DeviceFileIndex
+
+Download Process (for Analysis Worker):
+1. Query JumpLog record from database
+2. Use storageUrl or storagePath to fetch file from Supabase Storage
+3. Process the binary data for analysis
+4. Update JumpLog record with analysis results
+
+Benefits:
+- Reduced database size (files stored separately)
+- Better performance for database queries
+- Native support for file streaming and partial downloads
+- Built-in CDN capabilities if needed
+- Easier backup strategies (database separate from files)
+
+Security:
+- Files are stored in a private bucket
+- Access requires valid Supabase authentication
+- Download URLs can be time-limited if needed
+- User can only access their own files (enforced by RLS)
 
 ## State Management and Communication
 
@@ -530,27 +566,26 @@ In summary, device management is handled by a combination of real-time backgroun
 
 The primary function of Tempo Insights is to collect jump logs and turn raw data into useful information. This involves capturing logs from devices, storing them, processing them, and then making them available for user review.
 
-Log Upload and Storage: As described, the Bluetooth scanning service automatically uploads new jump logs from devices when they come into range after a jump. Each log file (on the device it might be e.g. a .bin or .csv) is saved in the JumpLog table as a binary blob. Log file contents will be stored in Supabase Storage.  The Postgres database entre for a JumpLog will include a reference to that file. Each log entry includes:
+Log Upload and Storage: As described, the Bluetooth scanning service automatically uploads new jump logs from devices when they come into range after a jump. Each log file (on the device it might be e.g. a .bin or .csv) is uploaded to Supabase Storage, with metadata saved in the JumpLog table. The process involves:
 
-A unique ID (UUID).
+1. Upload the file to Supabase Storage bucket (e.g., 'jump-logs')
+2. Generate a unique path like `users/{userId}/jumps/{jumpId}/{filename}`
+3. Store the file reference in the JumpLog table
 
-The owning user’s ID (from device metadata or assignment).
-
-The device ID it came from.
-
-The jump number (the device likely generates this sequentially, but to double-check, we could compute: if the user’s profile keeps a total jump count, but since multiple devices could be used by one user, “jump number” might refer to the device’s count. The requirements imply the device tracks its own jump count (nextJumpNumber). We might store both the device’s jump count and perhaps also compute an overall count per user if needed).
-
-Timestamp of log start (likely when recording began on the plane). If the device logs absolute time or at least date, we store that. Otherwise, we mark it and later during analysis we approximate the exit time and hence the date/time of jump.
-
-The raw file blob and a SHA-256 hash (to ensure integrity and uniqueness).
-
-A default note (empty initially, user can edit to add notes about the jump).
-
-visibleToConnections flag defaulted to True.
-
-Initially, fields like exit altitude, freefall time, etc., are unknown; they will be filled by the analysis worker.
-
-initialAnalysisTimestamp null (flagging it for processing).
+Each log entry includes:
+- A unique ID (UUID)
+- The owning user's ID (from device metadata or assignment)
+- The device ID it came from
+- The jump number (device's sequential count)
+- Timestamp of log start (when recording began on the plane)
+- A SHA-256 hash of the file content (to ensure integrity and uniqueness)
+- Storage URL and path references to the file in Supabase Storage
+- File size in bytes
+- MIME type (application/octet-stream for binary logs)
+- A default note (empty initially, user can edit)
+- visibleToConnections flag defaulted to True
+- Initially, analysis fields are null
+- initialAnalysisTimestamp null (flagging it for processing)
 
 The upload process for each file is atomic – if an upload fails mid-way, the service will retry. Only when a complete file is stored and verified (hash match) will it finalize the DB record. The hash also prevents duplicates (if somehow the same log is attempted twice, we can detect it by hash and skip or update).
 
