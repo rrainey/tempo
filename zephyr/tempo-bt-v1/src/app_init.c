@@ -125,6 +125,9 @@ int app_init(void)
 
     LOG_INF("Initializing Tempo-BT application");
 
+    /* Note: Settings are now initialized inside ble_mcumgr_init() */
+    /* to ensure the device name is available before BLE starts */
+
     /* Initialize BLE and mcumgr - this also starts advertising */
     ret = ble_mcumgr_init();
     if (ret != 0) {

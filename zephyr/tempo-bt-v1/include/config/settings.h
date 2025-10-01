@@ -28,13 +28,6 @@ int app_settings_init(void);
 const char *app_settings_get_ble_name(void);
 
 /**
- * @brief Get user UUID
- * 
- * @return Pointer to user UUID
- */
-const struct bt_uuid_128 *app_settings_get_user_uuid(void);
-
-/**
  * @brief Get device UUID
  * 
  * @return Pointer to device UUID
@@ -56,6 +49,13 @@ const char *app_settings_get_log_backend(void);
 bool app_settings_get_pps_enabled(void);
 
 /**
+ * @brief Get PCB variant
+ * 
+ * @return PCB variant/revision number
+ */
+uint8_t app_settings_get_pcb_variant(void);
+
+/**
  * @brief Set BLE device name
  * 
  * @param name New BLE name (max 31 chars)
@@ -64,20 +64,20 @@ bool app_settings_get_pps_enabled(void);
 int app_settings_set_ble_name(const char *name);
 
 /**
- * @brief Set user UUID
+ * @brief Set PPS enabled state
  * 
- * @param uuid New user UUID
+ * @param enabled true to enable PPS (will be forced to false on V1)
  * @return 0 on success, negative error code on failure
  */
-int app_settings_set_user_uuid(const struct bt_uuid_128 *uuid);
+int app_settings_set_pps_enabled(bool enabled);
 
 /**
- * @brief Set device UUID
+ * @brief Set PCB variant
  * 
- * @param uuid New device UUID
+ * @param variant PCB variant/revision number
  * @return 0 on success, negative error code on failure
  */
-int app_settings_set_device_uuid(const struct bt_uuid_128 *uuid);
+int app_settings_set_pcb_variant(uint8_t variant);
 
 /**
  * @brief Set log backend type

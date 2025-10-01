@@ -13,37 +13,26 @@
 
 LOG_MODULE_REGISTER(app_settings, LOG_LEVEL_INF);
 
-/* Default UUIDs - these will be replaced with generated values on first boot */
-static const struct bt_uuid_128 default_user_uuid = BT_UUID_INIT_128(
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-);
-
-static const struct bt_uuid_128 default_device_uuid = BT_UUID_INIT_128(
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-);
-
 /* Settings values with defaults */
 static struct {
     /* BLE settings */
     char ble_name[32];
     
-    /* User and device UUIDs */
-    struct bt_uuid_128 user_uuid;
+    /* Device UUIDs (zeroes means "Assign random id at startup")*/
     struct bt_uuid_128 device_uuid;
     
     /* Features */
-    bool pps_enabled;     /* PPS sync enabled (always false for V1) */
+    bool    pps_enabled;     /* PPS sync enabled (always false for V1) */
+    uint8_t pcb_variant;     /* PCB revision level, e.g. 0x01 = V1, etc. */
     
     /* Storage */
-    char log_backend[16]; /* "littlefs" or "fatfs" */
+    char log_backend[12]; /* "littlefs" or "fatfs" */
 } app_settings = {
     /* Default values */
-    .ble_name = "TempoBT",
-    .user_uuid = BT_UUID_INIT_128(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    .ble_name = "Tempo-BT",
     .device_uuid = BT_UUID_INIT_128(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
     .pps_enabled = false, /* No PPS on V1 */
+    .pcb_variant = 0x01,  /* V1 hardware */
     .log_backend = "littlefs"
 };
 
@@ -90,20 +79,6 @@ static int settings_set_handler(const char *name, size_t len,
         if (rc >= 0) {
             app_settings.ble_name[len] = '\0';
             LOG_INF("Set ble_name: %s", app_settings.ble_name);
-        }
-        return rc;
-    }
-
-    if (settings_name_steq(name, "user_uuid", &next) && !next) {
-        if (len != sizeof(app_settings.user_uuid.val)) {
-            return -EINVAL;
-        }
-        rc = read_cb(cb_arg, app_settings.user_uuid.val, len);
-        if (rc >= 0) {
-            char uuid_str[BT_UUID_STR_LEN];
-            bt_uuid_to_str((const struct bt_uuid *)&app_settings.user_uuid, 
-                          uuid_str, sizeof(uuid_str));
-            LOG_INF("Set user_uuid: %s", uuid_str);
         }
         return rc;
     }
@@ -170,16 +145,6 @@ int app_settings_init(void)
 
     /* Generate UUIDs if they haven't been set */
     bool need_save = false;
-    
-    if (is_uuid_empty(&app_settings.user_uuid)) {
-        LOG_INF("Generating new user UUID");
-        rc = app_settings_generate_uuid(&app_settings.user_uuid);
-        if (rc == 0) {
-            need_save = true;
-        } else {
-            LOG_ERR("Failed to generate user UUID: %d", rc);
-        }
-    }
 
     if (is_uuid_empty(&app_settings.device_uuid)) {
         LOG_INF("Generating new device UUID");
@@ -191,16 +156,6 @@ int app_settings_init(void)
         }
     }
 
-    /* Save if we generated new UUIDs */
-    if (need_save) {
-        if (app_settings_set_user_uuid(&app_settings.user_uuid) < 0) {
-            LOG_WRN("Failed to persist user UUID");
-        }
-        if (app_settings_set_device_uuid(&app_settings.device_uuid) < 0) {
-            LOG_WRN("Failed to persist device UUID");
-        }
-    }
-
     LOG_INF("Settings loaded successfully");
     return 0;
 }
@@ -209,11 +164,6 @@ int app_settings_init(void)
 const char *app_settings_get_ble_name(void)
 {
     return app_settings.ble_name;
-}
-
-const struct bt_uuid_128 *app_settings_get_user_uuid(void)
-{
-    return &app_settings.user_uuid;
 }
 
 const struct bt_uuid_128 *app_settings_get_device_uuid(void)
@@ -231,6 +181,11 @@ bool app_settings_get_pps_enabled(void)
     return app_settings.pps_enabled;
 }
 
+uint8_t app_settings_get_pcb_variant(void)
+{
+    return app_settings.pcb_variant;
+}   
+
 /* Setter functions with persistence */
 int app_settings_set_ble_name(const char *name)
 {
@@ -242,16 +197,7 @@ int app_settings_set_ble_name(const char *name)
     return settings_save_one("app/ble_name", name, strlen(name));
 }
 
-int app_settings_set_user_uuid(const struct bt_uuid_128 *uuid)
-{
-    if (!uuid) {
-        return -EINVAL;
-    }
-    
-    memcpy(&app_settings.user_uuid, uuid, sizeof(struct bt_uuid_128));
-    return settings_save_one("app/user_uuid", uuid->val, sizeof(uuid->val));
-}
-
+#if 0
 int app_settings_set_device_uuid(const struct bt_uuid_128 *uuid)
 {
     if (!uuid) {
@@ -261,6 +207,19 @@ int app_settings_set_device_uuid(const struct bt_uuid_128 *uuid)
     memcpy(&app_settings.device_uuid, uuid, sizeof(struct bt_uuid_128));
     return settings_save_one("app/device_uuid", uuid->val, sizeof(uuid->val));
 }
+#endif
+
+int app_settings_set_pps_enabled(bool enabled)
+{
+    app_settings.pps_enabled = enabled;
+    return settings_save_one("app/pps", &enabled, sizeof(enabled));
+}   
+
+int app_settings_set_pcb_variant(uint8_t variant)
+{
+    app_settings.pcb_variant = variant;
+    return settings_save_one("app/pcb", &variant, sizeof(variant));
+}
 
 int app_settings_set_log_backend(const char *backend)
 {
@@ -269,7 +228,7 @@ int app_settings_set_log_backend(const char *backend)
     }
     
     strcpy(app_settings.log_backend, backend);
-    return settings_save_one("app/log_backend", backend, strlen(backend));
+    return settings_save_one("app/log", backend, strlen(backend));
 }
 
 /* Test function to demonstrate settings */
@@ -281,11 +240,8 @@ void app_settings_test(void)
     LOG_INF("  BLE name: %s", app_settings.ble_name);
     LOG_INF("  Log backend: %s", app_settings.log_backend);
     LOG_INF("  PPS enabled: %s", app_settings.pps_enabled ? "Yes" : "No");
-    
-    /* Display user UUID */
-    bt_uuid_to_str((const struct bt_uuid *)&app_settings.user_uuid, 
-                   uuid_str, sizeof(uuid_str));
-    LOG_INF("  User UUID: %s", uuid_str);
+    LOG_INF("  PCB variant: 0x%02X", app_settings.pcb_variant); 
+
     
     /* Display device UUID */
     bt_uuid_to_str((const struct bt_uuid *)&app_settings.device_uuid, 
