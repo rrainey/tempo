@@ -46,6 +46,18 @@ CombinedLogger::CombinedLogger(SdFs& sd) : BinaryLogger(sd)
 
     nNextHGroundSample = 0;
 
+    // Initialize altitude sample arrays to prevent false triggers
+    for (int i = 0; i < NUM_H_SAMPLES; i++) {
+        nHSample[i] = 0;
+        nHDotSample[i] = 0;
+    }
+    
+    for (int i = 0; i < NUM_H_GROUND_SAMPLES; i++) {
+        nHGroundSample[i] = 0;
+    }
+    
+    nHDot_fpm = 0;
+
     morseBlinker.initialize(RED_LED, 250);
     
     mx = my = mz = 0.0f;

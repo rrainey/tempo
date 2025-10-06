@@ -57,9 +57,9 @@ enum BlinkState {
  * The version numbers referenced here are a continuation of the versioning scheme originally
  * used in Dropkick log files. These version numbers appear at the start of each TXT log file.
  */
-#define APP_STRING "Tempo, version 0.156"
+#define APP_STRING "Tempo, version 0.157"
 #define LOG_VERSION 3
-#define NMEA_APP_STRING "$PVER,\"Tempo, version 0.156\",156"
+#define NMEA_APP_STRING "$PVER,\"Tempo, version 0.157\",157"
 
 #define TEST_SPEED_THRESHOLD_KTS 6.0
 #define OPS_HDOT_THRESHOLD_FPM 300
