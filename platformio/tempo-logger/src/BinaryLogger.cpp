@@ -208,14 +208,16 @@ BinaryLogger::APIResult BinaryLogger::configureSensors() {
             return APIResult::SensorFault;
         }
 
+        settings.op_mode = BMP3_MODE_NORMAL;
         settings.int_settings.drdy_en = BMP3_ENABLE;
         settings.press_en = BMP3_ENABLE;
         settings.temp_en = BMP3_ENABLE;
 
         settings.odr_filter.press_os = BMP3_OVERSAMPLING_8X;
-        settings.odr_filter.temp_os = BMP3_NO_OVERSAMPLING;
+        settings.odr_filter.temp_os = BMP3_OVERSAMPLING_2X;
         settings.odr_filter.odr = BMP3_ODR_12_5_HZ;
-        settings.odr_filter.iir_filter = BMP3_IIR_FILTER_COEFF_3;
+        // Higher noise filtering
+        settings.odr_filter.iir_filter = BMP3_IIR_FILTER_COEFF_15;
       
         uint32_t settings_sel = BMP3_SEL_PRESS_EN | BMP3_SEL_TEMP_EN |
                        BMP3_SEL_PRESS_OS | BMP3_SEL_TEMP_OS | BMP3_SEL_ODR |
