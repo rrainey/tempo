@@ -494,13 +494,21 @@ Done when: scanner sees new name; DB updated.
 
 ## Phase 15 — Visibility & Permissions Hardening
 
-- **Task 104: Visibility rules (API)**
+- **Task 104a: add Connections and Connection Requests to the data model**
+- Do: add an appropriate table-based map specifying "Connected" users.  Add a one-to-many map of active connection requests originated by a user and directed at other users.
+- Done: Both maps exist in the data model.
+
+- **Task 104b: Visibility rules (API)**
 - Do: enforce visibleToConnections + group/connection checks on all jump reads
 - Done when: unauthorized user cannot GET hidden jumps.
 
-- **Task 105: Connections (basic)**
+- **Task 105a: Connections (basic)**
 - Do: endpoints to send/accept/decline connection requests; “Pending Actions” list
 - Done when: two users can connect and see each other’s visible jumps.
+
+- **Task 105b: Display and Remove Connections**
+- Do: "Connections" menu item displayed in the left navigation side bar. Navigates to a "/connections" page listing all connected Users (with links to their pages (via slug)). A vertical kebab menu button exposes a "Remove Connection" menu item, which will remove the connection (after confirmation).  Pending Connections are listed below the active Connections.
+- Done: User can display and remove connections.
 
 ---
 
