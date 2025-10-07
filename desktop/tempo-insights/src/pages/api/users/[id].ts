@@ -12,23 +12,19 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
   }
 
   try {
-    const { id: userId } = req.query;
+    const { id: targetId } = req.query;
     
-    if (!userId || typeof userId !== 'string') {
+    if (!targetId || typeof targetId !== 'string') {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
 
-    // Check permissions
+    const currentUserId = req.user!.id;
     const isAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPER_ADMIN';
-    const isSelf = req.user!.id === userId;
+    const isSelf = currentUserId === targetId;
 
-    if (!isAdmin && !isSelf) {
-      return res.status(403).json({ error: 'You do not have permission to view this user' });
-    }
-
-    // Get the user
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    // First try to get user by ID
+    let user = await prisma.user.findUnique({
+      where: { id: targetId },
       select: {
         id: true,
         name: true,
@@ -47,10 +43,96 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
       }
     });
 
+    // If not found by ID, try by slug (for public profile viewing)
+    if (!user && targetId.match(/^[a-z0-9-]+$/)) {
+      user = await prisma.user.findUnique({
+        where: { slug: targetId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          slug: true,
+          role: true,
+          nextJumpNumber: true,
+          isProxy: true,
+          createdAt: true,
+          _count: {
+            select: {
+              jumpLogs: true,
+              ownedDevices: true
+            }
+          }
+        }
+      });
+    }
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Update isSelf check with actual user ID
+    const actualIsSelf = currentUserId === user.id;
+
+    // Check connection status if not viewing self
+    let connectionStatus = 'self';
+    if (!actualIsSelf) {
+      // Check if connected
+      const connection = await prisma.connection.findFirst({
+        where: {
+          OR: [
+            { userId1: currentUserId, userId2: user.id },
+            { userId1: user.id, userId2: currentUserId }
+          ]
+        }
+      });
+
+      if (connection) {
+        connectionStatus = 'connected';
+      } else {
+        // Check for pending requests
+        const [sentRequest, receivedRequest] = await Promise.all([
+          prisma.connectionRequest.findFirst({
+            where: {
+              fromUserId: currentUserId,
+              toUserId: user.id,
+              status: 'PENDING'
+            }
+          }),
+          prisma.connectionRequest.findFirst({
+            where: {
+              fromUserId: user.id,
+              toUserId: currentUserId,
+              status: 'PENDING'
+            }
+          })
+        ]);
+
+        if (sentRequest) {
+          connectionStatus = 'request_sent';
+        } else if (receivedRequest) {
+          connectionStatus = 'request_received';
+        } else {
+          connectionStatus = 'none';
+        }
+      }
+    }
+
+    // For non-admin users viewing others, show limited info unless connected
+    if (!isAdmin && !actualIsSelf) {
+      // Public profile view - limited info
+      return res.status(200).json({
+        user: {
+          id: user.id,
+          name: user.name,
+          slug: user.slug,
+          isProxy: user.isProxy,
+          jumpCount: user._count.jumpLogs,
+          connectionStatus
+        }
+      });
+    }
+
+    // Full profile for self or admin
     return res.status(200).json({
       user: {
         id: user.id,
@@ -62,7 +144,8 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
         isProxy: user.isProxy,
         jumpCount: user._count.jumpLogs,
         deviceCount: user._count.ownedDevices,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        connectionStatus
       }
     });
 

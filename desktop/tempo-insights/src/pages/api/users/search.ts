@@ -46,8 +46,47 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
       },
     });
 
+    // Get connection status for each user
+    const usersWithStatus = await Promise.all(users.map(async (user) => {
+      // Check if connected
+      const connection = await prisma.connection.findFirst({
+        where: {
+          OR: [
+            { userId1: currentUserId, userId2: user.id },
+            { userId1: user.id, userId2: currentUserId }
+          ]
+        }
+      });
+
+      // Check for pending requests
+      const [sentRequest, receivedRequest] = await Promise.all([
+        prisma.connectionRequest.findFirst({
+          where: {
+            fromUserId: currentUserId,
+            toUserId: user.id,
+            status: 'PENDING'
+          }
+        }),
+        prisma.connectionRequest.findFirst({
+          where: {
+            fromUserId: user.id,
+            toUserId: currentUserId,
+            status: 'PENDING'
+          }
+        })
+      ]);
+
+      return {
+        ...user,
+        connectionStatus: connection ? 'connected' : 
+                         sentRequest ? 'request_sent' :
+                         receivedRequest ? 'request_received' : 
+                         'none'
+      };
+    }));
+
     return res.status(200).json({
-      users,
+      users: usersWithStatus,
     });
   } catch (error) {
     console.error('Search users error:', error);

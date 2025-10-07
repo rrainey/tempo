@@ -37,7 +37,8 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
           select: {
             name: true
           },
-        },        user: {
+        },
+        user: {
           select: {
             id: true,
             name: true,
@@ -53,15 +54,38 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
     }
 
     const isOwner = jump.userId === req.user.id;
+    const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     
     // Check visibility permissions
-    if (!isOwner && !jump.visibleToConnections) {
+    if (!isOwner && !isAdmin && !jump.visibleToConnections) {
       return res.status(403).json({ error: 'This jump is private' });
     }
     
-    // If not owner but jump is visible to connections, check if they share a formation
-    if (!isOwner && jump.visibleToConnections) {
-      // Check if they've been in any formation together
+    // If not owner/admin but jump is visible to connections, check permissions
+    if (!isOwner && !isAdmin && jump.visibleToConnections) {
+      // Check if users are connected
+      const isConnected = await prisma.connection.findFirst({
+        where: {
+          OR: [
+            { userId1: req.user.id, userId2: jump.userId },
+            { userId1: jump.userId, userId2: req.user.id }
+          ]
+        }
+      });
+
+      // Check if they share a group
+      const shareGroup = await prisma.groupMember.findFirst({
+        where: {
+          userId: req.user.id,
+          group: {
+            members: {
+              some: { userId: jump.userId }
+            }
+          }
+        }
+      });
+
+      // Check if they've been in a formation together
       const sharedFormation = await prisma.formationParticipant.findFirst({
         where: {
           AND: [
@@ -87,8 +111,10 @@ async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
         }
       });
 
-      if (!sharedFormation) {
-        return res.status(403).json({ error: 'You must have jumped together to view this jump' });
+      if (!isConnected && !shareGroup && !sharedFormation) {
+        return res.status(403).json({ 
+          error: 'You must be connected with this user, share a group, or have jumped together to view this jump' 
+        });
       }
     }
 

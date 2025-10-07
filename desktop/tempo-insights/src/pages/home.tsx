@@ -7,6 +7,7 @@ import { FormationJumpsPanel } from '../components/home/FormationJumpsPanel';
 import { JumpDetailsPanel } from '../components/home/JumpDetailsPanel';
 import { ImportJumpModal } from '../components/home/ImportJumpModal';
 import { LendDeviceForm } from '../components/LendDeviceForm';
+import { PendingConnectionsCard } from '../components/home/PendingConnectionsCard';
 import { useEffect, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconX, IconHandStop  } from '@tabler/icons-react';
@@ -35,6 +36,7 @@ export default function HomePage() {
   const [lendDeviceOpened, setLendDeviceOpened] = useState(false);
   const [importModalOpened, setImportModalOpened] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [connectionsRefreshKey, setConnectionsRefreshKey] = useState(0);
 
   useEffect(() => {
     loadInvitations();
@@ -108,7 +110,7 @@ export default function HomePage() {
       <AppLayout>
         <Container fluid>
           <Group justify="space-between" mb="xl">
-          <Title order={2} mb="xl">Dashboard</Title>
+            <Title order={2} mb="xl">Dashboard</Title>
             <Button 
               leftSection={<IconHandStop size={16} />}
               onClick={() => setLendDeviceOpened(true)}
@@ -117,10 +119,13 @@ export default function HomePage() {
             </Button>
           </Group>
 
+          {/* Pending Connection Requests */}
+          <PendingConnectionsCard refreshKey={connectionsRefreshKey} />
+
           {/* Pending Invitations */}
           {invitations.length > 0 && (
             <Paper p="md" withBorder mb="xl" style={{ backgroundColor: 'var(--mantine-color-dark-8)' }}>
-              <Title order={4} mb="md">Pending Invitations</Title>
+              <Title order={4} mb="md">Group Invitations</Title>
               <Stack gap="sm">
                 {invitations.map((invitation) => (
                   <Group key={invitation.id} justify="space-between">

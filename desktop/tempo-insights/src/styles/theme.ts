@@ -55,6 +55,7 @@ const lightText: MantineColorsTuple = [
 ];
 
 export const theme = createTheme({
+  autoContrast: true,
   colors: {
     brand: brandPrimary,
     accent: accent,

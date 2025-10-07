@@ -4,6 +4,7 @@ import '../styles/globals.css';
 import type { AppProps } from 'next/app';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
+import { ModalsProvider } from '@mantine/modals';
 import { theme } from '../styles/theme';
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -28,8 +29,10 @@ export default function App({ Component, pageProps }: AppProps) {
         },
       })}
     >
-      <Notifications position="top-right" />
-      <Component {...pageProps} />
+      <ModalsProvider>
+        <Notifications position="top-right" />
+        <Component {...pageProps} />
+      </ModalsProvider>
     </MantineProvider>
   );
 }

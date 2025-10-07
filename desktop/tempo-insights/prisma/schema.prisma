@@ -100,6 +100,63 @@ model Dropzone {
   @@index([slug])
 }
 
+model UserInvitation {
+  id          String   @id @default(cuid())
+  email       String
+  code        String   @unique
+  groupId     String?
+  groupRole   GroupRole? // Role they'll have if joining a group
+  userRole    UserRole   @default(USER) // System role they'll have
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime   @default(now())
+
+  // Relations
+  invitedById String
+  invitedBy   User       @relation("InvitationsSent", fields: [invitedById], references: [id])
+  usedById    String?    @unique
+  usedBy      User?      @relation("InvitationsUsed", fields: [usedById], references: [id])
+  group       Group?     @relation(fields: [groupId], references: [id])
+
+  @@index([code])
+  @@index([email])
+  @@index([invitedById])
+}
+
+model Connection {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  
+  // Relations - always store userId1 < userId2 alphabetically for consistency
+  userId1     String
+  user1       User     @relation("ConnectionUser1", fields: [userId1], references: [id])
+  userId2     String  
+  user2       User     @relation("ConnectionUser2", fields: [userId2], references: [id])
+  
+  @@unique([userId1, userId2])
+  @@index([userId1])
+  @@index([userId2])
+}
+
+model ConnectionRequest {
+  id          String   @id @default(cuid())
+  status      String   @default("PENDING") // PENDING, ACCEPTED, DECLINED
+  message     String?  // Optional message with request
+  createdAt   DateTime @default(now())
+  respondedAt DateTime? // When accepted/declined
+  
+  // Relations
+  fromUserId  String
+  fromUser    User     @relation("ConnectionRequestsSent", fields: [fromUserId], references: [id])
+  toUserId    String
+  toUser      User     @relation("ConnectionRequestsReceived", fields: [toUserId], references: [id])
+  
+  @@unique([fromUserId, toUserId])
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([status])
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -126,6 +183,10 @@ model User {
   createdProxies User[] @relation("ProxyCreator")
   homeDropzone Dropzone? @relation(fields: [homeDropzoneId], references: [id])
   deviceCommands DeviceCommandQueue[]
+  connectionsAsUser1 Connection[] @relation("ConnectionUser1")
+  connectionsAsUser2 Connection[] @relation("ConnectionUser2")
+  connectionRequestsSent ConnectionRequest[] @relation("ConnectionRequestsSent")
+  connectionRequestsReceived ConnectionRequest[] @relation("ConnectionRequestsReceived")
 
   @@index([email])
   @@index([slug])
@@ -281,27 +342,4 @@ model FormationParticipant {
   @@unique([formationId, userId])
   @@index([formationId])
   @@index([userId])
-}
-
-model UserInvitation {
-  id          String   @id @default(cuid())
-  email       String
-  code        String   @unique
-  groupId     String?
-  groupRole   GroupRole? // Role they'll have if joining a group
-  userRole    UserRole   @default(USER) // System role they'll have
-  expiresAt   DateTime
-  usedAt      DateTime?
-  createdAt   DateTime   @default(now())
-
-  // Relations
-  invitedById String
-  invitedBy   User       @relation("InvitationsSent", fields: [invitedById], references: [id])
-  usedById    String?    @unique
-  usedBy      User?      @relation("InvitationsUsed", fields: [usedById], references: [id])
-  group       Group?     @relation(fields: [groupId], references: [id])
-
-  @@index([code])
-  @@index([email])
-  @@index([invitedById])
 }

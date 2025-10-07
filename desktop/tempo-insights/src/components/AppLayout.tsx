@@ -10,7 +10,8 @@ import {
   IconUsers,
   IconCpu,
   IconLogout,
-  IconMapPin
+  IconMapPin,
+  IconUserPlus
 } from '@tabler/icons-react';
 import { logout } from '../lib/auth/logout';
 
@@ -87,6 +88,13 @@ export function AppLayout({ children }: AppLayoutProps) {
             label="Profile"
             leftSection={<IconUser size={16} />}
             active={router.pathname === '/profile'}
+          />
+          <NavLink
+            component={Link}
+            href="/connections"
+            label="Connections"
+            leftSection={<IconUserPlus size={16} />}
+            active={router.pathname === '/connections'}
           />
           <NavLink
             component={Link}
