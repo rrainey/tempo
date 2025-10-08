@@ -142,34 +142,19 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
                 Time spent at each fall rate after accelerating to terminal velocity
               </Text>
             </div>
-            <Group gap="xs">
-              <Badge size="sm" variant="light">
-                {summary.analysisWindow.startOffset.toFixed(0)}-{summary.analysisWindow.endOffset.toFixed(0)}s
-              </Badge>
-            </Group>
+            <Badge size="sm" variant="light">
+              {summary.analysisWindow.startOffset.toFixed(0)}-{summary.analysisWindow.endOffset.toFixed(0)}s
+            </Badge>
           </Group>
         </div>
 
-        {/* Display Mode Selector */}
-        <Select
-          label="Display Mode"
-          description="Choose between raw, calibrated (density-corrected), or both"
-          value={displayMode}
-          onChange={(value) => setDisplayMode(value as DisplayMode)}
-          data={[
-            { value: 'raw', label: 'Raw Fall Rate' },
-            { value: 'calibrated', label: 'Calibrated Fall Rate (Density Corrected)' },
-            { value: 'both', label: 'Both (Comparison)' }
-          ]}
-          allowDeselect={false}
-        />
-
-        {/* Summary Stats */}
-        <Group grow>
+        {/* Metrics Row - Side by Side */}
+        <Group grow align="stretch">
+          {/* Average Fall Rate */}
           <Card withBorder p="sm">
             <Group gap="xs">
               <IconRuler size={20} style={{ opacity: 0.7 }} />
-              <div>
+              <div style={{ flex: 1 }}>
                 <Text size="xs" c="dimmed">
                   {displayMode === 'calibrated' ? 'Avg Calibrated Rate' : 'Avg Raw Rate'}
                 </Text>
@@ -189,6 +174,7 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
             </Group>
           </Card>
           
+          {/* Analysis Duration */}
           <Card withBorder p="sm">
             <Group gap="xs">
               <IconClock size={20} style={{ opacity: 0.7 }} />
@@ -198,6 +184,22 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
               </div>
             </Group>
           </Card>
+
+          {/* Display Mode Selector */}
+          <Select
+            label="Display Mode"
+            value={displayMode}
+            onChange={(value) => setDisplayMode(value as DisplayMode)}
+            data={[
+              { value: 'raw', label: 'Raw Fall Rate' },
+              { value: 'calibrated', label: 'Calibrated Fall Rate' },
+              { value: 'both', label: 'Both (Comparison)' }
+            ]}
+            allowDeselect={false}
+            styles={{
+              root: { flex: 1 }
+            }}
+          />
         </Group>
 
         {/* Average Range Info (only show for calibrated) */}
@@ -224,29 +226,6 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
                   </Text>
                 </Group>
               )}
-            </Stack>
-          </Card>
-        )}
-
-        {displayMode === 'both' && (
-          <Card withBorder p="sm" style={{ backgroundColor: 'rgba(221, 255, 85, 0.05)' }}>
-            <Stack gap="xs">
-              <Text size="sm" fw={500}>Comparison</Text>
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">Raw Avg:</Text>
-                <Text size="xs" fw={500}>{summary.raw.averageFallRate} mph</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">Calibrated Avg:</Text>
-                <Text size="xs" fw={500}>{summary.calibrated.averageFallRate} mph</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">Difference:</Text>
-                <Text size="xs" fw={500} c={summary.calibrated.averageFallRate > summary.raw.averageFallRate ? 'green' : 'blue'}>
-                  {Math.abs(summary.calibrated.averageFallRate - summary.raw.averageFallRate)} mph
-                  {summary.calibrated.averageFallRate > summary.raw.averageFallRate ? ' faster' : ' slower'}
-                </Text>
-              </Group>
             </Stack>
           </Card>
         )}
@@ -292,7 +271,16 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
               content={<CustomTooltip />}
               cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
             />
-            {displayMode === 'both' && <Legend />}
+            {displayMode === 'both' && (
+              <Legend 
+                verticalAlign="top"
+                align="left"
+                wrapperStyle={{
+                  paddingBottom: '20px',
+                  paddingLeft: '30px'
+                }}
+              />
+            )}
             
             {/* Average Jumper Band - only show for calibrated mode */}
             {displayMode === 'calibrated' && (
@@ -300,30 +288,30 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
                 <ReferenceArea
                   y1={FALL_RATE_AVG_MIN}
                   y2={FALL_RATE_AVG_MAX}
-                  fill="#ddff55"
-                  fillOpacity={0.15}
-                  stroke="#ddff55"
-                  strokeOpacity={0.3}
+                  fill="#555555"
+                  fillOpacity={0.2}
+                  stroke="#888888"
+                  strokeOpacity={0.4}
                   strokeWidth={1}
                   strokeDasharray="3 3"
                   label={{
                     value: 'Average Range',
                     position: 'insideRight',
-                    fill: '#ddff55',
+                    fill: '#ffffff',
                     fontSize: 11,
-                    opacity: 0.7
+                    fontWeight: 500
                   }}
                 />
                 <ReferenceLine
                   y={FALL_RATE_AVG_MIN}
-                  stroke="#ddff55"
+                  stroke="#888888"
                   strokeOpacity={0.5}
                   strokeWidth={1}
                   strokeDasharray="3 3"
                 />
                 <ReferenceLine
                   y={FALL_RATE_AVG_MAX}
-                  stroke="#ddff55"
+                  stroke="#888888"
                   strokeOpacity={0.5}
                   strokeWidth={1}
                   strokeDasharray="3 3"
@@ -347,6 +335,7 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
                 fill="#ddff55" 
                 radius={[0, 10, 10, 0]} 
                 activeBar={<Rectangle fill="#eeff88" stroke="#ddff55" radius={[0, 10, 10, 0]} />}
+                name="Calibrated Fall Rate"
               />
             )}
             
