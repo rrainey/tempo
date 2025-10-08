@@ -191,8 +191,9 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
       const calibrationFactor = getCalibrationFactor(alt_ft);
       
       // Calculate calibrated fall rate
-      // TODO: weshould reject entries lacking good altitude data
+      // TODO: we should reject entries lacking good altitude data
       const calibratedFallRate_mph = Math.round(rawFallRate_mph * calibrationFactor);
+
 
       // Accumulate time in raw fall rate bin
       if (rawFallRate_mph >= 90 && rawFallRate_mph <= 200) {

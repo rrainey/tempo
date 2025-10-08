@@ -10,11 +10,13 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
   Rectangle,
-  Legend
+  Legend,
+  ReferenceLine,
+  ReferenceArea
 } from 'recharts';
 import { IconClock, IconRuler } from '@tabler/icons-react';
+import { FALL_RATE_AVG_MIN, FALL_RATE_AVG_MAX } from '../../lib/utils/constants';
 
 interface VelocityBinData {
   fallRate_mph: number;
@@ -80,6 +82,11 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
               <Text size="xs" c="dimmed">
                 {(bin.calibrated_elapsed_sec / summary.calibrated.totalAnalysisTime * 100).toFixed(1)}% of time
               </Text>
+              {bin.fallRate_mph >= FALL_RATE_AVG_MIN && bin.fallRate_mph <= FALL_RATE_AVG_MAX && (
+                <Badge size="xs" color="green" mt={4}>
+                  Average Range
+                </Badge>
+              )}
             </>
           )}
           {displayMode === 'both' && (
@@ -111,6 +118,17 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
 
   // Get active summary based on display mode
   const activeSummary = displayMode === 'calibrated' ? summary.calibrated : summary.raw;
+
+  // Determine if jumper is in average range (only for calibrated)
+  const isInAverageRange = displayMode === 'calibrated' && 
+    summary.calibrated.averageFallRate >= FALL_RATE_AVG_MIN && 
+    summary.calibrated.averageFallRate <= FALL_RATE_AVG_MAX;
+
+  const isFastJumper = displayMode === 'calibrated' && 
+    summary.calibrated.averageFallRate > FALL_RATE_AVG_MAX;
+
+  const isFloatyJumper = displayMode === 'calibrated' && 
+    summary.calibrated.averageFallRate < FALL_RATE_AVG_MIN;
 
   return (
     <Card withBorder p="md">
@@ -155,7 +173,18 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
                 <Text size="xs" c="dimmed">
                   {displayMode === 'calibrated' ? 'Avg Calibrated Rate' : 'Avg Raw Rate'}
                 </Text>
-                <Text fw={600}>{activeSummary.averageFallRate} mph</Text>
+                <Group gap={4} align="center">
+                  <Text fw={600}>{activeSummary.averageFallRate} mph</Text>
+                  {displayMode === 'calibrated' && isInAverageRange && (
+                    <Badge size="xs" color="green" variant="light">Average</Badge>
+                  )}
+                  {displayMode === 'calibrated' && isFastJumper && (
+                    <Badge size="xs" color="blue" variant="light">Fast</Badge>
+                  )}
+                  {displayMode === 'calibrated' && isFloatyJumper && (
+                    <Badge size="xs" color="orange" variant="light">Floaty</Badge>
+                  )}
+                </Group>
               </div>
             </Group>
           </Card>
@@ -170,6 +199,34 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
             </Group>
           </Card>
         </Group>
+
+        {/* Average Range Info (only show for calibrated) */}
+        {displayMode === 'calibrated' && (
+          <Card withBorder p="sm" style={{ backgroundColor: 'rgba(221, 255, 85, 0.05)' }}>
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>Average Jumper Range</Text>
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">Reference Range:</Text>
+                <Text size="xs" fw={500}>{FALL_RATE_AVG_MIN}-{FALL_RATE_AVG_MAX} mph</Text>
+              </Group>
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">Your Average:</Text>
+                <Text size="xs" fw={500}>{summary.calibrated.averageFallRate} mph</Text>
+              </Group>
+              {!isInAverageRange && (
+                <Group justify="space-between">
+                  <Text size="xs" c="dimmed">Difference:</Text>
+                  <Text size="xs" fw={500} c={isFastJumper ? 'blue' : 'orange'}>
+                    {isFastJumper 
+                      ? `${summary.calibrated.averageFallRate - FALL_RATE_AVG_MAX} mph faster`
+                      : `${FALL_RATE_AVG_MIN - summary.calibrated.averageFallRate} mph slower`
+                    }
+                  </Text>
+                </Group>
+              )}
+            </Stack>
+          </Card>
+        )}
 
         {displayMode === 'both' && (
           <Card withBorder p="sm" style={{ backgroundColor: 'rgba(221, 255, 85, 0.05)' }}>
@@ -237,6 +294,43 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
             />
             {displayMode === 'both' && <Legend />}
             
+            {/* Average Jumper Band - only show for calibrated mode */}
+            {displayMode === 'calibrated' && (
+              <>
+                <ReferenceArea
+                  y1={FALL_RATE_AVG_MIN}
+                  y2={FALL_RATE_AVG_MAX}
+                  fill="#ddff55"
+                  fillOpacity={0.15}
+                  stroke="#ddff55"
+                  strokeOpacity={0.3}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  label={{
+                    value: 'Average Range',
+                    position: 'insideRight',
+                    fill: '#ddff55',
+                    fontSize: 11,
+                    opacity: 0.7
+                  }}
+                />
+                <ReferenceLine
+                  y={FALL_RATE_AVG_MIN}
+                  stroke="#ddff55"
+                  strokeOpacity={0.5}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                />
+                <ReferenceLine
+                  y={FALL_RATE_AVG_MAX}
+                  stroke="#ddff55"
+                  strokeOpacity={0.5}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                />
+              </>
+            )}
+            
             {displayMode === 'raw' && (
               <Bar 
                 dataKey="elapsed_sec" 
@@ -253,7 +347,6 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
                 fill="#ddff55" 
                 radius={[0, 10, 10, 0]} 
                 activeBar={<Rectangle fill="#eeff88" stroke="#ddff55" radius={[0, 10, 10, 0]} />}
-                name="Calibrated Fall Rate"
               />
             )}
             
@@ -275,6 +368,14 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
             )}
           </BarChart>
         </ResponsiveContainer>
+
+        {/* Legend explanation for calibrated mode */}
+        {displayMode === 'calibrated' && (
+          <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
+            The highlighted band ({FALL_RATE_AVG_MIN}-{FALL_RATE_AVG_MAX} mph) represents the typical fall rate range 
+            for an average jumper in belly-to-earth orientation, corrected for air density at altitude.
+          </Text>
+        )}
       </Stack>
     </Card>
   );
