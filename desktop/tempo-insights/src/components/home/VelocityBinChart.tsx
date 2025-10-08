@@ -1,7 +1,7 @@
 // components/home/VelocityBinChart.tsx
 
-import React from 'react';
-import { Card, Text, Group, Badge, Stack } from '@mantine/core';
+import React, { useState } from 'react';
+import { Card, Text, Group, Badge, Stack, Select } from '@mantine/core';
 import {
   BarChart,
   Bar,
@@ -11,21 +11,30 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  LabelList,
-  Rectangle
+  Rectangle,
+  Legend
 } from 'recharts';
 import { IconClock, IconRuler } from '@tabler/icons-react';
 
 interface VelocityBinData {
   fallRate_mph: number;
   elapsed_sec: number;
+  calibrated_elapsed_sec: number;
 }
 
 interface VelocityBinSummary {
-  totalAnalysisTime: number;
-  averageFallRate: number;
-  minFallRate: number | null;
-  maxFallRate: number | null;
+  raw: {
+    totalAnalysisTime: number;
+    averageFallRate: number;
+    minFallRate: number | null;
+    maxFallRate: number | null;
+  };
+  calibrated: {
+    totalAnalysisTime: number;
+    averageFallRate: number;
+    minFallRate: number | null;
+    maxFallRate: number | null;
+  };
   analysisWindow: {
     startOffset: number;
     endOffset: number;
@@ -38,35 +47,56 @@ interface VelocityBinChartProps {
   summary: VelocityBinSummary;
 }
 
+type DisplayMode = 'raw' | 'calibrated' | 'both';
+
 export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('raw');
+
   // Custom tooltip
   const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload[0]) {
+    if (active && payload && payload.length > 0) {
       const bin = payload[0].payload;
-      const percentage = (bin.elapsed_sec / summary.totalAnalysisTime * 100).toFixed(1);
       
       return (
         <Card p="xs" withBorder>
           <Text size="sm" fw={500}>
             {bin.fallRate_mph} mph
           </Text>
-          <Text size="xs" c="dimmed">
-            {bin.elapsed_sec.toFixed(1)} seconds
-          </Text>
-          <Text size="xs" c="dimmed">
-            {percentage}% of time
-          </Text>
+          {displayMode === 'raw' && (
+            <>
+              <Text size="xs" c="dimmed">
+                Raw: {bin.elapsed_sec.toFixed(1)} seconds
+              </Text>
+              <Text size="xs" c="dimmed">
+                {(bin.elapsed_sec / summary.raw.totalAnalysisTime * 100).toFixed(1)}% of time
+              </Text>
+            </>
+          )}
+          {displayMode === 'calibrated' && (
+            <>
+              <Text size="xs" c="dimmed">
+                Calibrated: {bin.calibrated_elapsed_sec.toFixed(1)} seconds
+              </Text>
+              <Text size="xs" c="dimmed">
+                {(bin.calibrated_elapsed_sec / summary.calibrated.totalAnalysisTime * 100).toFixed(1)}% of time
+              </Text>
+            </>
+          )}
+          {displayMode === 'both' && (
+            <>
+              <Text size="xs" c="dimmed">
+                Raw: {bin.elapsed_sec.toFixed(1)}s ({(bin.elapsed_sec / summary.raw.totalAnalysisTime * 100).toFixed(1)}%)
+              </Text>
+              <Text size="xs" c="dimmed">
+                Cal: {bin.calibrated_elapsed_sec.toFixed(1)}s ({(bin.calibrated_elapsed_sec / summary.calibrated.totalAnalysisTime * 100).toFixed(1)}%)
+              </Text>
+            </>
+          )}
         </Card>
       );
     }
     return null;
   };
-
-  // Format time display
-  //const formatTime = (seconds: number): string => {
-  //  if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`;
-  //  return `${seconds.toFixed(1)}s`;
-  //};
 
   if (!data || data.length === 0) {
     return (
@@ -79,21 +109,42 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
   // Calculate height based on number of bins
   const chartHeight = Math.max(400, data.length * 20);
 
+  // Get active summary based on display mode
+  const activeSummary = displayMode === 'calibrated' ? summary.calibrated : summary.raw;
+
   return (
     <Card withBorder p="md">
       <Stack>
         {/* Header */}
         <div>
           <Group justify="space-between" align="flex-start">
-            <Text fw={500}>Fall Rate Distribution</Text>
-            <Badge size="sm" variant="light">
-              {summary.analysisWindow.startOffset.toFixed(0)}-{summary.analysisWindow.endOffset.toFixed(0)}s
-            </Badge>
+            <div>
+              <Text fw={500}>Fall Rate Distribution</Text>
+              <Text size="xs" c="dimmed" mt={4}>
+                Time spent at each fall rate after accelerating to terminal velocity
+              </Text>
+            </div>
+            <Group gap="xs">
+              <Badge size="sm" variant="light">
+                {summary.analysisWindow.startOffset.toFixed(0)}-{summary.analysisWindow.endOffset.toFixed(0)}s
+              </Badge>
+            </Group>
           </Group>
-          <Text size="xs" c="dimmed" mt={4}>
-            Time spent at each fall rate after accelerating to terminal velocity
-          </Text>
         </div>
+
+        {/* Display Mode Selector */}
+        <Select
+          label="Display Mode"
+          description="Choose between raw, calibrated (density-corrected), or both"
+          value={displayMode}
+          onChange={(value) => setDisplayMode(value as DisplayMode)}
+          data={[
+            { value: 'raw', label: 'Raw Fall Rate' },
+            { value: 'calibrated', label: 'Calibrated Fall Rate (Density Corrected)' },
+            { value: 'both', label: 'Both (Comparison)' }
+          ]}
+          allowDeselect={false}
+        />
 
         {/* Summary Stats */}
         <Group grow>
@@ -101,8 +152,10 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
             <Group gap="xs">
               <IconRuler size={20} style={{ opacity: 0.7 }} />
               <div>
-                <Text size="xs" c="dimmed">Average Fall Rate</Text>
-                <Text fw={600}>{summary.averageFallRate} mph</Text>
+                <Text size="xs" c="dimmed">
+                  {displayMode === 'calibrated' ? 'Avg Calibrated Rate' : 'Avg Raw Rate'}
+                </Text>
+                <Text fw={600}>{activeSummary.averageFallRate} mph</Text>
               </div>
             </Group>
           </Card>
@@ -117,6 +170,29 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
             </Group>
           </Card>
         </Group>
+
+        {displayMode === 'both' && (
+          <Card withBorder p="sm" style={{ backgroundColor: 'rgba(221, 255, 85, 0.05)' }}>
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>Comparison</Text>
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">Raw Avg:</Text>
+                <Text size="xs" fw={500}>{summary.raw.averageFallRate} mph</Text>
+              </Group>
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">Calibrated Avg:</Text>
+                <Text size="xs" fw={500}>{summary.calibrated.averageFallRate} mph</Text>
+              </Group>
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">Difference:</Text>
+                <Text size="xs" fw={500} c={summary.calibrated.averageFallRate > summary.raw.averageFallRate ? 'green' : 'blue'}>
+                  {Math.abs(summary.calibrated.averageFallRate - summary.raw.averageFallRate)} mph
+                  {summary.calibrated.averageFallRate > summary.raw.averageFallRate ? ' faster' : ' slower'}
+                </Text>
+              </Group>
+            </Stack>
+          </Card>
+        )}
 
         {/* Chart */}
         <ResponsiveContainer width="100%" height={chartHeight}>
@@ -159,7 +235,44 @@ export function VelocityBinChart({ data, summary }: VelocityBinChartProps) {
               content={<CustomTooltip />}
               cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
             />
-            <Bar dataKey="elapsed_sec" fill="#0088ff" radius={[0,10,10,0]} activeBar={<Rectangle fill="#f2f2f2" stroke="blue" radius={[0,10,10,0]}/>}/>
+            {displayMode === 'both' && <Legend />}
+            
+            {displayMode === 'raw' && (
+              <Bar 
+                dataKey="elapsed_sec" 
+                fill="#0088ff" 
+                radius={[0, 10, 10, 0]} 
+                activeBar={<Rectangle fill="#00aaff" stroke="#0088ff" radius={[0, 10, 10, 0]} />}
+                name="Raw Fall Rate"
+              />
+            )}
+            
+            {displayMode === 'calibrated' && (
+              <Bar 
+                dataKey="calibrated_elapsed_sec" 
+                fill="#ddff55" 
+                radius={[0, 10, 10, 0]} 
+                activeBar={<Rectangle fill="#eeff88" stroke="#ddff55" radius={[0, 10, 10, 0]} />}
+                name="Calibrated Fall Rate"
+              />
+            )}
+            
+            {displayMode === 'both' && (
+              <>
+                <Bar 
+                  dataKey="elapsed_sec" 
+                  fill="#0088ff" 
+                  radius={[0, 10, 10, 0]}
+                  name="Raw"
+                />
+                <Bar 
+                  dataKey="calibrated_elapsed_sec" 
+                  fill="#ddff55" 
+                  radius={[0, 10, 10, 0]}
+                  name="Calibrated"
+                />
+              </>
+            )}
           </BarChart>
         </ResponsiveContainer>
       </Stack>

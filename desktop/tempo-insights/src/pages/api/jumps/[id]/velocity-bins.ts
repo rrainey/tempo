@@ -15,6 +15,58 @@ const supabase = createClient(
 interface VelocityBin {
   fallRate_mph: number;
   elapsed_sec: number;
+  calibrated_elapsed_sec: number;
+}
+
+// Fall Rate Calibration Factor table from coordinate-frames.md
+// Altitude in feet MSL, calibration factor
+const CALIBRATION_TABLE: Array<[number, number]> = [
+  [20000, 0.8107],
+  [18000, 0.8385],
+  [16000, 0.8667],
+  [14000, 0.8955],
+  [12000, 0.9247],
+  [10000, 0.9545],
+  [9000, 0.9695],
+  [8000, 0.9847],
+  [7000, 1.0000],  // Reference altitude
+  [6000, 1.0154],
+  [5000, 1.0310],
+  [4000, 1.0467],
+  [3000, 1.0625],
+  [2000, 1.0784],
+  [1000, 1.0945],
+  [0, 1.1107]
+];
+
+/**
+ * Get fall rate calibration factor for a given altitude using linear interpolation
+ * @param altitude_ft Altitude in feet MSL
+ * @returns Calibration factor to convert raw fall rate to normalized fall rate
+ */
+function getCalibrationFactor(altitude_ft: number): number {
+  // Handle edge cases
+  if (altitude_ft >= CALIBRATION_TABLE[0][0]) {
+    return CALIBRATION_TABLE[0][1];
+  }
+  if (altitude_ft <= CALIBRATION_TABLE[CALIBRATION_TABLE.length - 1][0]) {
+    return CALIBRATION_TABLE[CALIBRATION_TABLE.length - 1][1];
+  }
+
+  // Find bracketing altitudes for linear interpolation
+  for (let i = 0; i < CALIBRATION_TABLE.length - 1; i++) {
+    const [alt_upper, factor_upper] = CALIBRATION_TABLE[i];
+    const [alt_lower, factor_lower] = CALIBRATION_TABLE[i + 1];
+
+    if (altitude_ft <= alt_upper && altitude_ft >= alt_lower) {
+      // Linear interpolation
+      const t = (altitude_ft - alt_lower) / (alt_upper - alt_lower);
+      return factor_lower + t * (factor_upper - factor_lower);
+    }
+  }
+
+  // Fallback (shouldn't reach here)
+  return 1.0;
 }
 
 export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) => {
@@ -93,7 +145,11 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
     // Initialize velocity bins (90-200 mph)
     const velocityBins: Map<number, VelocityBin> = new Map();
     for (let mph = 90; mph <= 200; mph++) {
-      velocityBins.set(mph, { fallRate_mph: mph, elapsed_sec: 0.0 });
+      velocityBins.set(mph, { 
+        fallRate_mph: mph, 
+        elapsed_sec: 0.0,
+        calibrated_elapsed_sec: 0.0
+      });
     }
 
     // Define analysis window
@@ -109,7 +165,7 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
         continue;
       }
 
-      // Skip entries without rate of descent data
+      // Skip entries without rate of descent or altitude data
       if (entry.rateOfDescent_fpm === null || entry.rateOfDescent_fpm === undefined) {
         continue;
       }
@@ -126,37 +182,71 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
         continue;
       }
 
-      // Convert fpm to mph and round to nearest integer
+      // Convert fpm to mph (raw fall rate)
       const fallRate_fpm = entry.rateOfDescent_fpm;
-      const fallRate_mph = Math.round(fallRate_fpm * 60 / 5280); // fpm * 60 min/hr / 5280 ft/mile
+      const rawFallRate_mph = Math.round(fallRate_fpm * 60 / 5280);
 
-      // Only consider rates in our bin range
-      if (fallRate_mph >= 90 && fallRate_mph <= 200) {
-        const bin = velocityBins.get(fallRate_mph);
-        if (bin) {
-          bin.elapsed_sec += deltaT_sec;
+      // Get calibration factor for current altitude
+      let alt_ft = entry.baroAlt_ft || (entry.location?.alt_m || 0) * 3.28084;
+      const calibrationFactor = getCalibrationFactor(alt_ft);
+      
+      // Calculate calibrated fall rate
+      // TODO: weshould reject entries lacking good altitude data
+      const calibratedFallRate_mph = Math.round(rawFallRate_mph * calibrationFactor);
+
+      // Accumulate time in raw fall rate bin
+      if (rawFallRate_mph >= 90 && rawFallRate_mph <= 200) {
+        const rawBin = velocityBins.get(rawFallRate_mph);
+        if (rawBin) {
+          rawBin.elapsed_sec += deltaT_sec;
+        }
+      }
+
+      // Accumulate time in calibrated fall rate bin
+      if (calibratedFallRate_mph >= 90 && calibratedFallRate_mph <= 200) {
+        const calibratedBin = velocityBins.get(calibratedFallRate_mph);
+        if (calibratedBin) {
+          calibratedBin.calibrated_elapsed_sec += deltaT_sec;
         }
       }
     }
 
-    // Filter out bins with 0 elapsed time and convert to array
+    // Filter out bins with 0 elapsed time in BOTH categories and convert to array
     const results = Array.from(velocityBins.values())
-      .filter(bin => bin.elapsed_sec > 0)
+      .filter(bin => bin.elapsed_sec > 0 || bin.calibrated_elapsed_sec > 0)
       .sort((a, b) => a.fallRate_mph - b.fallRate_mph);
 
-    // Calculate some summary statistics
-    const totalTime = results.reduce((sum, bin) => sum + bin.elapsed_sec, 0);
-    const avgFallRate = totalTime > 0 
-      ? results.reduce((sum, bin) => sum + (bin.fallRate_mph * bin.elapsed_sec), 0) / totalTime
+    // Calculate summary statistics for both raw and calibrated
+    const totalRawTime = results.reduce((sum, bin) => sum + bin.elapsed_sec, 0);
+    const totalCalibratedTime = results.reduce((sum, bin) => sum + bin.calibrated_elapsed_sec, 0);
+    
+    const avgRawFallRate = totalRawTime > 0 
+      ? results.reduce((sum, bin) => sum + (bin.fallRate_mph * bin.elapsed_sec), 0) / totalRawTime
       : 0;
+    
+    const avgCalibratedFallRate = totalCalibratedTime > 0
+      ? results.reduce((sum, bin) => sum + (bin.fallRate_mph * bin.calibrated_elapsed_sec), 0) / totalCalibratedTime
+      : 0;
+
+    // Find min/max for bins with non-zero time
+    const binsWithRawTime = results.filter(bin => bin.elapsed_sec > 0);
+    const binsWithCalibratedTime = results.filter(bin => bin.calibrated_elapsed_sec > 0);
 
     return res.status(200).json({
       velocityBins: results,
       summary: {
-        totalAnalysisTime: totalTime,
-        averageFallRate: Math.round(avgFallRate),
-        minFallRate: results.length > 0 ? results[0].fallRate_mph : null,
-        maxFallRate: results.length > 0 ? results[results.length - 1].fallRate_mph : null,
+        raw: {
+          totalAnalysisTime: totalRawTime,
+          averageFallRate: Math.round(avgRawFallRate),
+          minFallRate: binsWithRawTime.length > 0 ? binsWithRawTime[0].fallRate_mph : null,
+          maxFallRate: binsWithRawTime.length > 0 ? binsWithRawTime[binsWithRawTime.length - 1].fallRate_mph : null,
+        },
+        calibrated: {
+          totalAnalysisTime: totalCalibratedTime,
+          averageFallRate: Math.round(avgCalibratedFallRate),
+          minFallRate: binsWithCalibratedTime.length > 0 ? binsWithCalibratedTime[0].fallRate_mph : null,
+          maxFallRate: binsWithCalibratedTime.length > 0 ? binsWithCalibratedTime[binsWithCalibratedTime.length - 1].fallRate_mph : null,
+        },
         analysisWindow: {
           startOffset: analysisStartTime,
           endOffset: analysisEndTime,
