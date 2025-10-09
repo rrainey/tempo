@@ -1,3 +1,4 @@
+// pages/groups/[slug].tsx
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import {
@@ -13,13 +14,17 @@ import {
   Avatar,
   Table,
   Loader,
-  Center
+  Center,
+  Modal,
+  Stack,
+  Select,
+  Divider
 } from '@mantine/core';
 import { AppLayout } from '../../components/AppLayout';
 import { AuthGuard } from '../../components/AuthGuard';
 import { InviteMemberModal } from '../../components/InviteMemberModal';
 import { notifications } from '@mantine/notifications';
-import { IconUsers, IconCalendar, IconSettings, IconUserPlus, IconUserCheck } from '@tabler/icons-react';
+import { IconUsers, IconCalendar, IconSettings, IconUserPlus, IconUserCheck, IconTrash, IconAlertTriangle } from '@tabler/icons-react';
 
 interface GroupMember {
   id: string;
@@ -50,6 +55,11 @@ export default function GroupPage() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [inviteModalOpened, setInviteModalOpened] = useState(false);
+  const [deleteModalOpened, setDeleteModalOpened] = useState(false);
+  const [reassignModalOpened, setReassignModalOpened] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [selectedNewAdmin, setSelectedNewAdmin] = useState<string | null>(null);
+  const [promoting, setPromoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -114,6 +124,100 @@ export default function GroupPage() {
     }
   };
 
+  const handleDeleteGroup = async () => {
+    if (!group) return;
+
+    setDeleting(true);
+
+    try {
+      const response = await fetch(`/api/groups/${group.slug}/delete`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Check if we need to reassign admin
+        if (data.requiresAdminReassignment) {
+          setDeleteModalOpened(false);
+          setReassignModalOpened(true);
+          notifications.show({
+            title: 'Action Required',
+            message: data.message,
+            color: 'orange',
+          });
+          return;
+        }
+        throw new Error(data.error || 'Failed to delete group');
+      }
+
+      notifications.show({
+        title: 'Success',
+        message: 'Group deleted successfully',
+        color: 'green',
+      });
+
+      // Redirect to groups page
+      router.push('/groups');
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to delete group',
+        color: 'red',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handlePromoteMember = async () => {
+    if (!group || !selectedNewAdmin) return;
+
+    setPromoting(true);
+
+    try {
+      const response = await fetch(`/api/groups/${group.slug}/members/${selectedNewAdmin}/promote`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to promote member');
+      }
+
+      notifications.show({
+        title: 'Success',
+        message: 'Member promoted to admin successfully',
+        color: 'green',
+      });
+
+      // Reload group data
+      await loadGroupData();
+      
+      // Close reassign modal and open delete confirmation
+      setReassignModalOpened(false);
+      setSelectedNewAdmin(null);
+      
+      notifications.show({
+        title: 'Admin Assigned',
+        message: 'You can now delete the group',
+        color: 'blue',
+      });
+
+      // Open delete modal after promotion
+      setTimeout(() => setDeleteModalOpened(true), 500);
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to promote member',
+        color: 'red',
+      });
+    } finally {
+      setPromoting(false);
+    }
+  };
+
   const getRoleBadgeColor = (role: GroupMember['role']) => {
     switch (role) {
       case 'OWNER': return 'red';
@@ -121,6 +225,11 @@ export default function GroupPage() {
       default: return 'gray';
     }
   };
+
+  // Get eligible members for promotion (non-admins)
+  const eligibleMembers = group?.members.filter(
+    m => m.role === 'MEMBER'
+  ) || [];
 
   if (loading) return (
     <AuthGuard>
@@ -269,10 +378,51 @@ export default function GroupPage() {
 
             {(group.userRole === 'OWNER' || group.userRole === 'ADMIN') && (
               <Tabs.Panel value="settings" pt="md">
-                <Paper p="md" withBorder>
-                  <Title order={4} mb="md">Group Settings</Title>
-                  <Text c="dimmed">Settings panel - to be implemented</Text>
-                </Paper>
+                <Stack gap="md">
+                  <Paper p="md" withBorder>
+                    <Title order={4} mb="md">Group Information</Title>
+                    <Stack gap="xs">
+                      <MantineGroup justify="space-between">
+                        <Text size="sm" c="dimmed">Group Name</Text>
+                        <Text size="sm" fw={500}>{group.name}</Text>
+                      </MantineGroup>
+                      <MantineGroup justify="space-between">
+                        <Text size="sm" c="dimmed">Visibility</Text>
+                        <Text size="sm">{group.isPublic ? 'Public' : 'Private'}</Text>
+                      </MantineGroup>
+                      <MantineGroup justify="space-between">
+                        <Text size="sm" c="dimmed">Total Members</Text>
+                        <Text size="sm">{group.memberCount}</Text>
+                      </MantineGroup>
+                      <MantineGroup justify="space-between">
+                        <Text size="sm" c="dimmed">Created</Text>
+                        <Text size="sm">{new Date(group.createdAt).toLocaleDateString()}</Text>
+                      </MantineGroup>
+                    </Stack>
+                  </Paper>
+
+                  <Paper p="md" withBorder>
+                    <Title order={4} mb="md" c="red">Danger Zone</Title>
+                    <Card withBorder p="md" style={{ backgroundColor: 'var(--mantine-color-dark-8)' }}>
+                      <MantineGroup justify="space-between">
+                        <div>
+                          <Text fw={500} mb="xs">Delete this group</Text>
+                          <Text size="sm" c="dimmed">
+                            Once you delete a group, there is no going back. All members will be removed.
+                          </Text>
+                        </div>
+                        <Button
+                          color="red"
+                          variant="light"
+                          leftSection={<IconTrash size={16} />}
+                          onClick={() => setDeleteModalOpened(true)}
+                        >
+                          Delete Group
+                        </Button>
+                      </MantineGroup>
+                    </Card>
+                  </Paper>
+                </Stack>
               </Tabs.Panel>
             )}
           </Tabs>
@@ -283,6 +433,129 @@ export default function GroupPage() {
             groupSlug={group.slug}
             userRole={group.userRole || 'MEMBER'}
           />
+
+          {/* Delete Confirmation Modal */}
+          <Modal
+            opened={deleteModalOpened}
+            onClose={() => setDeleteModalOpened(false)}
+            title="Delete Group"
+            size="md"
+          >
+            <Stack gap="md">
+              <MantineGroup gap="sm">
+                <IconAlertTriangle size={24} color="red" />
+                <div style={{ flex: 1 }}>
+                  <Text fw={500}>Are you sure you want to delete "{group.name}"?</Text>
+                  <Text size="sm" c="dimmed" mt="xs">
+                    This action cannot be undone. This will permanently:
+                  </Text>
+                </div>
+              </MantineGroup>
+
+              <Card withBorder p="md" style={{ backgroundColor: 'var(--mantine-color-dark-8)' }}>
+                <Stack gap="xs">
+                  <Text size="sm">• Remove all {group.memberCount} members from the group</Text>
+                  <Text size="sm">• Delete all pending invitations</Text>
+                  <Text size="sm">• Remove group associations from formation skydives</Text>
+                  <Text size="sm" c="dimmed" mt="xs">
+                    Note: Individual jump logs and formation data will be preserved.
+                  </Text>
+                </Stack>
+              </Card>
+
+              <MantineGroup justify="flex-end" gap="xs" mt="md">
+                <Button
+                  variant="subtle"
+                  onClick={() => setDeleteModalOpened(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  color="red"
+                  leftSection={<IconTrash size={16} />}
+                  onClick={handleDeleteGroup}
+                  loading={deleting}
+                >
+                  Delete Permanently
+                </Button>
+              </MantineGroup>
+            </Stack>
+          </Modal>
+
+          {/* Reassign Admin Modal */}
+          <Modal
+            opened={reassignModalOpened}
+            onClose={() => {
+              setReassignModalOpened(false);
+              setSelectedNewAdmin(null);
+            }}
+            title="Assign New Admin"
+            size="md"
+          >
+            <Stack gap="md">
+              <Text size="sm">
+                You are the last admin of this group. Please promote another member to admin 
+                before deleting the group, or remove all other members first.
+              </Text>
+
+              {eligibleMembers.length > 0 ? (
+                <>
+                  <Select
+                    label="Select a member to promote to admin"
+                    placeholder="Choose a member"
+                    data={eligibleMembers.map(m => ({
+                      value: m.id,
+                      label: `${m.name} (@${m.slug})`
+                    }))}
+                    value={selectedNewAdmin}
+                    onChange={setSelectedNewAdmin}
+                  />
+
+                  <Divider />
+
+                  <Text size="sm" c="dimmed">
+                    After promoting a new admin, you can proceed with deleting the group.
+                  </Text>
+
+                  <MantineGroup justify="flex-end" gap="xs">
+                    <Button
+                      variant="subtle"
+                      onClick={() => {
+                        setReassignModalOpened(false);
+                        setSelectedNewAdmin(null);
+                      }}
+                      disabled={promoting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handlePromoteMember}
+                      loading={promoting}
+                      disabled={!selectedNewAdmin}
+                    >
+                      Promote to Admin
+                    </Button>
+                  </MantineGroup>
+                </>
+              ) : (
+                <>
+                  <Text size="sm" c="dimmed">
+                    There are no regular members to promote. You must remove all other members 
+                    before you can delete this group.
+                  </Text>
+                  <MantineGroup justify="flex-end">
+                    <Button
+                      variant="subtle"
+                      onClick={() => setReassignModalOpened(false)}
+                    >
+                      Close
+                    </Button>
+                  </MantineGroup>
+                </>
+              )}
+            </Stack>
+          </Modal>
         </Container>
       </AppLayout>
     </AuthGuard>

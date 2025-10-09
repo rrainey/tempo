@@ -1,3 +1,4 @@
+// pages/groups/index.tsx
 import { useState, useEffect } from 'react';
 import { Container, Title, Text, Button, Group as MantineGroup, Card, Stack, Badge, Grid } from '@mantine/core';
 import { AppLayout } from '../../components/AppLayout';
