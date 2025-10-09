@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Container, Title, Paper, Group, Text, Avatar, ActionIcon, Menu, Stack, Loader, Center, Button, Badge } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { IconDotsVertical, IconUserX, IconUserPlus, IconSearch } from '@tabler/icons-react';
+import { IconDotsVertical, IconUserX, IconUserPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { AppLayout } from '../components/AppLayout';
 import { AuthGuard } from '../components/AuthGuard';
 import { UserSearchModal } from '../components/UserSearchModal';
@@ -39,16 +39,33 @@ interface PendingRequest {
   createdAt: string;
 }
 
+interface PendingInvitation {
+  id: string;
+  code: string;
+  email: string;
+  group: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+  groupRole: string | null;
+  userRole: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export default function ConnectionsPage() {
   const router = useRouter();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [sentRequests, setSentRequests] = useState<PendingRequest[]>([]);
   const [receivedRequests, setReceivedRequests] = useState<PendingRequest[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   useEffect(() => {
     loadConnections();
+    loadPendingInvitations();
   }, []);
 
   const loadConnections = async () => {
@@ -69,6 +86,18 @@ export default function ConnectionsPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPendingInvitations = async () => {
+    try {
+      const response = await fetch('/api/invitations/pending');
+      if (response.ok) {
+        const data = await response.json();
+        setPendingInvitations(data.invitations || []);
+      }
+    } catch (error) {
+      console.error('Error loading pending invitations:', error);
     }
   };
 
@@ -171,6 +200,47 @@ export default function ConnectionsPage() {
     }
   };
 
+  const handleDeleteInvitation = (invitationCode: string, email: string) => {
+    modals.openConfirmModal({
+      title: 'Delete Invitation',
+      children: (
+        <Text size="sm">
+          Are you sure you want to delete the invitation for <strong>{email}</strong>? 
+          They will no longer be able to use this invitation link to join.
+        </Text>
+      ),
+      labels: { confirm: 'Delete Invitation', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/invitations/${invitationCode}/delete`, {
+            method: 'DELETE'
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to delete invitation');
+          }
+
+          notifications.show({
+            title: 'Success',
+            message: 'Invitation deleted successfully',
+            color: 'green',
+          });
+
+          // Remove from state
+          setPendingInvitations(prev => prev.filter(inv => inv.code !== invitationCode));
+        } catch (error) {
+          notifications.show({
+            title: 'Error',
+            message: error instanceof Error ? error.message : 'Failed to delete invitation',
+            color: 'red',
+          });
+        }
+      }
+    });
+  };
+
   if (loading) {
     return (
       <AuthGuard>
@@ -205,7 +275,7 @@ export default function ConnectionsPage() {
           {/* Pending Received Requests */}
           {receivedRequests.length > 0 && (
             <Paper p="md" mb="xl" withBorder>
-              <Title order={4} mb="md">Pending Requests</Title>
+              <Title order={4} mb="md">Pending Connection Requests</Title>
               <Stack gap="sm">
                 {receivedRequests.map((request) => (
                   <Group key={request.id} justify="space-between">
@@ -241,6 +311,47 @@ export default function ConnectionsPage() {
                         Decline
                       </Button>
                     </Group>
+                  </Group>
+                ))}
+              </Stack>
+            </Paper>
+          )}
+
+          {/* Pending Invitations (Created by User) */}
+          {pendingInvitations.length > 0 && (
+            <Paper p="md" mb="xl" withBorder>
+              <Title order={4} mb="md">Pending Invitations</Title>
+              <Text size="sm" c="dimmed" mb="md">
+                Invitations you've sent that haven't been accepted yet
+              </Text>
+              <Stack gap="sm">
+                {pendingInvitations.map((invitation) => (
+                  <Group key={invitation.id} justify="space-between">
+                    <div>
+                      <Group gap="xs">
+                        <Text fw={500}>{invitation.email}</Text>
+                        {invitation.group && (
+                          <Badge size="sm" variant="light">
+                            {invitation.group.name}
+                          </Badge>
+                        )}
+                      </Group>
+                      <Text size="xs" c="dimmed">
+                        Expires: {new Date(invitation.expiresAt).toLocaleDateString()}
+                      </Text>
+                      {invitation.groupRole && (
+                        <Text size="xs" c="dimmed">
+                          Role: {invitation.groupRole}
+                        </Text>
+                      )}
+                    </div>
+                    <ActionIcon
+                      color="red"
+                      variant="subtle"
+                      onClick={() => handleDeleteInvitation(invitation.code, invitation.email)}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
                   </Group>
                 ))}
               </Stack>
@@ -303,7 +414,7 @@ export default function ConnectionsPage() {
           {/* Pending Sent Requests */}
           {sentRequests.length > 0 && (
             <Paper p="md" withBorder>
-              <Title order={4} mb="md">Sent Requests</Title>
+              <Title order={4} mb="md">Sent Connection Requests</Title>
               <Stack gap="sm">
                 {sentRequests.map((request) => (
                   <Group key={request.id} justify="space-between">
