@@ -23,15 +23,24 @@ interface JumpTimeSeries {
 interface VelocityBinData {
   fallRate_mph: number;
   elapsed_sec: number;
+  calibrated_elapsed_sec: number;
 }
 
 interface VelocityBinResponse {
   velocityBins: VelocityBinData[];
   summary: {
-    totalAnalysisTime: number;
-    averageFallRate: number;
-    minFallRate: number | null;
-    maxFallRate: number | null;
+    raw: {
+      totalAnalysisTime: number;
+      averageFallRate: number;
+      minFallRate: number | null;
+      maxFallRate: number | null;
+    };
+    calibrated: {
+      totalAnalysisTime: number;
+      averageFallRate: number;
+      minFallRate: number | null;
+      maxFallRate: number | null;
+    };
     analysisWindow: {
       startOffset: number;
       endOffset: number;
