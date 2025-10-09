@@ -105,6 +105,13 @@ export default function HomePage() {
     setRefreshKey(prev => prev + 1);
   };
 
+  const handleJumpDeleted = () => {
+    // Clear the selected jump
+    setSelectedJumpId(null);
+    // Trigger a refresh of the jumps panel
+    setRefreshKey(prev => prev + 1);
+  };
+
   return (
     <AuthGuard>
       <AppLayout>
@@ -172,7 +179,10 @@ export default function HomePage() {
             {/* Center Column - Jump Details */}
             <Grid.Col span={{ base: 12, md: 8 }}>
               <Paper p="md" withBorder style={{ minHeight: '400px' }}>
-                <JumpDetailsPanel jumpId={selectedJumpId} />
+                <JumpDetailsPanel 
+                  jumpId={selectedJumpId}
+                  onJumpDeleted={handleJumpDeleted}
+                />
               </Paper>
             </Grid.Col>
 

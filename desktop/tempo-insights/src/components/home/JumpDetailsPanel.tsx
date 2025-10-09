@@ -1,8 +1,8 @@
 // components/home/JumpDetailsPanel.tsx
 
 import React, { useEffect, useState } from 'react';
-import { Card, Text, Group, Stack, Badge, Divider, Skeleton, SimpleGrid, Paper, Title, Switch, Textarea, Button } from '@mantine/core';
-import { IconClock, IconRuler, IconMapPin, IconParachute, IconCalendar, IconEye, IconEyeOff, IconMessage2Up } from '@tabler/icons-react';
+import { Card, Text, Group, Stack, Badge, Divider, Skeleton, SimpleGrid, Paper, Title, Switch, Textarea, Button, Modal } from '@mantine/core';
+import { IconClock, IconRuler, IconMapPin, IconParachute, IconCalendar, IconEye, IconEyeOff, IconMessage2Up, IconTrash, IconAlertTriangle } from '@tabler/icons-react';
 import { JumpAltitudeChart } from './JumpAltitudeChart';
 import { VelocityBinChart } from './VelocityBinChart';
 import { notifications } from '@mantine/notifications';
@@ -23,24 +23,15 @@ interface JumpTimeSeries {
 interface VelocityBinData {
   fallRate_mph: number;
   elapsed_sec: number;
-  calibrated_elapsed_sec: number;
 }
 
 interface VelocityBinResponse {
   velocityBins: VelocityBinData[];
   summary: {
-    raw: {
-      totalAnalysisTime: number;
-      averageFallRate: number;
-      minFallRate: number | null;
-      maxFallRate: number | null;
-    };
-    calibrated: {
-      totalAnalysisTime: number;
-      averageFallRate: number;
-      minFallRate: number | null;
-      maxFallRate: number | null;
-    };
+    totalAnalysisTime: number;
+    averageFallRate: number;
+    minFallRate: number | null;
+    maxFallRate: number | null;
     analysisWindow: {
       startOffset: number;
       endOffset: number;
@@ -84,9 +75,10 @@ interface JumpDetails {
 
 interface JumpDetailsPanelProps {
   jumpId: string | null;
+  onJumpDeleted?: () => void;
 }
 
-export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
+export function JumpDetailsPanel({ jumpId, onJumpDeleted }: JumpDetailsPanelProps) {
   const [jump, setJump] = useState<JumpDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +86,8 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [deleteModalOpened, setDeleteModalOpened] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   
   // Velocity bin data
   const [velocityBinData, setVelocityBinData] = useState<VelocityBinResponse | null>(null);
@@ -195,6 +189,49 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
     }
   };
 
+  const handleDeleteJump = async () => {
+    if (!jump || deleting) return;
+    
+    setDeleting(true);
+    
+    try {
+      const response = await fetch(`/api/jumps/${jump.id}/delete`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete jump');
+      }
+      
+      const data = await response.json();
+      
+      notifications.show({
+        title: 'Success',
+        message: data.message,
+        color: 'green',
+      });
+      
+      setDeleteModalOpened(false);
+      
+      // Clear the current jump
+      setJump(null);
+      
+      // Notify parent to refresh the list
+      if (onJumpDeleted) {
+        onJumpDeleted();
+      }
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to delete jump',
+        color: 'red',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
@@ -205,6 +242,11 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
       minute: '2-digit',
       hour12: true,
     });
+  };
+
+  const formatFreefallTime = (seconds: number | null) => {
+    if (seconds === null) return 'N/A';
+    return `${Math.round(seconds)}s`;
   };
 
   const formatTime = (seconds: number | null) => {
@@ -315,24 +357,35 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
           </div>
           <Stack gap="xs" align="flex-end">
             {jump.isOwner && (
-              <Switch
-                checked={jump.visibleToConnections}
-                onChange={handleVisibilityToggle}
-                disabled={updatingVisibility}
-                label={
-                  <Group gap={4}>
-                    {jump.visibleToConnections ? (
-                      <IconEye size={16} />
-                    ) : (
-                      <IconEyeOff size={16} />
-                    )}
-                    <Text size="sm">
-                      {jump.visibleToConnections ? 'Visible' : 'Private'}
-                    </Text>
-                  </Group>
-                }
-                color="green"
-              />
+              <>
+                <Switch
+                  checked={jump.visibleToConnections}
+                  onChange={handleVisibilityToggle}
+                  disabled={updatingVisibility}
+                  label={
+                    <Group gap={4}>
+                      {jump.visibleToConnections ? (
+                        <IconEye size={16} />
+                      ) : (
+                        <IconEyeOff size={16} />
+                      )}
+                      <Text size="sm">
+                        {jump.visibleToConnections ? 'Visible' : 'Private'}
+                      </Text>
+                    </Group>
+                  }
+                  color="green"
+                />
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="subtle"
+                  leftSection={<IconTrash size={14} />}
+                  onClick={() => setDeleteModalOpened(true)}
+                >
+                  Delete Jump
+                </Button>
+              </>
             )}
             {!jump.isOwner && (
               <Badge color={jump.visibleToConnections ? 'green' : 'gray'}>
@@ -356,6 +409,18 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
         <>
           {/* Main Metrics */}
           <SimpleGrid cols={2} spacing="md">
+            <Card withBorder p="md">
+              <Group gap="sm">
+                <IconParachute size={24} style={{ opacity: 0.7 }} />
+                <div>
+                  <Text size="xs" c="dimmed">Jump Number</Text>
+                  <Text size="lg" fw={600}>
+                    #{jump.jumpNumber || 'N/A'}
+                  </Text>
+                </div>
+              </Group>
+            </Card>
+
             <Card withBorder p="md">
               <Group gap="sm">
                 <IconClock size={24} style={{ opacity: 0.7 }} />
@@ -397,22 +462,7 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
                 <div>
                   <Text size="xs" c="dimmed">Freefall Time</Text>
                   <Text size="lg" fw={600}>
-                    {formatTime(jump.freefallTime)}
-                  </Text>
-                </div>
-              </Group>
-            </Card>
-
-            <Card withBorder p="md">
-              <Group gap="sm">
-                <IconRuler size={24} style={{ opacity: 0.7 }} />
-                <div>
-                  <Text size="xs" c="dimmed">Avg Fall Rate</Text>
-                  <Text size="lg" fw={600}>
-                    {jump.averageFallRate 
-                      ? `${Math.round(jump.averageFallRate)} mph`
-                      : 'N/A'
-                    }
+                    {formatFreefallTime(jump.freefallTime)}
                   </Text>
                 </div>
               </Group>
@@ -538,6 +588,55 @@ export function JumpDetailsPanel({ jumpId }: JumpDetailsPanelProps) {
           )}
         </Card>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        opened={deleteModalOpened}
+        onClose={() => setDeleteModalOpened(false)}
+        title="Delete Jump Log"
+        size="md"
+      >
+        <Stack gap="md">
+          <Group gap="sm">
+            <IconAlertTriangle size={24} color="red" />
+            <div style={{ flex: 1 }}>
+              <Text fw={500}>Are you sure you want to delete this jump?</Text>
+              <Text size="sm" c="dimmed" mt="xs">
+                This action cannot be undone. This will permanently remove:
+              </Text>
+            </div>
+          </Group>
+
+          <Card withBorder p="md" style={{ backgroundColor: 'var(--mantine-color-dark-8)' }}>
+            <Stack gap="xs">
+              <Text size="sm">• The jump log and all associated data</Text>
+              <Text size="sm">• The raw flight data file</Text>
+              <Text size="sm">• Any references to this jump in formation skydives</Text>
+              <Text size="sm" c="dimmed" mt="xs">
+                Note: If this is the only jump in a formation, the formation will also be deleted.
+              </Text>
+            </Stack>
+          </Card>
+
+          <Group justify="flex-end" gap="xs" mt="md">
+            <Button
+              variant="subtle"
+              onClick={() => setDeleteModalOpened(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconTrash size={16} />}
+              onClick={handleDeleteJump}
+              loading={deleting}
+            >
+              Delete Permanently
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }
