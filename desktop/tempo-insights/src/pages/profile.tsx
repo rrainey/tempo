@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Container, Title, Paper, TextInput, Button, Group, Text, Alert, Stack, Card, Select, NumberInput } from '@mantine/core';
+import { Container, Title, Paper, TextInput, Button, Group, Text, Alert, Stack, Card, Select, NumberInput, Modal } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { AppLayout } from '../components/AppLayout';
 import { AuthGuard } from '../components/AuthGuard';
 import { ChangePasswordModal } from '../components/ChangePasswordModal';
-import { IconLock, IconParachute, IconMapPin } from '@tabler/icons-react';
+import { IconLock, IconParachute, IconMapPin, IconDownload, IconFileZip } from '@tabler/icons-react';
 
 interface ProfileForm {
   name: string;
@@ -40,12 +40,24 @@ interface Dropzone {
   icaoCode: string | null;
 }
 
+interface ExportSizeInfo {
+  jumpCount: number;
+  totalRawLogSize: number;
+  estimatedMetadataSize: number;
+  estimatedTotalSize: number;
+  estimatedTotalSizeMB: string;
+}
+
 export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [dropzones, setDropzones] = useState<Dropzone[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [passwordModalOpened, setPasswordModalOpened] = useState(false);
+  const [exportModalOpened, setExportModalOpened] = useState(false);
+  const [exportSizeInfo, setExportSizeInfo] = useState<ExportSizeInfo | null>(null);
+  const [loadingExportSize, setLoadingExportSize] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
 
   const form = useForm<ProfileForm>({
     initialValues: {
@@ -138,6 +150,58 @@ export default function ProfilePage() {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRequestExport = async () => {
+    setLoadingExportSize(true);
+    setExportSizeInfo(null);
+
+    try {
+      const response = await fetch('/api/export/size');
+      if (!response.ok) throw new Error('Failed to get export size');
+
+      const data = await response.json();
+      setExportSizeInfo(data);
+      setExportModalOpened(true);
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to estimate export size',
+        color: 'red',
+      });
+    } finally {
+      setLoadingExportSize(false);
+    }
+  };
+
+  const handleConfirmExport = async () => {
+    setExportingData(true);
+
+    try {
+      // Create a hidden link and trigger download
+      const link = document.createElement('a');
+      link.href = '/api/export';
+      link.download = `tempo-export-${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      notifications.show({
+        title: 'Export Started',
+        message: 'Your data export has started. The download will begin shortly.',
+        color: 'green',
+      });
+
+      setExportModalOpened(false);
+    } catch (err) {
+      notifications.show({
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to export data',
+        color: 'red',
+      });
+    } finally {
+      setExportingData(false);
     }
   };
 
@@ -267,13 +331,23 @@ export default function ProfilePage() {
                 )}
 
                 <Group justify="space-between" mt="xl">
-                  <Button
-                    variant="subtle"
-                    leftSection={<IconLock size={16} />}
-                    onClick={() => setPasswordModalOpened(true)}
-                  >
-                    Change Password
-                  </Button>
+                  <Group>
+                    <Button
+                      variant="subtle"
+                      leftSection={<IconLock size={16} />}
+                      onClick={() => setPasswordModalOpened(true)}
+                    >
+                      Change Password
+                    </Button>
+                    <Button
+                      variant="subtle"
+                      leftSection={<IconDownload size={16} />}
+                      onClick={handleRequestExport}
+                      loading={loadingExportSize}
+                    >
+                      Export My Data
+                    </Button>
+                  </Group>
 
                   <Group>
                     <Button
@@ -302,6 +376,66 @@ export default function ProfilePage() {
           opened={passwordModalOpened}
           onClose={() => setPasswordModalOpened(false)}
         />
+
+        <Modal
+          opened={exportModalOpened}
+          onClose={() => setExportModalOpened(false)}
+          title="Export My Data"
+          size="md"
+        >
+          <Stack gap="md">
+            <Alert color="blue" icon={<IconFileZip size={16} />}>
+              This will export all your jump data in a ZIP archive containing:
+              <ul style={{ marginTop: 8, marginBottom: 0 }}>
+                <li>All jump logs (raw NMEA format files)</li>
+                <li>Jump analysis metadata (JSON format)</li>
+                <li>Your profile information</li>
+                <li>Group memberships</li>
+                <li>Formation skydive information</li>
+                <li>Device information</li>
+                <li>Connection list</li>
+              </ul>
+            </Alert>
+
+            {exportSizeInfo && (
+              <Paper p="md" withBorder>
+                <Text size="sm" fw={600} mb="xs">Export Details:</Text>
+                <Stack gap="xs">
+                  <Group justify="space-between">
+                    <Text size="sm" c="dimmed">Jump logs:</Text>
+                    <Text size="sm">{exportSizeInfo.jumpCount}</Text>
+                  </Group>
+                  <Group justify="space-between">
+                    <Text size="sm" c="dimmed">Estimated size:</Text>
+                    <Text size="sm" fw={600}>{exportSizeInfo.estimatedTotalSizeMB} MB</Text>
+                  </Group>
+                </Stack>
+              </Paper>
+            )}
+
+            <Text size="sm" c="dimmed">
+              The download may take a few moments depending on the amount of data.
+            </Text>
+
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="subtle"
+                onClick={() => setExportModalOpened(false)}
+                disabled={exportingData}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmExport}
+                loading={exportingData}
+                leftSection={<IconDownload size={16} />}
+                color="brand"
+              >
+                Download Export
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
       </AppLayout>
     </AuthGuard>
   );
