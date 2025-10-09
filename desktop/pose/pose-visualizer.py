@@ -595,6 +595,7 @@ class TickOverride(QtWidgets.QSlider):
 
         # draw the groove only
         opt.subControls = style.SC_SliderGroove
+
         qp.drawComplexControl(style.CC_Slider, opt)
 
         sliderMin = self.minimum()

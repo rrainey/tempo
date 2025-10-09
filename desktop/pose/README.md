@@ -8,6 +8,9 @@ $ python pose-visualizer.py <path-to-jump-log-file>
 
 ![application](../../images/tempo-visualizer.png)
 
+
+### Uses Python 3.9.13 for development
+
 ### Configuring Python to run pose-visualizer
 
 To be added,
