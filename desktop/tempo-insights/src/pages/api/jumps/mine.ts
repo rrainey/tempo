@@ -27,7 +27,7 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
     const isViewingOwnJumps = userId === currentUserId;
 
     // Build where clause based on visibility rules
-    let whereClause: any = { userId };
+    const whereClause: any = { userId };
 
     // If viewing another user's jumps, apply visibility rules
     if (!isViewingOwnJumps) {

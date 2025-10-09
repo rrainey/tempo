@@ -187,7 +187,7 @@ export default withAuth(async (req: AuthenticatedRequest, res: NextApiResponse) 
       const rawFallRate_mph = Math.round(fallRate_fpm * 60 / 5280);
 
       // Get calibration factor for current altitude
-      let alt_ft = entry.baroAlt_ft || (entry.location?.alt_m || 0) * 3.28084;
+      const alt_ft = entry.baroAlt_ft || (entry.location?.alt_m || 0) * 3.28084;
       const calibrationFactor = getCalibrationFactor(alt_ft);
       
       // Calculate calibrated fall rate

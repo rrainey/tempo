@@ -107,7 +107,7 @@ export default function ConnectionsPage() {
       children: (
         <Text size="sm">
           Are you sure you want to remove your connection with <strong>{userName}</strong>? 
-          They will no longer be able to see your jumps marked as "visible to connections".
+          They will no longer be able to see your jumps marked as &quot;visible to connections&quot;.
         </Text>
       ),
       labels: { confirm: 'Remove Connection', cancel: 'Cancel' },
@@ -322,7 +322,7 @@ export default function ConnectionsPage() {
             <Paper p="md" mb="xl" withBorder>
               <Title order={4} mb="md">Pending Invitations</Title>
               <Text size="sm" c="dimmed" mb="md">
-                Invitations you've sent that haven't been accepted yet
+                Invitations you&apos;ve sent that haven&apos;t been accepted yet
               </Text>
               <Stack gap="sm">
                 {pendingInvitations.map((invitation) => (
@@ -363,7 +363,7 @@ export default function ConnectionsPage() {
             <Title order={4} mb="md">My Connections</Title>
             {connections.length === 0 ? (
               <Text c="dimmed" ta="center" py="xl">
-                You don't have any connections yet. Find and connect with other jumpers!
+                You don&apos;t have any connections yet. Find and connect with other jumpers!
               </Text>
             ) : (
               <Stack gap="sm">

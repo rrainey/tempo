@@ -445,7 +445,7 @@ export default function GroupPage() {
               <MantineGroup gap="sm">
                 <IconAlertTriangle size={24} color="red" />
                 <div style={{ flex: 1 }}>
-                  <Text fw={500}>Are you sure you want to delete "{group.name}"?</Text>
+                  <Text fw={500}>Are you sure you want to delete &quot;{group.name}&quot;?</Text>
                   <Text size="sm" c="dimmed" mt="xs">
                     This action cannot be undone. This will permanently:
                   </Text>

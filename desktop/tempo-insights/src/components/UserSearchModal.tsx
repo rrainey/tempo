@@ -99,7 +99,7 @@ export function UserSearchModal({ opened, onClose }: UserSearchModalProps) {
 
           {!loading && searchTerm && users.length === 0 && (
             <Text c="dimmed" ta="center" py="xl">
-              No users found matching "{searchTerm}"
+              No users found matching &quot;{searchTerm}&quot;
             </Text>
           )}
 
