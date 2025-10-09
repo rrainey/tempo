@@ -17,13 +17,13 @@ export default function App({ Component, pageProps }: AppProps) {
         light: {},
         dark: {
           // Override CSS variables for dark mode
-          '--mantine-color-body': '#002233',
+          '--mantine-color-body': '#001018',
           '--mantine-color-text': '#c5c0c9',
           '--mantine-color-dimmed': '#757079',
           '--mantine-color-placeholder': '#757079',
           '--mantine-color-anchor': '#ddff55',
           '--mantine-color-default-border': '#1a5270',
-          '--mantine-color-default': '#11425d',
+          '--mantine-color-default': '#0d2c3dff',
           '--mantine-color-default-hover': '#1a5270',
           '--mantine-color-default-color': '#c5c0c9',
         },

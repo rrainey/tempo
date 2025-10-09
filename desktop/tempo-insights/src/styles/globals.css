@@ -16,7 +16,7 @@ body {
 /* Ensure full height for app container */
 #__next {
   min-height: 100vh;
-  background-color: #002233; /* color-1 */
+  background-color: #001018; /* color-1 */
 }
 
 /* Custom scrollbar for dark theme */
