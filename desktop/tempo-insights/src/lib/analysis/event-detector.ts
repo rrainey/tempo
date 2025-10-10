@@ -3,7 +3,6 @@
 import { ParsedLogData, TimeSeriesPoint } from './log-parser';
 import { KMLDataV1, Vector3 } from './dropkick-reader';
 import { METERStoFEET } from './dropkick-tools';
-import { sqrt } from 'three/tsl';
 
 export interface JumpEvents {
   exitOffsetSec?: number;

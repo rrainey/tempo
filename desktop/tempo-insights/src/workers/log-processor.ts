@@ -22,6 +22,16 @@ class LogProcessor {
   private isRunning = false;
   private processInterval: NodeJS.Timeout | null = null;
   private cycleCount = 0;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private processedCount = 0;
+
+  private startHeartbeat() {
+    this.heartbeatInterval = setInterval(() => {
+      console.log(`[ANALYSIS WORKER] ♥ Heartbeat - Worker alive`);
+      console.log(`[ANALYSIS WORKER]   - Logs processed this session: ${this.processedCount}`);
+      console.log(`[ANALYSIS WORKER]   - Uptime: ${process.uptime().toFixed(0)}s`);
+    }, 30000); // 30 seconds
+  }
 
   async start() {
     console.log('[LOG PROCESSOR] Starting worker...');
@@ -30,6 +40,9 @@ class LogProcessor {
     console.log(`[LOG PROCESSOR]   - Batch size: ${BATCH_SIZE} logs per cycle`);
     
     this.isRunning = true;
+
+    // Start heartbeat logging
+    this.startHeartbeat();
 
     // Initial processing
     await this.processCycle();
@@ -52,6 +65,10 @@ class LogProcessor {
     
     if (this.processInterval) {
       clearInterval(this.processInterval);
+    }
+
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
     }
 
     await prisma.$disconnect();
@@ -249,6 +266,7 @@ class LogProcessor {
       });
       
       console.log(`[LOG PROCESSOR]   ✓ Analysis complete`);
+      this.processedCount++;
       
     } catch (error) {
       console.error(`[LOG PROCESSOR]   ✗ Error processing log:`, error);

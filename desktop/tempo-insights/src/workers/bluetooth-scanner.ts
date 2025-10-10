@@ -43,13 +43,26 @@ class BluetoothScanner {
   private fileProcessingState = new Map<string, FileProcessingState>(); // Track file state per device
   private commandProcessors: Map<CommandType, CommandProcessor> = new Map();
   private isProcessingCommand = false;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private scanCycleCount = 0;
+
+  private startHeartbeat() {
+    // Log heartbeat every 60 seconds to confirm worker is alive
+    this.heartbeatInterval = setInterval(() => {
+      console.log(`[BLUETOOTH SCANNER] ♥ Heartbeat - Worker alive`);
+      console.log(`[BLUETOOTH SCANNER]   - Scan cycles completed: ${this.scanCycleCount}`);
+      console.log(`[BLUETOOTH SCANNER]   - Devices tracked: ${this.discoveredDevices.size}`);
+      console.log(`[BLUETOOTH SCANNER]   - File states cached: ${this.fileProcessingState.size}`);
+      console.log(`[BLUETOOTH SCANNER]   - Uptime: ${process.uptime().toFixed(0)}s`);
+    }, 60000); // 60 seconds
+  }
 
   async start() {
     console.log('[BLUETOOTH SCANNER] Starting worker...');
     console.log(`[BLUETOOTH SCANNER] Configuration:`);
     console.log(`[BLUETOOTH SCANNER]   - Discovery window: ${DISCOVERY_WINDOW} seconds`);
     console.log(`[BLUETOOTH SCANNER]   - Scan interval: ${SCAN_INTERVAL / 1000} seconds`);
-    
+      
     // Check for smpmgr
     const smpmgrAvailable = await this.checkSmpmgr();
     if (!smpmgrAvailable) {
@@ -67,6 +80,9 @@ class BluetoothScanner {
     await this.initializeFileProcessingState();
     
     this.isRunning = true;
+
+    // perform heartbeat logging
+    this.startHeartbeat();
 
     // Initial scan
     await this.performScan();
@@ -90,6 +106,11 @@ class BluetoothScanner {
     if (this.scanInterval) {
       clearInterval(this.scanInterval);
     }
+
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+
 
     await prisma.$disconnect();
     process.exit(0);
@@ -127,7 +148,8 @@ class BluetoothScanner {
 
   private async performScan() {
     const scanId = Date.now();
-    console.log(`[BLUETOOTH SCANNER] Starting scan cycle ${scanId}...`);
+    this.scanCycleCount++; // Increment cycle counter
+    console.log(`[BLUETOOTH SCANNER] Starting scan cycle ${this.scanCycleCount}...`);
     
     try {
       const startTime = Date.now();
