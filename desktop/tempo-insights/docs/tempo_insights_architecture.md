@@ -181,6 +181,10 @@ tempo-insights/
     │       └── log-processor.ts
     ├── supabase/
     │   └── config.toml
+    ├── supabase-stack/
+    ├── docker-compose.yml
+    ├── .env
+    └── volumes/
     └── .github/
         └── workflows/
             └── ci.yml

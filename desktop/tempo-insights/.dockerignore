@@ -100,6 +100,7 @@ supabase/volumes/
 supabase/.branches/
 supabase/.temp/
 supabase/config.toml
+supabase-stack/
 
 # ===================================
 # LOGS
@@ -156,8 +157,9 @@ tsconfig.tsbuildinfo
 # ===================================
 # PACKAGE MANAGER LOCKS
 # ===================================
-# Keep package-lock.json and pnpm-lock.yaml for reproducible builds
-# Exclude yarn.lock if not using yarn
+# Keep pnpm-lock.yaml for reproducible builds
+# Exclude npm and yarn lock files
+package-lock.json
 yarn.lock
 
 # ===================================
